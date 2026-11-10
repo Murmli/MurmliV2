@@ -302,7 +302,7 @@ Regeln für CLAUDE.md und weitere Agent-Instruktionsdateien im Repo.
 
 ## CI
 
-GitHub Actions unter `.github/`: `ci.yml` (Push auf `main`, Pull Requests) ruft die wiederverwendbaren Workflows `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf; der Vulnerability-Scan läuft zusätzlich nächtlich um 00:00 Europe/Berlin. Die Flutter-Version kommt aus `src/app/.fvmrc`, das .NET-SDK aus `src/backend/global.json`. Flutter-Setup samt Lockfile-Check steckt in der Composite-Action `.github/actions/setup-app`.
+GitHub Actions unter `.github/`: `ci.yml` (Push auf `main`, Pull Requests) ruft die wiederverwendbaren Workflows `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf; der Vulnerability-Scan läuft zusätzlich nächtlich um 00:05 Europe/Berlin. Die Flutter-Version kommt aus `src/app/.fvmrc`, das .NET-SDK aus `src/backend/global.json`. Flutter-Setup samt Lockfile-Check steckt in der Composite-Action `.github/actions/setup-app`.
 
 Dieselben Checks lokal:
 
