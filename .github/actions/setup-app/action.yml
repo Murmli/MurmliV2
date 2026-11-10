@@ -1,0 +1,14 @@
+name: Set up app
+description: Installs the Flutter version pinned in src/app/.fvmrc and resolves the locked dependencies.
+
+runs:
+  using: composite
+  steps:
+    - uses: subosito/flutter-action@v2
+      with:
+        flutter-version-file: src/app/.fvmrc
+        cache: true
+
+    - run: flutter pub get --enforce-lockfile
+      shell: bash
+      working-directory: src/app
