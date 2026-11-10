@@ -299,3 +299,19 @@ Regeln für CLAUDE.md und weitere Agent-Instruktionsdateien im Repo.
 
 <!-- TODO: Eigene Konventionen ergänzen (projektspezifischer Stil, Review-Regeln, ...) -->
 <!-- claudete:general-conventions:end -->
+
+## CI
+
+GitHub Actions unter `.github/`: `ci.yml` (Push auf `main`, Pull Requests) ruft die wiederverwendbaren Workflows `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf; der Vulnerability-Scan läuft zusätzlich nächtlich um 00:00 Europe/Berlin. Die Flutter-Version kommt aus `src/app/.fvmrc`, das .NET-SDK aus `src/backend/global.json`. Flutter-Setup samt Lockfile-Check steckt in der Composite-Action `.github/actions/setup-app`.
+
+Dieselben Checks lokal:
+
+- App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze` (Infos sind fatal), `fvm flutter test`.
+- Backend (`src/backend`): `dotnet format --verify-no-changes`, `dotnet test` und als Audit `dotnet restore --force -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904`. Ohne `--force` spielt ein No-op-Restore nur die Funde des letzten echten Restores erneut ab; neu veröffentlichte Advisories sieht erst ein erzwungener Restore.
+
+Vulnerability-Scan:
+
+- Ein `dart pub audit` existiert nicht; die App prüft osv-scanner anhand von `src/app/pubspec.lock`. Warum das Backend per NuGetAudit statt osv-scanner oder `dotnet package list --vulnerable` geprüft wird, steht als Kommentar in `vulnerability-scan.yml`.
+- Funde ohne verfügbaren Fix bewusst unterdrücken: im Backend per `<NuGetAuditSuppress Include="<Advisory-URL>" />` im csproj, in der App per `[[IgnoredVulns]]` in `src/app/osv-scanner.toml`.
+
+Concurrency nur im Caller (`ci.yml`) setzen: In Called Workflows meint `github.workflow` den Caller, eine Concurrency-Gruppe dort cancelt oder blockiert den Caller.
