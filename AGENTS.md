@@ -61,6 +61,8 @@ Konvention, geht die vor.
 
 ## Code-Stil
 
+- Code, Bezeichner und Code-Kommentare sind immer auf Englisch – unabhängig
+  von der Sprache im Chat.
 - Standard ist null Kommentare. Ein Kommentar wird nur geschrieben, wenn er
   etwas nennt, das der Leser dem Code nicht ansehen kann: einen nicht
   offensichtlichen Algorithmus, einen behandelten Edge-Case, einen Workaround
@@ -151,7 +153,7 @@ Konvention, geht die vor.
 - Testnamen nennen getestetes Verhalten, Szenario und erwartetes Ergebnis
   (z.B. `AddRow_EmptyTable_AddsRow` – sinngemäß je Test-Framework).
 
-## Branches & Commit-Messages
+## Branches & Commits
 
 - Branch-Namen beim Anlegen: nur die Prefixe `feature/`, `fix/` und `release/`,
   immer ausgeschrieben (`feature/abc`, nicht `feat/abc`); andere Prefixe nur
@@ -160,6 +162,9 @@ Konvention, geht die vor.
   dem Prefix vor dem beschreibenden Namen: `feature/123-add-retry-logic`.
   Nummern nie raten – nur verwenden, wenn das Issue in der Aufgabe genannt
   oder vorher nachgeschlagen wurde.
+- Änderungen automatisch committen, ohne nachzufragen – in sinnvollen,
+  logischen Blöcken: Zusammengehöriges in einem Commit, Unzusammenhängendes
+  getrennt.
 - Commit-Messages bestehen ausschließlich aus dem Titel (eine Zeile) und sind
   immer auf Englisch – einzige Ausnahme ist die Issue-Referenz unten.
 - Commit-Messages folgen Conventional Commits – außer das Repo beschreibt eine
@@ -300,8 +305,10 @@ Regeln für CLAUDE.md und weitere Agent-Instruktionsdateien im Repo.
 
 ## Memory
 
-- Maschinenlokales Projekt-Wissen bringt im Team nichts – niemals schreiben,
-  du hättest dir etwas gemerkt, wenn es nur lokal gespeichert ist.
+- Maschinenlokale Memory-Funktionen des Agents (etwa die Auto-Memory von
+  Claude Code) nicht nutzen, auch wenn sie aktiv sind: Projekt-Wissen, das
+  nur auf einer Maschine liegt, bringt im Team nichts. Niemals schreiben, du
+  hättest dir etwas gemerkt, wenn es nur lokal gespeichert ist.
 - Repo-bezogene Erkenntnisse gehören ins Repo (z.B. in dessen CLAUDE.md bzw.
   AGENTS.md) und werden committet.
 - Globale Erkenntnisse (Arbeitsweise, Vorlieben, Umgebung) stattdessen dem
