@@ -48,6 +48,17 @@ Konvention, geht die vor.
   einmal sofort benutzte Werte inlinen; wirkt etwas over-engineered, zuerst
   vereinfachen.
 
+## Antworten im Chat
+
+- Auflistungen im Chat immer nummerieren (`1.`, `2.`, …), nie als
+  Bullet-Liste – damit sich der User per Nummer auf einzelne Punkte beziehen
+  kann. Das gilt besonders für Rückfragen an den User: jede Frage bekommt
+  eine eigene Nummer, auch wenn es nur zwei sind.
+- Die Nummerierung läuft über die ganze Antwort durch und beginnt nicht pro
+  Absatz oder Liste neu – jede Nummer ist innerhalb einer Antwort eindeutig.
+  Folgt auf eine Liste mit `1.` bis `3.` eine weitere, beginnt diese bei `4.`
+  (Markdown übernimmt die Startnummer des ersten Eintrags).
+
 ## Code-Stil
 
 - Standard ist null Kommentare. Ein Kommentar wird nur geschrieben, wenn er
