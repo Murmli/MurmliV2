@@ -333,6 +333,7 @@ Dieselben Checks lokal:
 
 - App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze` (Infos sind fatal), `fvm flutter test`.
 - Backend (`src/backend`): `dotnet format --verify-no-changes`, `dotnet test` und als Audit `dotnet restore --force -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904`. Ohne `--force` spielt ein No-op-Restore nur die Funde des letzten echten Restores erneut ab; neu veröffentlichte Advisories sieht erst ein erzwungener Restore.
+- `dotnet test` läuft per `src/backend/global.json` auf Microsoft.Testing.Platform (das Paket `xunit.v3` ab 4.0 unterstützt `dotnet test` nur dort). Der Integrationstest startet den AppHost samt PostgreSQL-Container und braucht Docker. Der AppHost-Build holt sich wegen `AspireUseCliBundle` DCP und Dashboard aus dem Bundle einer Aspire-CLI: Liegt `aspire` im PATH, nimmt er deren Bundle (in deren Version); sonst lädt er beim ersten Build per `dnx` `aspire.cli` in der SDK-Version des AppHost nach `~/.aspire` und braucht dafür Netzwerk, sonst bricht er mit ASPIRE009 ab. CI und Sandbox haben keine Aspire-CLI im PATH und nehmen den `dnx`-Weg.
 
 Vulnerability-Scan:
 
@@ -343,6 +344,23 @@ Concurrency nur im Caller (`ci.yml`) setzen: In Called Workflows meint `github.w
 
 ## Aspire und Azure
 
-Aspire-Befehle, die in Azure etwas anlegen, ändern oder löschen, führt nur ein Mensch aus, nie ein KI-Agent: `aspire deploy`, `aspire destroy` und `aspire do` mit Provisionierungs- oder Deploy-Steps. `aspire publish` erzeugt nur lokale Artefakte und ist erlaubt.
+Aspire-Befehle, die in Azure etwas anlegen, ändern oder löschen, führt nur ein Mensch aus, nie ein KI-Agent: `aspire deploy`, `aspire destroy` und `aspire do` mit Provisionierungs- oder Deploy-Steps. `aspire publish` erzeugt nur lokale Artefakte (nach `aspire-output/`, git-ignoriert) und ist erlaubt; ohne installierte Aspire-CLI per `dnx --yes aspire.cli@<SDK-Version des AppHost> -- publish --apphost <csproj> --output-path <Ordner> --non-interactive`.
 
-Auch `aspire run` legt echte Azure-Ressourcen an, sobald eine Azure-Ressource im AppHost lokal weder als Container noch als Emulator läuft. In dem Fall startet ein Agent den AppHost nicht.
+Auch `aspire run` und `dotnet test` (der Integrationstest startet den AppHost) legen echte Azure-Ressourcen an, sobald eine Azure-Ressource im AppHost lokal weder als Container noch als Emulator läuft. In dem Fall startet ein Agent den AppHost nicht. Derzeit trifft das auf keine Ressource zu: PostgreSQL läuft per `RunAsContainer` lokal als Container, die Container-Apps-Umgebung samt Registry existiert nur beim Publish. Jede neue Azure-Ressource braucht deshalb einen Container oder Emulator für den lokalen Lauf.
+
+### Ressourcen
+
+Der AppHost beschreibt für Dev:
+
+- `env`: Container-Apps-Umgebung nur mit Consumption-Profil und ohne Aspire-Dashboard (kostet in Azure extra). Aspire legt dazu implizit eine Container Registry Basic, einen Log-Analytics-Workspace und eine Managed Identity für den Image-Pull an.
+- `postgres`: PostgreSQL Flexible Server Burstable B1ms mit den Aspire-Standardwerten (32 GB Speicher, 7 Tage Backup, ohne HA und Geo-Backup), nur Entra-Anmeldung, Firewall-Regel für Azure-Dienste. Die Version ist auf 18 überschrieben (Aspire-Default 16), damit sie zum lokalen Container `postgres:18` passt.
+- `murmli`: die Datenbank auf `postgres`, zugleich der Connection-String-Name, unter dem die API sie per `AddAzureNpgsqlDataSource` bezieht.
+- `api`: `Murmli.Backend.Api` als Container App mit 0,25 vCPU, 0,5 GiB und null bis einer Instanz, öffentlich per HTTPS (ohne Vorgabe liefe dauerhaft eine Instanz, bis zu zehn). Die Managed Identity `api-identity` meldet sich ohne Passwort an der Datenbank an; Aspire macht sie zum Entra-Admin des Servers, eine schwächere Rolle bietet es nicht.
+
+`/health` der API meldet, ob die Datenbank erreichbar ist, und ist in allen Umgebungen öffentlich. Container-Apps-Probes setzt der AppHost bewusst nicht (`WithHttpProbe` ist experimentell), und ServiceDefaults fehlen bewusst: Ohne Dashboard exportiert OpenTelemetry in Azure nichts. Beides kommt mit dem ersten konkreten Bedarf.
+
+Nicht verwenden, weil Preview oder mit Zusatzkosten: ACA Express, Dedicated Workload Profiles, Private Endpoints, geplante Wartungsfenster.
+
+### Stabile Namen
+
+Die Aspire-Ressourcennamen (`env`, `postgres`, `murmli`, `api`) bestimmen die Namen in Azure und bleiben nach dem ersten Deploy unverändert, ebenso das Naming-Schema der Umgebung (kein nachträgliches `WithAzdResourceNaming`, `WithCompactResourceNaming` oder `WithUniqueResourceNaming`). Eine Umbenennung legt in Azure einen neuen, leeren Server bzw. eine neue Datenbank an; die alte Ressource bleibt liegen und kostet weiter. Aspire löscht beim Deploy nie etwas: Wird eine Ressource aus dem AppHost entfernt, muss sie in Azure von Hand gelöscht oder Dev neu aufgebaut werden.
