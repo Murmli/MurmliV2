@@ -84,5 +84,10 @@ die Defaults hier greifen für neue Projekte und neue Testsuiten.
 - Die Aspire-SDK-Version steht im `Sdk`-Attribut des AppHost-csproj, nicht
   in `Directory.Packages.props`. Sie und alle `Aspire.*`-Pakete laufen immer
   auf derselben Version.
+- Aspire-Updates per `aspire update`: Es hebt die SDK-Version im AppHost und
+  die `Aspire.*`-Pakete in `Directory.Packages.props` an, erfasst aber nur
+  Projekte, die der AppHost referenziert. `Aspire.Hosting.Testing` (aus dem
+  Testprojekt, das den AppHost referenziert, nicht umgekehrt) danach von Hand
+  auf dieselbe Version ziehen.
 
 <!-- TODO: Projektspezifische Konventionen ergänzen (Architektur, Analyzer, ...) -->
