@@ -348,6 +348,10 @@ Aspire-Befehle, die in Azure etwas anlegen, ändern oder löschen, führt nur ei
 
 Auch `aspire run` und `dotnet test` (der Integrationstest startet den AppHost) legen echte Azure-Ressourcen an, sobald eine Azure-Ressource im AppHost lokal weder als Container noch als Emulator läuft. In dem Fall startet ein Agent den AppHost nicht. Derzeit trifft das auf keine Ressource zu: PostgreSQL läuft per `RunAsContainer` lokal als Container, die Container-Apps-Umgebung samt Registry existiert nur beim Publish. Jede neue Azure-Ressource braucht deshalb einen Container oder Emulator für den lokalen Lauf.
 
+### Umgebungen
+
+Wie Menschen deployen, steht im BackOffice-Repo unter [docs/03_Betrieb/Deployment.md](https://github.com/Murmli/BackOffice/blob/main/docs/03_Betrieb/Deployment.md); das Repo hier enthält nur Technisches. Azure-Umgebungen heißen `azure-<name>` (derzeit nur `azure-dev` mit Resource Group `rg-murmli-dev`) und werden per `aspire deploy --environment azure-<name>` angesprochen; ohne `--environment` deployt Aspire als Production. Ihr Deploy-Ziel (`Azure:Location`, `Azure:ResourceGroup`) steht in `src/backend/Murmli.Backend.Aspire/appsettings.azure-<name>.json`, die Subscription-ID kommt per Umgebungsvariable `Azure__SubscriptionId`, weil das Repo öffentlich ist. Alle appsettings ohne `azure-`-Präfix sind lokal: `Azure:*`-Werte gehören nie in `appsettings.json`, `appsettings.Development.json` oder die User Secrets, sonst bindet sie auch `aspire run`. User Secrets liest der AppHost ohnehin nur in der Umgebung Development, also nie beim Deploy.
+
 ### Ressourcen
 
 Jeder Service hat im AppHost (`src/backend/Murmli.Backend.Aspire`) einen eigenen Ordner mit einer `Extensions.cs`, die ihn per `Add<Service>`-Extension-Methode auf `IDistributedApplicationBuilder` anlegt (Namespace `Murmli.Backend.Aspire.<Ordner>`); `AppHost.cs` verdrahtet nur. Neue Services folgen demselben Schema.
@@ -355,7 +359,7 @@ Jeder Service hat im AppHost (`src/backend/Murmli.Backend.Aspire`) einen eigenen
 Der AppHost beschreibt für Dev:
 
 - `env`: Container-Apps-Umgebung nur mit Consumption-Profil und ohne Aspire-Dashboard (kostet in Azure extra). Aspire legt dazu implizit eine Container Registry Basic, einen Log-Analytics-Workspace und eine Managed Identity für den Image-Pull an.
-- `postgres`: PostgreSQL Flexible Server Burstable B1ms mit den Aspire-Standardwerten (32 GB Speicher, 7 Tage Backup, ohne HA und Geo-Backup), nur Entra-Anmeldung, Firewall-Regel für Azure-Dienste. Die Version ist auf 18 überschrieben (Aspire-Default 16), damit sie zum lokalen Container `postgres:18` passt.
+- `postgres`: PostgreSQL Flexible Server Burstable B1ms mit den Aspire-Standardwerten (32 GB Speicher, 7 Tage Backup, ohne HA und Geo-Backup), nur Entra-Anmeldung, Firewall-Regel für Azure-Dienste. Die Version ist auf 18 überschrieben (Aspire-Default 16), damit sie zum lokalen Container `postgres:18` passt; dafür nutzt der Server die API-Version 2025-08-01, die erste stabile mit PostgreSQL 18.
 - `murmli`: die Datenbank auf `postgres`, zugleich der Connection-String-Name, unter dem die API sie per `AddAzureNpgsqlDataSource` bezieht.
 - `api`: `Murmli.Backend.Api` als Container App mit 0,25 vCPU, 0,5 GiB und null bis einer Instanz, öffentlich per HTTPS (ohne Vorgabe liefe dauerhaft eine Instanz, bis zu zehn). Die Managed Identity `api-identity` meldet sich ohne Passwort an der Datenbank an; Aspire macht sie zum Entra-Admin des Servers, eine schwächere Rolle bietet es nicht.
 
@@ -365,4 +369,4 @@ Nicht verwenden, weil Preview oder mit Zusatzkosten: ACA Express, Dedicated Work
 
 ### Stabile Namen
 
-Die Aspire-Ressourcennamen (`env`, `postgres`, `murmli`, `api`) bestimmen die Namen in Azure und bleiben nach dem ersten Deploy unverändert, ebenso das Naming-Schema der Umgebung (kein nachträgliches `WithAzdResourceNaming`, `WithCompactResourceNaming` oder `WithUniqueResourceNaming`). Eine Umbenennung legt in Azure einen neuen, leeren Server bzw. eine neue Datenbank an; die alte Ressource bleibt liegen und kostet weiter. Aspire löscht beim Deploy nie etwas: Wird eine Ressource aus dem AppHost entfernt, muss sie in Azure von Hand gelöscht oder Dev neu aufgebaut werden.
+Die Aspire-Ressourcennamen (`env`, `postgres`, `murmli`, `api`) bestimmen zusammen mit der Resource Group die Namen in Azure und bleiben nach dem ersten Deploy unverändert, ebenso das Naming-Schema der Umgebung (kein nachträgliches `WithAzdResourceNaming`, `WithCompactResourceNaming` oder `WithUniqueResourceNaming`). Eine Umbenennung legt in Azure einen neuen, leeren Server bzw. eine neue Datenbank an; die alte Ressource bleibt liegen und kostet weiter. Aspire löscht beim Deploy nie etwas: Wird eine Ressource aus dem AppHost entfernt, muss sie in Azure von Hand gelöscht oder Dev neu aufgebaut werden.
