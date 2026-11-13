@@ -9,4 +9,13 @@
         <UserSecretsId>8177bde2-91f2-4557-8c8b-864c47b70a39</UserSecretsId>
     </PropertyGroup>
 
+    <ItemGroup>
+        <PackageReference Include="Aspire.Hosting.Azure.AppContainers" Version="13.6.5" />
+        <PackageReference Include="Aspire.Hosting.Azure.PostgreSQL" Version="13.6.5" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Murmli.Backend.Api\Murmli.Backend.Api.csproj" />
+    </ItemGroup>
+
 </Project>

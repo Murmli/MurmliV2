@@ -1,3 +1,4 @@
 <Solution>
+  <Project Path="Murmli.Backend.Api/Murmli.Backend.Api.csproj" />
   <Project Path="Murmli.Backend.Aspire/Murmli.Backend.Aspire.csproj" />
 </Solution>
