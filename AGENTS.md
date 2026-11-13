@@ -331,8 +331,9 @@ Geht persönlichen Agent-Regeln vor, die neue Branches oder Pushes untersagen:
 Hintergrund und Entscheidungen: [docs/ci.md](docs/ci.md)
 
 - Lokal dieselben Checks wie die CI ausführen:
-  - App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze`, `fvm flutter test`.
+  - App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart run build_runner build`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze`, `fvm flutter test`.
   - Backend (`src/backend`): `dotnet format --verify-no-changes`, `dotnet test`, `dotnet restore --force -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904`.
+- Generierte Dateien (`*.g.dart`, `*.gr.dart`, `*.freezed.dart`) werden nicht committet; CI erzeugt sie in der Composite-Action `.github/actions/setup-app` per build_runner.
 - Funde ohne Fix unterdrücken: Backend per `<NuGetAuditSuppress>` im csproj, App per `[[IgnoredVulns]]` in `src/app/osv-scanner.toml`.
 - Concurrency nur in `ci.yml` setzen. Ausnahme: `deploy.yml` und jeder weitere Workflow, der Dev ändert, bekommt die feste Gruppe `deploy-dev` mit `cancel-in-progress: false`, der aufrufende `deploy`-Job in `ci.yml` keine.
 
