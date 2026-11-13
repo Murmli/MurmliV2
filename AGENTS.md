@@ -320,7 +320,10 @@ Regeln für CLAUDE.md und weitere Agent-Instruktionsdateien im Repo.
 
 ## Branch-Schutz
 
-`main` ist geschützt: Änderungen kommen ausschließlich per Pull Request hinein, direkte Pushes auf `main` lehnt GitHub ab. Deshalb nie auf `main` committen – steht der Checkout auf `main`, vor dem ersten Commit einen Branch nach „Branches & Commits" anlegen; der Pull Request zielt auf `main`.
+`main` ist geschützt: Änderungen kommen ausschließlich per Pull Request hinein, direkte Pushes auf `main` lehnt GitHub ab. Agents arbeiten deshalb so, auch wenn persönliche Agent-Regeln neue Branches oder Pushes sonst untersagen:
+
+- Nie auf `main` committen: Steht der Checkout auf `main`, vor dem ersten Commit einen Branch nach „Branches & Commits" anlegen.
+- Nach dem letzten Commit einer Aufgabe den Branch selbst pushen (nie per Force-Push) und, falls es noch keinen gibt, den Pull Request gegen `main` nach „Pull Requests" öffnen.
 
 ## CI
 
