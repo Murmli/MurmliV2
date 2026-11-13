@@ -358,7 +358,7 @@ Jeder Service hat im AppHost (`src/backend/Murmli.Backend.Aspire`) einen eigenen
 
 Der AppHost beschreibt für Dev:
 
-- `env`: Container-Apps-Umgebung nur mit Consumption-Profil und ohne Aspire-Dashboard (kostet in Azure extra). Aspire legt dazu implizit eine Container Registry Basic, einen Log-Analytics-Workspace und eine Managed Identity für den Image-Pull an.
+- `env`: Container-Apps-Umgebung nur mit Consumption-Profil und ohne Aspire-Dashboard (kostet in Azure extra). Aspire legt dazu implizit eine Container Registry Basic, einen Log-Analytics-Workspace und eine Managed Identity für den Image-Pull an. Die SKU der Registry lässt sich pro Umgebung per `ContainerRegistry:Sku` in `appsettings.azure-<name>.json` überschreiben (`azure-dev` nutzt Standard); `ContainerAppEnvironment/Extensions.cs` setzt sie nachträglich, weil Aspire die Registry nur intern anlegt.
 - `postgres`: PostgreSQL Flexible Server Burstable B1ms mit den Aspire-Standardwerten (32 GB Speicher, 7 Tage Backup, ohne HA und Geo-Backup), nur Entra-Anmeldung, Firewall-Regel für Azure-Dienste. Die Version ist auf 18 überschrieben (Aspire-Default 16), damit sie zum lokalen Container `postgres:18` passt; dafür nutzt der Server die API-Version 2025-08-01, die erste stabile mit PostgreSQL 18.
 - `murmli`: die Datenbank auf `postgres`, zugleich der Connection-String-Name, unter dem die API sie per `AddAzureNpgsqlDataSource` bezieht.
 - `api`: `Murmli.Backend.Api` als Container App mit 0,25 vCPU, 0,5 GiB und null bis einer Instanz, öffentlich per HTTPS (ohne Vorgabe liefe dauerhaft eine Instanz, bis zu zehn). Die Managed Identity `api-identity` meldet sich ohne Passwort an der Datenbank an; Aspire macht sie zum Entra-Admin des Servers, eine schwächere Rolle bietet es nicht.
