@@ -327,9 +327,9 @@ Regeln für CLAUDE.md und weitere Agent-Instruktionsdateien im Repo.
 
 ## CI
 
-`ci.yml` (Push auf `main`, Pull Requests) ruft `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf, auf `main` danach `deploy.yml`. Dieselben Checks lokal:
+`ci.yml` (Push auf `main`, Pull Requests) ruft `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf, auf `main` danach `deploy.yml`. Generierte Dateien (`*.g.dart`, `*.gr.dart`, `*.freezed.dart`) werden nicht committet; CI erzeugt sie in der Composite-Action `.github/actions/setup-app` per build_runner. Dieselben Checks lokal:
 
-- App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze`, `fvm flutter test`.
+- App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart run build_runner build`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze`, `fvm flutter test`.
 - Backend (`src/backend`): `dotnet format --verify-no-changes`, `dotnet test` (braucht Docker und beim ersten Build Netzwerk für `dnx aspire.cli`, sonst ASPIRE009) und `dotnet restore --force -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904` (ohne `--force` keine neuen Advisories).
 - Funde ohne Fix unterdrücken: Backend per `<NuGetAuditSuppress>` im csproj, App per `[[IgnoredVulns]]` in `src/app/osv-scanner.toml`.
 
