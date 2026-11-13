@@ -318,6 +318,13 @@ Regeln für CLAUDE.md und weitere Agent-Instruktionsdateien im Repo.
 <!-- TODO: Eigene Konventionen ergänzen (projektspezifischer Stil, Review-Regeln, ...) -->
 <!-- claudete:general-conventions:end -->
 
+## Branch-Schutz
+
+`main` ist geschützt: Änderungen kommen ausschließlich per Pull Request hinein, direkte Pushes auf `main` lehnt GitHub ab. Agents arbeiten deshalb so, auch wenn persönliche Agent-Regeln neue Branches oder Pushes sonst untersagen:
+
+- Nie auf `main` committen: Steht der Checkout auf `main`, vor dem ersten Commit einen Branch nach „Branches & Commits" anlegen.
+- Nach dem letzten Commit einer Aufgabe den Branch selbst pushen (nie per Force-Push) und, falls es noch keinen gibt, den Pull Request gegen `main` nach „Pull Requests" öffnen.
+
 ## CI
 
 GitHub Actions unter `.github/`: `ci.yml` (Push auf `main`, Pull Requests) ruft die wiederverwendbaren Workflows `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf; der Vulnerability-Scan läuft zusätzlich nächtlich um 00:05 Europe/Berlin. Die Flutter-Version kommt aus `src/app/.fvmrc`, das .NET-SDK aus `src/backend/global.json`. Flutter-Setup samt Lockfile-Check steckt in der Composite-Action `.github/actions/setup-app`.
