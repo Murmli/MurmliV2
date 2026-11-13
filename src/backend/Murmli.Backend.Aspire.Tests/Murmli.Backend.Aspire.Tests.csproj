@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net11.0</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Aspire.Hosting.Testing" />
+        <PackageReference Include="xunit.v3" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Murmli.Backend.Aspire\Murmli.Backend.Aspire.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Using Include="Aspire.Hosting.Testing" />
+        <Using Include="Xunit" />
+    </ItemGroup>
+
+</Project>
