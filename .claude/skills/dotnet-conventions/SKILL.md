@@ -75,4 +75,14 @@ die Defaults hier greifen für neue Projekte und neue Testsuiten.
   statt duplizierter Testmethoden.
 - Tests mit `dotnet test` vor jedem Commit.
 
+## NuGet
+
+- Versionen stehen zentral in `src/backend/Directory.Packages.props`
+  (Central Package Management): ein neues Paket dort als `<PackageVersion>`
+  eintragen, im csproj nur `<PackageReference Include="…" />` ohne
+  `Version`.
+- Die Aspire-SDK-Version steht im `Sdk`-Attribut des AppHost-csproj, nicht
+  in `Directory.Packages.props`. Sie und alle `Aspire.*`-Pakete laufen immer
+  auf derselben Version.
+
 <!-- TODO: Projektspezifische Konventionen ergänzen (Architektur, Analyzer, ...) -->
