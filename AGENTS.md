@@ -333,3 +333,9 @@ Vulnerability-Scan:
 - Funde ohne verfügbaren Fix bewusst unterdrücken: im Backend per `<NuGetAuditSuppress Include="<Advisory-URL>" />` im csproj, in der App per `[[IgnoredVulns]]` in `src/app/osv-scanner.toml`.
 
 Concurrency nur im Caller (`ci.yml`) setzen: In Called Workflows meint `github.workflow` den Caller, eine Concurrency-Gruppe dort cancelt oder blockiert den Caller.
+
+## Aspire und Azure
+
+Aspire-Befehle, die in Azure etwas anlegen, ändern oder löschen, führt nur ein Mensch aus, nie ein KI-Agent: `aspire deploy`, `aspire destroy` und `aspire do` mit Provisionierungs- oder Deploy-Steps. `aspire publish` erzeugt nur lokale Artefakte und ist erlaubt.
+
+Auch `aspire run` legt echte Azure-Ressourcen an, sobald eine Azure-Ressource im AppHost lokal weder als Container noch als Emulator läuft. In dem Fall startet ein Agent den AppHost nicht.
