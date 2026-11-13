@@ -327,11 +327,11 @@ Regeln für CLAUDE.md und weitere Agent-Instruktionsdateien im Repo.
 
 ## CI
 
-GitHub Actions unter `.github/`: `ci.yml` (Push auf `main`, Pull Requests) ruft die wiederverwendbaren Workflows `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf; der Vulnerability-Scan läuft zusätzlich nächtlich um 00:05 Europe/Berlin. Die Flutter-Version kommt aus `src/app/.fvmrc`, das .NET-SDK aus `src/backend/global.json`. Flutter-Setup samt Lockfile-Check steckt in der Composite-Action `.github/actions/setup-app`.
+GitHub Actions unter `.github/`: `ci.yml` (Push auf `main`, Pull Requests) ruft die wiederverwendbaren Workflows `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf; der Vulnerability-Scan läuft zusätzlich nächtlich um 00:05 Europe/Berlin. Die Flutter-Version kommt aus `src/app/.fvmrc`, das .NET-SDK aus `src/backend/global.json`. Flutter-Setup samt Lockfile-Check steckt in der Composite-Action `.github/actions/setup-app`. Generierte Dateien (`*.g.dart`, `*.gr.dart`, `*.freezed.dart`) werden nicht committet; CI erzeugt sie in derselben Composite-Action per build_runner.
 
 Dieselben Checks lokal:
 
-- App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze` (Infos sind fatal), `fvm flutter test`.
+- App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart run build_runner build`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze` (Infos sind fatal), `fvm flutter test`.
 - Backend (`src/backend`): `dotnet format --verify-no-changes`, `dotnet test` und als Audit `dotnet restore --force -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904`. Ohne `--force` spielt ein No-op-Restore nur die Funde des letzten echten Restores erneut ab; neu veröffentlichte Advisories sieht erst ein erzwungener Restore.
 - `dotnet test` läuft per `src/backend/global.json` auf Microsoft.Testing.Platform (das Paket `xunit.v3` ab 4.0 unterstützt `dotnet test` nur dort). Der Integrationstest startet den AppHost samt PostgreSQL-Container und braucht Docker. Der AppHost-Build holt sich wegen `AspireUseCliBundle` DCP und Dashboard aus dem Bundle einer Aspire-CLI: Liegt `aspire` im PATH, nimmt er deren Bundle (in deren Version); sonst lädt er beim ersten Build per `dnx` `aspire.cli` in der SDK-Version des AppHost nach `~/.aspire` und braucht dafür Netzwerk, sonst bricht er mit ASPIRE009 ab. CI und Sandbox haben keine Aspire-CLI im PATH und nehmen den `dnx`-Weg.
 
