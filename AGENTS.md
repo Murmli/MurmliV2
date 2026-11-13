@@ -350,6 +350,8 @@ Auch `aspire run` und `dotnet test` (der Integrationstest startet den AppHost) l
 
 ### Ressourcen
 
+Jeder Service hat im AppHost (`src/backend/Murmli.Backend.Aspire`) einen eigenen Ordner mit einer `Extensions.cs`, die ihn per `Add<Service>`-Extension-Methode auf `IDistributedApplicationBuilder` anlegt (Namespace `Murmli.Backend.Aspire.<Ordner>`); `AppHost.cs` verdrahtet nur. Neue Services folgen demselben Schema.
+
 Der AppHost beschreibt für Dev:
 
 - `env`: Container-Apps-Umgebung nur mit Consumption-Profil und ohne Aspire-Dashboard (kostet in Azure extra). Aspire legt dazu implizit eine Container Registry Basic, einen Log-Analytics-Workspace und eine Managed Identity für den Image-Pull an.
