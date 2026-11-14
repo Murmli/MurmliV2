@@ -6,12 +6,14 @@ public static class Extensions
 {
     public static IResourceBuilder<ProjectResource> AddApi(
         this IDistributedApplicationBuilder builder,
-        IResourceBuilder<AzurePostgresFlexibleServerDatabaseResource> database
+        IResourceBuilder<AzurePostgresFlexibleServerDatabaseResource> database,
+        IResourceBuilder<AzureUserAssignedIdentityResource> identity
     ) =>
         builder
             .AddProject<Projects.Murmli_Backend_Api>("api")
             .WithReference(database)
             .WaitFor(database)
+            .WithAzureUserAssignedIdentity(identity)
             .WithExternalHttpEndpoints()
             .WithHttpHealthCheck("/health")
             .PublishAsAzureContainerApp(
