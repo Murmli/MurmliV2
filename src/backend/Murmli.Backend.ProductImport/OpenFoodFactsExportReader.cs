@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.IO.Pipelines;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Murmli.Backend.Data.Products;
 
 namespace Murmli.Backend.ProductImport;

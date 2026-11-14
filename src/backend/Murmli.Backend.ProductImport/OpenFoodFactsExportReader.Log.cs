@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace Murmli.Backend.ProductImport;
 
 public sealed partial class OpenFoodFactsExportReader

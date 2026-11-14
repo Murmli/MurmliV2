@@ -6,10 +6,10 @@ public class RuntimeConfigurationTests
 {
     // RuntimeHostConfigurationOption only applies to the starting host, so the truncation test covers the test host's copy
     [Fact]
-    public void RuntimeConfiguration_ProductImportWorker_EnablesStrictGzipValidation()
+    public void RuntimeConfiguration_ProductImportHost_EnablesStrictGzipValidation()
     {
         var runtimeConfiguration = JsonNode.Parse(
-            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Murmli.Backend.ProductImport.runtimeconfig.json"))
+            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Murmli.Backend.ProductImport.Host.runtimeconfig.json"))
         );
 
         Assert.True(
