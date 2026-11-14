@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 
-namespace Murmli.Backend.Api;
+namespace Murmli.Backend.Api.Extensions;
 
 public static class EndpointRouteBuilderExtensions
 {

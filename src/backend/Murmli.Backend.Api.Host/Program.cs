@@ -1,4 +1,4 @@
-using Murmli.Backend.Api;
+using Murmli.Backend.Api.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
