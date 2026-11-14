@@ -44,6 +44,9 @@ dependencies:
   drift: ^2.35.4
   drift_flutter: ^0.3.1
 
+  # Storage
+  shared_preferences: ^2.5.6
+
   # Utilities
   path_provider: ^2.1.6
 
@@ -52,6 +55,9 @@ dev_dependencies:
   build_runner: ^2.16.1
   flutter_test:
     sdk: flutter
+
+  # Testing
+  shared_preferences_platform_interface: ^2.4.2
 
   # Lints
   flutter_lints: ^6.0.0
