@@ -20,4 +20,11 @@ class OnboardingCompleted extends _$OnboardingCompleted {
         .setBool(PreferenceKeys.onboardingCompleted, true);
     state = true;
   }
+
+  Future<void> reset() async {
+    await ref
+        .read(sharedPreferencesProvider)
+        .remove(PreferenceKeys.onboardingCompleted);
+    state = false;
+  }
 }
