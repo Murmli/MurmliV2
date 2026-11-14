@@ -6,9 +6,18 @@
 
     <ItemGroup>
         <PackageVersion Include="Aspire.Azure.Npgsql" Version="13.6.5" />
+        <PackageVersion Include="Aspire.Azure.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.6.5" />
         <PackageVersion Include="Aspire.Hosting.Azure.AppContainers" Version="13.6.5" />
         <PackageVersion Include="Aspire.Hosting.Azure.PostgreSQL" Version="13.6.5" />
         <PackageVersion Include="Aspire.Hosting.Testing" Version="13.6.5" />
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.15" />
+        <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.15" />
+        <PackageVersion Include="Microsoft.Extensions.Hosting" Version="11.0.0" />
+        <PackageVersion Include="Microsoft.Extensions.Http" Version="11.0.0" />
+        <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="11.0.0" />
+        <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="11.0.0" />
+        <PackageVersion Include="Testcontainers.PostgreSql" Version="4.16.0" />
+        <PackageVersion Include="Thinktecture.Runtime.Extensions" Version="10.6.0" />
         <PackageVersion Include="xunit.v3" Version="4.0.3" />
     </ItemGroup>
 

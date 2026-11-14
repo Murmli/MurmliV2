@@ -59,9 +59,9 @@ die Defaults hier greifen für neue Projekte und neue Testsuiten.
 - Message-Template-Platzhalter aus gemeinsamen Konstanten, nie als
   Inline-Literale – dasselbe Konzept loggt immer unter demselben Namen.
 - Jede `[LoggerMessage]` ab Level `Information` bekommt eine eindeutige
-  Event-ID aus einem zentralen Register (z.B. eine `LogEvents`-Klasse;
-  anlegen, falls das Repo noch keins hat) plus `EventName`; `Debug`/`Trace`
-  dürfen sie weglassen.
+  Event-ID aus einem zentralen Register (z.B. eine `LogEvents`-Klasse in
+  `Diagnostics`; anlegen, falls das Repo noch keins hat) plus `EventName`;
+  `Debug`/`Trace` dürfen sie weglassen.
 
 ## Tests
 
@@ -73,6 +73,13 @@ die Defaults hier greifen für neue Projekte und neue Testsuiten.
 - Naming: `{MethodName}_{Scenario}_{ExpectedResult}`.
 - Parametrisierte Fälle per `[Theory]` mit `[InlineData]`/`[MemberData]`
   statt duplizierter Testmethoden.
+- Jede Testklasse liegt im selben relativen Ordner und Namespace wie die
+  Klasse, die sie testet: `Murmli.Backend.X.Foo.Bar` wird in
+  `Murmli.Backend.X.Tests.Foo.BarTests` getestet, eine Klasse im Root der
+  Library im Root des Testprojekts.
+  Gemeinsame Test-Helfer liegen unter `Infrastructure/`, gemeinsame
+  Testdaten unter `Fixtures/`. Kein Ordner- oder Namespace-Segment `Host`
+  (es verdeckt `Host.CreateApplicationBuilder`), stattdessen `Hosting/`.
 - Tests mit `dotnet test` vor jedem Commit.
 
 ## NuGet
@@ -90,4 +97,16 @@ die Defaults hier greifen für neue Projekte und neue Testsuiten.
   Testprojekt, das den AppHost referenziert, nicht umgekehrt) danach von Hand
   auf dieselbe Version ziehen.
 
-<!-- TODO: Projektspezifische Konventionen ergänzen (Architektur, Analyzer, ...) -->
+## Solution
+
+- Projekte liegen physisch flach unter `src/backend/<Projekt>/`. In
+  `Murmli.Backend.slnx` gehören Produktivprojekte in den Solution-Ordner
+  `/src/`, Testprojekte (`*.Tests`) in `/tests/`; die Ordner sind rein
+  virtuell, Pfade in CI, `deploy.yml` und ProjectReferences bleiben gleich.
+- Ausführbare Services (`*.Host`) enthalten nur Start und Host-Konfiguration
+  (`Program.cs`, `launchSettings.json`, `appsettings*.json`,
+  Runtime-Optionen); die Logik liegt in einer Bibliothek, die der Host
+  referenziert.
+- Ordner entsprechen immer dem Namespace. Extension-Klassen liegen im
+  Ordner und Namespace `Extensions`, die zentralen Logging-Register
+  (`LogEvents`, `LogProperties`) in `Diagnostics`.

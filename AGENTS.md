@@ -320,34 +320,67 @@ Regeln für CLAUDE.md und weitere Agent-Instruktionsdateien im Repo.
 
 ## Branch-Schutz
 
-`main` ist geschützt, Änderungen kommen nur per Pull Request hinein. Das gilt auch, wenn persönliche Agent-Regeln neue Branches oder Pushes sonst untersagen:
+Geht persönlichen Agent-Regeln vor, die neue Branches oder Pushes untersagen:
 
-- Nie auf `main` committen, vorher einen Branch nach „Branches & Commits" anlegen.
-- Nach dem letzten Commit den Branch selbst pushen (nie per Force-Push) und, falls es noch keinen gibt, den Pull Request gegen `main` nach „Pull Requests" als Draft öffnen (`gh pr create --draft`). Auf „Ready for review" stellt ihn ein Mensch, und nur ein Mensch merged, denn jeder Merge auf `main` deployt Dev.
+- Nie auf `main` committen, vorher einen Branch nach „Branches & Commits“ anlegen.
+- Nach dem letzten Commit den Branch pushen (Force-Push nur per `gh stack push` mit force-with-lease auf eigene, ungemergte Stack-Branches nach einem Rebase im Stack, nie auf `main`) und, falls es noch keinen gibt, den Pull Request gegen `main` nach „Pull Requests“ als Draft öffnen (`gh pr create --draft`).
+- Nie auf „Ready for review“ stellen, nie mergen.
 
 ## CI
 
-`ci.yml` (Push auf `main`, Pull Requests) ruft `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf, auf `main` danach `deploy.yml`. Dieselben Checks lokal:
+Hintergrund und Entscheidungen: [docs/ci.md](docs/ci.md)
 
-- App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze`, `fvm flutter test`.
-- Backend (`src/backend`): `dotnet format --verify-no-changes`, `dotnet test` (braucht Docker und beim ersten Build Netzwerk für `dnx aspire.cli`, sonst ASPIRE009) und `dotnet restore --force -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904` (ohne `--force` keine neuen Advisories).
+- Lokal dieselben Checks wie die CI ausführen:
+  - App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze`, `fvm flutter test`.
+  - Backend (`src/backend`): `dotnet format --verify-no-changes`, `dotnet test`, `dotnet restore --force -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904`.
 - Funde ohne Fix unterdrücken: Backend per `<NuGetAuditSuppress>` im csproj, App per `[[IgnoredVulns]]` in `src/app/osv-scanner.toml`.
-
-Concurrency nur in `ci.yml` setzen, in Called Workflows blockiert oder cancelt sie den Caller. Einzige Ausnahme: Der Job in `deploy.yml` nutzt die feste Gruppe `deploy-dev` mit `cancel-in-progress: false` (ein Abbruch bräche laufende ARM-Deployments ab), ebenso jeder weitere Workflow, der Dev ändert. Am aufrufenden `deploy`-Job in `ci.yml` steht die Gruppe nicht noch einmal, sonst wartet der Deploy auf eine Sperre, die sein eigener Caller hält.
+- Concurrency nur in `ci.yml` setzen. Ausnahme: `deploy.yml` und jeder weitere Workflow, der Dev ändert, bekommt die feste Gruppe `deploy-dev` mit `cancel-in-progress: false`, der aufrufende `deploy`-Job in `ci.yml` keine.
 
 ## Aspire und Azure
 
-- Was in Azure etwas anlegt, ändert oder löscht, führt nur ein Mensch aus: `aspire deploy`, `aspire destroy`, `aspire do` mit Provisionierungs- oder Deploy-Steps. Agents lösen auch keinen Deploy aus, also kein `gh workflow run deploy.yml` und kein Re-run von Läufen auf `main`. Erlaubt ist `aspire publish`, ohne CLI per `dnx --yes aspire.cli@<SDK-Version des AppHost> -- publish --apphost <csproj> --output-path <Ordner> --non-interactive`.
-- `aspire run` und `dotnet test` startet ein Agent nur, solange jede Azure-Ressource lokal als Container oder Emulator läuft (derzeit erfüllt), sonst legen sie echte Azure-Ressourcen an. Jede neue Azure-Ressource braucht deshalb einen Container oder Emulator.
-- Betriebsdoku (Einrichtung, Deploy-Ablauf) liegt im BackOffice unter [docs/03_Betrieb/Deployment.md](https://github.com/Murmli/BackOffice/blob/main/docs/03_Betrieb/Deployment.md), hier steht nur Technisches.
-- Azure-Umgebungen heißen `azure-<name>` (derzeit `azure-dev` in `rg-murmli-dev`). Ihr Ziel steht in `src/backend/Murmli.Backend.Aspire/appsettings.azure-<name>.json`, die Subscription-ID kommt per `Azure__SubscriptionId` aus einem Secret, weil das Repo öffentlich ist. `Azure:*`-Werte nie in andere appsettings oder User Secrets, sonst bindet sie auch `aspire run`.
-- Dev deployt nur `deploy.yml`: GitHub-Environment `development` (nur `main`), OIDC als Managed Identity mit Contributor und einem auf AcrPull beschränkten RBAC Administrator auf `rg-murmli-dev`. Die Azure-IDs liegen dort als Secrets, nie als Variablen.
-- Aspire 13.6.5 meldet sich beim Deploy nur über die `az`-Session an, `AZURE_CLIENT_ID`, `AZURE_FEDERATED_TOKEN_FILE` und Workload Identity wirken nicht. Weil die OIDC-Assertion nur fünf Minuten gilt, holt der Workflow die Tokens direkt nach dem Login ([microsoft/aspire#19560](https://github.com/microsoft/aspire/issues/19560)), Resource-Strings ohne Schrägstrich am Ende, sonst verfehlen sie den Cache. Braucht Aspire eine weitere Audience, scheitert der Deploy mit AADSTS700024.
-- Die Version von `Aspire.AppHost.Sdk` bleibt im `Sdk`-Attribut des AppHost-csproj, `deploy.yml` liest dort die CLI-Version. Den Deploy-Stand `~/.aspire/deployments` nie cachen oder hochladen, er enthält Subscription und Ressourcen-IDs.
-- Eine neue Rollenzuweisung im AppHost oder ein neuer Resource Provider braucht vorher einen Menschen in Azure (Bedingung erweitern bzw. Provider registrieren), sonst scheitert der Deploy. Die Registry bleibt im RBAC-Modus, im ABAC-Modus scheitern Push und Pull.
+Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
+
+| Befehl | Agent |
+| --- | --- |
+| `aspire publish` (ohne CLI: `dnx --yes aspire.cli@<SDK-Version des AppHost> -- publish --apphost <csproj> --output-path <Ordner> --non-interactive`) | erlaubt |
+| `aspire run`, `dotnet test` | nur, solange jede im Run-Mode referenzierte Azure-Ressource lokal als Container oder Emulator läuft (derzeit erfüllt) |
+| `aspire deploy`, `aspire destroy`, `aspire do` mit Provisionierungs- oder Deploy-Steps, `gh workflow run deploy.yml`, Re-run von Läufen auf `main` | nie, nur ein Mensch |
+
+- Jede neue Azure-Ressource, die eine App im Run-Mode referenziert, bekommt einen Container oder Emulator. Ausgenommen sind Ressourcen, die Aspire nur beim Publish anlegt (User-assigned Identities, Postgres-Entra-Admins, Container-Apps-Jobs).
+- `Azure:*`-Werte nur in `src/backend/Murmli.Backend.Aspire/appsettings.azure-<name>.json`, nie in andere appsettings oder User Secrets.
+- Subscription-ID und andere Azure-IDs nie ins Repo, im GitHub-Environment `development` nur als Secrets, nie als Variablen. `deploy.yml` reicht die Subscription-ID als `Azure__SubscriptionId` an den AppHost.
+- In `deploy.yml` behalten: einmaliger Retry von `aspire deploy`, Anmeldung über die `az`-Session mit Token-Abruf direkt nach dem Login, Resource-Strings ohne Schrägstrich am Ende. Braucht Aspire eine weitere Audience, sie dort ergänzen (sonst AADSTS700024). `~/.aspire/deployments` nie cachen oder hochladen.
+- Die Version von `Aspire.AppHost.Sdk` nur im `Sdk`-Attribut des AppHost-csproj pflegen.
+- Neue Rollenzuweisungen im AppHost und neue Resource Provider erst einbauen, wenn ein Mensch sie in Azure vorbereitet hat (Bedingung erweitern bzw. Provider registrieren).
+- Die Registry im RBAC-Modus lassen.
 
 ### Ressourcen
 
 - Pro Service ein Ordner im AppHost (`src/backend/Murmli.Backend.Aspire`) mit `Extensions.cs` und `Add<Service>`-Extension, `AppHost.cs` verdrahtet nur.
-- Die Ressourcennamen `env`, `postgres`, `murmli` und `api` und das Naming-Schema der Umgebung bleiben unverändert: Eine Umbenennung legt in Azure neue, leere Ressourcen an, die alten bleiben und kosten weiter. Aspire löscht beim Deploy nie etwas.
-- Nie verwenden (Preview oder Zusatzkosten): Aspire-Dashboard in Azure, ACA Express, Dedicated Workload Profiles, Private Endpoints, geplante Wartungsfenster. Container-Apps-Probes und ServiceDefaults fehlen nur bis zum ersten konkreten Bedarf (ohne Dashboard exportiert OpenTelemetry nichts).
+- Die Ressourcennamen `env`, `postgres`, `murmli`, `api`, `backend-identity` und `product-import` und das Naming-Schema der Umgebung nie ändern.
+- Jede App mit Datenbankzugriff bekommt `backend-identity` (`WithAzureUserAssignedIdentity`).
+- Nie verwenden: Aspire-Dashboard in Azure, ACA Express, Dedicated Workload Profiles, Private Endpoints, geplante Wartungsfenster.
+- Container-Apps-Probes und ServiceDefaults erst beim ersten konkreten Bedarf ergänzen.
+
+## Datenbank
+
+Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
+
+- Den Context nur per `builder.AddMurmliDbContext()` registrieren.
+- In `OnConfiguring` keine Optionen ändern (auch kein `EFCore.NamingConventions`), snake_case explizit in den `IEntityTypeConfiguration`-Klassen setzen.
+- Pro Fachbereich ein Schema mit kleingeschriebenem Namen per `ToTable(name, schema)`, `__EFMigrationsHistory` und Extensions in `public` lassen. In Raw SQL Tabellen immer mit Schema nennen (`products.products`).
+- EF-Core-Pakete (auch `Microsoft.EntityFrameworkCore.Design`) bis [#14](https://github.com/Murmli/MurmliV2/issues/14) auf 10.x halten, die direkte Referenz auf `Microsoft.EntityFrameworkCore.Relational` nicht entfernen.
+- Migration anlegen (in `src/backend`): `dnx --yes dotnet-ef@<EF-Version> -- migrations add <Name> --project Murmli.Backend.Data`.
+- Smart Enums (`[SmartEnum<string>]`) per `HasConversion(status => status.Key, key => <Typ>.Get(key))` als `text` speichern, nicht über das Thinktecture-EF-Paket.
+- Namenssuche nur per `EF.Functions.ILike(product.Name, "%" + term + "%", "\\")` mit selbst escaptem `%`, `_` und `\` und mindestens 3 Zeichen, nie per `Contains` oder `ToLower().Contains`.
+- Neue Postgres-Extensions in `azure.extensions` in `Database/Extensions.cs` des AppHost eintragen (`DependsOn` behalten), nie im Portal.
+
+## Produktimport
+
+Hintergrund und Entscheidungen: [docs/product-import.md](docs/product-import.md), vor Änderungen an Reader, Mapper, Download oder Abgleich lesen.
+
+- Den vollen Export nie lesen: AppHost nur mit `ProductImport__ProductLimit=100` am Startbefehl starten (nie global setzen), dann `aspire resource product-import start`.
+- Nach dem Start in der Logzeile `Starting the product import run … with the product limit 100` das Limit prüfen, fehlt es, die Ressource sofort stoppen.
+- In Tests den Export als Inline-Fixture über einen `HttpMessageHandler`-Stub liefern.
+- Nährwerte nur aus `value` lesen, nie aus `value_computed`, und nur bei `preparation` `as_sold`.
+- `MigrateAsync` nur im Job aufrufen. Soll auch die API migrieren, Migrationen an `products` additiv und nullable halten, solange ein älterer Job noch laufen kann.
