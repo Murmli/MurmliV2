@@ -366,7 +366,7 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 
 Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 
-- Den Context in Hosts nur per `builder.AddMurmliDbContext()` registrieren.
+- Den Context nur per `builder.AddMurmliDbContext()` registrieren.
 - In `OnConfiguring` keine Optionen ändern (auch kein `EFCore.NamingConventions`), snake_case explizit in den `IEntityTypeConfiguration`-Klassen setzen.
 - Pro Fachbereich ein Schema mit kleingeschriebenem Namen per `ToTable(name, schema)`, `__EFMigrationsHistory` und Extensions in `public` lassen. In Raw SQL Tabellen immer mit Schema nennen (`products.products`).
 - EF-Core-Pakete (auch `Microsoft.EntityFrameworkCore.Design`) bis [#14](https://github.com/Murmli/MurmliV2/issues/14) auf 10.x halten, die direkte Referenz auf `Microsoft.EntityFrameworkCore.Relational` nicht entfernen.

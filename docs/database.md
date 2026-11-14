@@ -24,7 +24,7 @@ Postgres-Container auf Host-Port 60123, User `postgres`, Passwort in den User Se
 | Raw SQL mit Schema | `search_path` enthält nur `public`. |
 | Keine Optionen in `OnConfiguring` | Die Aspire-Integration poolt den Context, EF wirft sonst `PoolingOptionsModified`. Deshalb snake_case explizit in den Konfigurationen. Verworfen: `EFCore.NamingConventions`. |
 | EF Core 10.x | Aspires EF-Integration 13.6.5 hängt am Npgsql-Provider 10, der Provider für EF Core 11 ist nur als RC verfügbar, Pakete der EF-Core-11-Linie (auch `Microsoft.EntityFrameworkCore.Design` 11) brechen den Restore. Gilt bis [#14](https://github.com/Murmli/MurmliV2/issues/14). |
-| Direkte Referenz auf `Microsoft.EntityFrameworkCore.Relational` | Alle Hosts nutzen dieselbe EF-Version wie die Migrationen, die Aspire-Integration allein zöge eine ältere Patch-Version. |
+| Direkte Referenz auf `Microsoft.EntityFrameworkCore.Relational` | Alle Projekte nutzen dieselbe EF-Version wie die Migrationen, die Aspire-Integration allein zöge eine ältere Patch-Version. |
 | `MurmliDbContextDesignTimeFactory` | Die Aspire-Registrierung würde zur Design-Zeit ein Azure-Token holen. |
 | Smart Enums per `HasConversion` | Verworfen: Thinktecture-EF-Paket, es ist an eine EF-Major gebunden. |
 | `azure.extensions` nur aus `Database/Extensions.cs` | Der AppHost setzt den Parameter bei jedem Deploy vollständig. Verworfen: Pflege im Portal, sie geht beim Deploy verloren. |
