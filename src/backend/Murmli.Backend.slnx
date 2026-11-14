@@ -9,9 +9,12 @@
     <Project Path="Murmli.Backend.Data/Murmli.Backend.Data.csproj" />
     <Project Path="Murmli.Backend.ProductImport/Murmli.Backend.ProductImport.csproj" />
     <Project Path="Murmli.Backend.ProductImport.Host/Murmli.Backend.ProductImport.Host.csproj" />
+    <Project Path="Murmli.Backend.Telemetry/Murmli.Backend.Telemetry.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="Murmli.Backend.Aspire.Tests/Murmli.Backend.Aspire.Tests.csproj" />
+    <Project Path="Murmli.Backend.Data.Tests/Murmli.Backend.Data.Tests.csproj" />
     <Project Path="Murmli.Backend.ProductImport.Tests/Murmli.Backend.ProductImport.Tests.csproj" />
+    <Project Path="Murmli.Backend.Telemetry.Tests/Murmli.Backend.Telemetry.Tests.csproj" />
   </Folder>
 </Solution>

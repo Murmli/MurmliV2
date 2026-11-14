@@ -1,7 +1,9 @@
 using Murmli.Backend.ProductImport;
 using Murmli.Backend.ProductImport.Extensions;
+using Murmli.Backend.Telemetry.Extensions;
 
 var builder = Host.CreateApplicationBuilder(args);
+builder.AddTelemetry();
 builder.AddProductImport();
 
 using var host = builder.Build();

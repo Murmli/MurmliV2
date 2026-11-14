@@ -8,6 +8,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Murmli.Backend.Api\Murmli.Backend.Api.csproj" />
+        <ProjectReference Include="..\Murmli.Backend.Telemetry\Murmli.Backend.Telemetry.csproj" />
     </ItemGroup>
 
 </Project>

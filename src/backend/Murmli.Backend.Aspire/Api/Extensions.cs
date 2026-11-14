@@ -1,4 +1,5 @@
 using Aspire.Hosting.Azure;
+using Murmli.Backend.Aspire.Telemetry;
 
 namespace Murmli.Backend.Aspire.Api;
 
@@ -7,13 +8,15 @@ public static class Extensions
     public static IResourceBuilder<ProjectResource> AddApi(
         this IDistributedApplicationBuilder builder,
         IResourceBuilder<AzurePostgresFlexibleServerDatabaseResource> database,
-        IResourceBuilder<AzureUserAssignedIdentityResource> identity
+        IResourceBuilder<AzureUserAssignedIdentityResource> identity,
+        IResourceBuilder<AzureApplicationInsightsResource>? applicationInsights
     ) =>
         builder
             .AddProject<Projects.Murmli_Backend_Api_Host>("api")
             .WithReference(database)
             .WaitFor(database)
             .WithAzureUserAssignedIdentity(identity)
+            .WithTelemetry(applicationInsights)
             .WithExternalHttpEndpoints()
             .WithHttpHealthCheck("/health")
             .PublishAsAzureContainerApp(

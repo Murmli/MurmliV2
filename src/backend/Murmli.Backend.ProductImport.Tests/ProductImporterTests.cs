@@ -1,12 +1,15 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Products;
 using Murmli.Backend.ProductImport.Tests.Fixtures;
 using Murmli.Backend.ProductImport.Tests.Infrastructure;
+using OpenTelemetry.Logs;
 
 namespace Murmli.Backend.ProductImport.Tests;
 
@@ -157,11 +160,7 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
     public async Task ImportAsync_TruncatedExport_ThrowsKeepsProductsAndRecordsFailedRun()
     {
         var seededProducts = await SeedProductsAsync();
-        using var host = CreateHostWithAdvancingClock(
-            CompressedExport.CreateTruncated(
-                [CreateExportLine("4000000000013", "Butter", 83), CreateExportLine("4000000000014", "Käse", 28.5)]
-            )
-        );
+        using var host = CreateHostWithAdvancingClock(CreateTruncatedExport());
 
         await Assert.ThrowsAsync<InvalidDataException>(() => ImportAsync(host));
 
@@ -173,6 +172,33 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
         );
         Assert.Equal(StartTime + ImportDuration, runs[1].FinishedAt);
         Assert.True(runs[1].PeakMemoryBytes > 0);
+    }
+
+    [Fact]
+    public async Task ImportAsync_TruncatedExport_RecordsFailedRunSpanAndErrorLog()
+    {
+        List<Activity> activities = [];
+        List<LogRecord> logRecords = [];
+        using (
+            var host = ProductImportHost.Create(
+                connectionString,
+                CreateTruncatedExport(),
+                activities: activities,
+                logRecords: logRecords
+            )
+        )
+        {
+            await host.StartAsync(TestContext.Current.CancellationToken);
+            await Assert.ThrowsAsync<InvalidDataException>(() => ImportAsync(host));
+        }
+
+        var runActivity = Assert.Single(activities, activity => activity.Source.Name == "Murmli.Backend.ProductImport");
+        Assert.Equal(ActivityStatusCode.Error, runActivity.Status);
+        Assert.Contains(runActivity.Events, activityEvent => activityEvent.Name == "exception");
+        var failureLog = Assert.Single(logRecords, logRecord => logRecord.EventId.Id == 1005);
+        Assert.Equal(LogLevel.Error, failureLog.LogLevel);
+        Assert.Equal(runActivity.TraceId, failureLog.TraceId);
+        Assert.IsType<InvalidDataException>(failureLog.Exception);
     }
 
     [Fact(Timeout = 30_000)]
@@ -359,6 +385,32 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
     }
 
     [Fact]
+    public async Task ImportAsync_SuccessfulRun_RecordsRunAsRootSpanWithDatabaseSpans()
+    {
+        List<Activity> activities = [];
+        using (
+            var host = ProductImportHost.Create(
+                connectionString,
+                CompressedExport.Create([CreateExportLine("4000000000011", "Apfel", 0.2)]),
+                activities: activities
+            )
+        )
+        {
+            await host.StartAsync(TestContext.Current.CancellationToken);
+            await ImportAsync(host);
+        }
+
+        var runActivity = Assert.Single(activities, activity => activity.Source.Name == "Murmli.Backend.ProductImport");
+        Assert.Equal("product-import run", runActivity.OperationName);
+        Assert.Equal(default, runActivity.ParentSpanId);
+        Assert.NotEqual(ActivityStatusCode.Error, runActivity.Status);
+        Assert.Contains(
+            activities,
+            activity => activity.Source.Name == "Npgsql" && activity.TraceId == runActivity.TraceId
+        );
+    }
+
+    [Fact]
     public async Task ImportAsync_WhileReadingExport_RunIsRecordedAsRunning()
     {
         var exportRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -483,6 +535,11 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
             ["source"] = source,
             ["source_per"] = per,
         };
+
+    private static byte[] CreateTruncatedExport() =>
+        CompressedExport.CreateTruncated(
+            [CreateExportLine("4000000000013", "Butter", 83), CreateExportLine("4000000000014", "Käse", 28.5)]
+        );
 
     private IHost CreateHostWithAdvancingClock(byte[] export) =>
         ProductImportHost.Create(

@@ -1,4 +1,5 @@
 using Aspire.Hosting.Azure;
+using Murmli.Backend.Aspire.Telemetry;
 
 namespace Murmli.Backend.Aspire.ProductImport;
 
@@ -7,7 +8,8 @@ public static class Extensions
     public static IResourceBuilder<ProjectResource> AddProductImport(
         this IDistributedApplicationBuilder builder,
         IResourceBuilder<AzurePostgresFlexibleServerDatabaseResource> database,
-        IResourceBuilder<AzureUserAssignedIdentityResource> identity
+        IResourceBuilder<AzureUserAssignedIdentityResource> identity,
+        IResourceBuilder<AzureApplicationInsightsResource>? applicationInsights
     )
     {
         var productImport = builder
@@ -15,6 +17,7 @@ public static class Extensions
             .WithReference(database)
             .WaitFor(database)
             .WithAzureUserAssignedIdentity(identity)
+            .WithTelemetry(applicationInsights)
             // Keeps aspire run and dotnet test from downloading the export
             .WithExplicitStart()
             // Cron is UTC, Open Food Facts uploads the export around 05:30 UTC

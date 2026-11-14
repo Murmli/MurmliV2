@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Products;
 using Murmli.Backend.ProductImport.Configuration;
+using Murmli.Backend.ProductImport.Diagnostics;
 using Murmli.Backend.ProductImport.OpenFoodFacts;
 using Murmli.Backend.ProductImport.Synchronization;
 
@@ -20,6 +21,22 @@ public sealed partial class ProductImporter(
 )
 {
     public async Task ImportAsync(CancellationToken cancellationToken = default)
+    {
+        using var activity = ProductImportActivitySource.Instance.StartActivity("product-import run");
+        try
+        {
+            await RunImportAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            LogProductImportFailed(exception);
+            activity?.SetStatus(ActivityStatusCode.Error, exception.Message);
+            activity?.AddException(exception);
+            throw;
+        }
+    }
+
+    private async Task RunImportAsync(CancellationToken cancellationToken)
     {
         await context.Database.MigrateAsync(cancellationToken);
         await FailInterruptedRunsAsync(cancellationToken);

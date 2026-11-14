@@ -11,4 +11,6 @@ internal static class LogEvents
     public const int UnknownSchemaVersion = 1003;
 
     public const int RunFailureNotRecorded = 1004;
+
+    public const int ProductImportFailed = 1005;
 }

@@ -8,6 +8,7 @@
 - `WithExplicitStart` verhindert, dass `aspire run` und `dotnet test` den Export laden. Lokal startet man ihn über das Dashboard oder `aspire resource product-import start`, er lädt dann den vollen Export wie in Azure.
 - Der AppHost reicht `ProductImport__ProductLimit` nur im Run-Mode an `product-import` weiter. Ein Lauf mit erreichtem Limit löscht nichts.
 - Derzeit migriert nur der Job (`MigrateAsync` beim Start).
+- Jeder Lauf ist ein eigener Trace `product-import run` (Quelle `Murmli.Backend.ProductImport`) mit Migration, Download und Datenbankarbeit. Ein fehlgeschlagener Lauf trägt Fehlerstatus und Exception und wird als Fehler geloggt (Event 1005).
 
 ## Nährwerte im Export
 
