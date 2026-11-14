@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../i18n/strings.g.dart';
 import 'core/router/app_router_provider.dart';
 import 'core/theme/app_theme.dart';
+import 'features/settings/theme_mode_provider.dart';
 
 class MurmliApp extends HookConsumerWidget {
   const MurmliApp({super.key});
@@ -18,7 +19,7 @@ class MurmliApp extends HookConsumerWidget {
       onGenerateTitle: (context) => context.t.app.title,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
+      themeMode: ref.watch(appThemeModeProvider),
       locale: TranslationProvider.of(context).flutterLocale,
       supportedLocales: AppLocaleUtils.supportedLocales,
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
