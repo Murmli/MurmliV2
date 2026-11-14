@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app/app.dart';
 import 'app/core/storage/preference_keys.dart';
 import 'app/core/storage/shared_preferences_provider.dart';
+import 'app/features/settings/app_language_provider.dart';
 import 'i18n/strings.g.dart';
 
 Future<void> main() async {
@@ -21,7 +22,7 @@ Future<void> main() async {
   final container = ProviderContainer(
     overrides: [sharedPreferencesProvider.overrideWithValue(sharedPreferences)],
   );
-  await LocaleSettings.useDeviceLocale();
+  await container.read(selectedAppLanguageProvider).apply();
 
   runApp(
     UncontrolledProviderScope(

@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:app/app/app.dart';
+import 'package:app/app/features/settings/app_language_provider.dart';
 import 'package:app/i18n/strings.g.dart';
 
 import 'preferences.dart';
@@ -16,7 +17,7 @@ Future<void> pumpApp(
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
 
   final container = createContainer(await createPreferences(storedPreferences));
-  await LocaleSettings.useDeviceLocale();
+  await container.read(selectedAppLanguageProvider).apply();
 
   await tester.pumpWidget(
     UncontrolledProviderScope(

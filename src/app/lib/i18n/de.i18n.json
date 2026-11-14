@@ -31,6 +31,7 @@
     "legalNote": "Mit der Anmeldung stimmst du den AGB und der Datenschutzerklärung zu."
   },
   "home": {
+    "settingsTooltip": "Einstellungen",
     "comingSoon": "Kommt bald",
     "tabs": {
       "recipes": {
@@ -53,6 +54,31 @@
         "label": "Kalorien",
         "title": "Kalorien"
       }
+    }
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "language": {
+      "section": "Sprache",
+      "system": "Systemsprache",
+      "german": "Deutsch",
+      "english": "English"
+    },
+    "theme": {
+      "section": "Darstellung",
+      "system": "System",
+      "light": "Hell",
+      "dark": "Dunkel"
+    },
+    "onboarding": {
+      "section": "Onboarding",
+      "showAgain": "Onboarding erneut anzeigen"
+    },
+    "about": {
+      "section": "Über Murmli",
+      "version": "Version",
+      "versionUnavailable": "Nicht verfügbar",
+      "licenses": "Lizenzen"
     }
   }
 }
