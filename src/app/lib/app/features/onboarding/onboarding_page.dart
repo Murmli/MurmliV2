@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:auto_route/auto_route.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -277,14 +279,14 @@ class _SignInButtons extends ConsumerWidget {
           label: translations.continueWithApple,
           backgroundColor: colors.ink,
           foregroundColor: colors.background,
-          onPressed: () => _completeOnboarding(context, ref),
+          onPressed: () => unawaited(_completeOnboarding(context, ref)),
         ),
         _PillButton(
           label: translations.continueWithGoogle,
           backgroundColor: colors.surface,
           foregroundColor: colors.ink,
           border: BorderSide(color: colors.line),
-          onPressed: () => _completeOnboarding(context, ref),
+          onPressed: () => unawaited(_completeOnboarding(context, ref)),
         ),
       ],
     );
