@@ -37,34 +37,26 @@ class OnboardingPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const _Brand(),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: AppSpacing.space28),
                     Text(
                       translations.headline,
-                      style: AppTypography.display.copyWith(
-                        fontSize: 36,
-                        height: 40 / 36,
-                        letterSpacing: -0.72,
-                        fontVariations: const [FontVariation.opticalSize(36)],
-                        color: colors.ink,
-                      ),
+                      style: AppTypography.hero.copyWith(color: colors.ink),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: AppSpacing.space14),
                     Text(
                       translations.subline,
-                      style: AppTypography.body.copyWith(
-                        fontSize: 16,
-                        height: 24 / 16,
+                      style: AppTypography.bodyLarge.copyWith(
                         color: colors.inkSecondary,
                       ),
                     ),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: AppSpacing.space28),
                     const _FeatureCard(),
                     const Spacer(),
                     const SizedBox(height: AppSpacing.space24),
                     const Center(child: _StartTokensChip()),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: AppSpacing.space14),
                     const _SignInButtons(),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: AppSpacing.space14),
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.space8,
@@ -96,13 +88,8 @@ class _Brand extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final translations = context.t.app;
-    final brandStyle = AppTypography.title.copyWith(
-      fontSize: 26,
-      height: 1,
-      fontVariations: const [FontVariation.opticalSize(26)],
-    );
     return Row(
-      spacing: 10,
+      spacing: AppSpacing.space10,
       children: [
         Container(
           width: 44,
@@ -110,11 +97,11 @@ class _Brand extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: colors.primary,
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(AppRadius.brandMark),
           ),
           child: Text(
             translations.logoInitial,
-            style: brandStyle.copyWith(
+            style: AppTypography.brand.copyWith(
               fontWeight: FontWeight.w800,
               color: colors.onPrimary,
             ),
@@ -122,7 +109,7 @@ class _Brand extends StatelessWidget {
         ),
         Text(
           translations.wordmark,
-          style: brandStyle.copyWith(letterSpacing: -0.52, color: colors.ink),
+          style: AppTypography.wordmark.copyWith(color: colors.ink),
         ),
       ],
     );
@@ -144,7 +131,7 @@ class _FeatureCard extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(AppRadius.featureCard),
         boxShadow: colors.cardShadow,
       ),
       child: Column(
@@ -195,7 +182,7 @@ class _FeatureRow extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 58),
       child: Row(
-        spacing: 14,
+        spacing: AppSpacing.space14,
         children: [
           IconTile(icon: icon),
           Expanded(
@@ -234,10 +221,13 @@ class _StartTokensChip extends StatelessWidget {
     final colors = context.colors;
     return Container(
       height: 36,
-      padding: const EdgeInsets.only(left: 10, right: AppSpacing.space16),
+      padding: const EdgeInsetsDirectional.only(
+        start: AppSpacing.space10,
+        end: AppSpacing.space16,
+      ),
       decoration: BoxDecoration(
         color: colors.primarySoft,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -273,7 +263,7 @@ class _SignInButtons extends ConsumerWidget {
     final translations = context.t.onboarding;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 10,
+      spacing: AppSpacing.space10,
       children: [
         _PillButton(
           label: translations.continueWithApple,
@@ -317,10 +307,7 @@ class _PillButton extends StatelessWidget {
         foregroundColor: foregroundColor,
         minimumSize: const Size.fromHeight(56),
         shape: StadiumBorder(side: border),
-        textStyle: AppTypography.body.copyWith(
-          fontSize: 16,
-          fontWeight: FontWeight.w700,
-        ),
+        textStyle: AppTypography.button,
       ),
       child: Text(label),
     );

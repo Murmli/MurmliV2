@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
 
 class IconTile extends StatelessWidget {
   const IconTile({required this.icon, super.key});
@@ -15,7 +16,7 @@ class IconTile extends StatelessWidget {
       height: 40,
       decoration: BoxDecoration(
         color: colors.primarySoft,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.iconTile),
       ),
       child: Icon(icon, size: 22, color: colors.primaryText),
     );

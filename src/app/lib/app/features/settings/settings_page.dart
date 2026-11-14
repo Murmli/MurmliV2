@@ -25,7 +25,7 @@ class SettingsPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(context.t.settings.title)),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(
+        padding: const EdgeInsetsDirectional.fromSTEB(
           AppSpacing.screenMargin,
           AppSpacing.space8,
           AppSpacing.screenMargin,
@@ -291,7 +291,7 @@ class _SettingsRow extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 58),
           child: Row(
-            spacing: 14,
+            spacing: AppSpacing.space14,
             children: [
               IconTile(icon: icon),
               Expanded(

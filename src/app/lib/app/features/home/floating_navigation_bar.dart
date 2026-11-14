@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../i18n/strings.g.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import 'home_tab.dart';
@@ -23,7 +24,7 @@ class FloatingNavigationBar extends StatelessWidget {
       top: false,
       minimum: const EdgeInsets.only(bottom: AppSpacing.space20),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
+        padding: const EdgeInsetsDirectional.fromSTEB(
           AppSpacing.space16,
           AppSpacing.space16,
           AppSpacing.space16,
@@ -31,17 +32,17 @@ class FloatingNavigationBar extends StatelessWidget {
         ),
         child: Container(
           constraints: const BoxConstraints(minHeight: 68),
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space6),
           decoration: BoxDecoration(
             color: colors.surface,
-            borderRadius: BorderRadius.circular(34),
+            borderRadius: BorderRadius.circular(AppRadius.navigationBar),
             border: Border.all(color: colors.line),
             boxShadow: colors.navigationShadow,
           ),
           child: Material(
             type: MaterialType.transparency,
             child: Row(
-              spacing: 2,
+              spacing: AppSpacing.space2,
               children: [
                 for (final tab in HomeTab.values)
                   if (tab == HomeTab.chat)
@@ -96,15 +97,17 @@ class _TabButton extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
-            spacing: 3,
+            spacing: AppSpacing.space3,
             children: [
               AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
+                duration: AppMotion.short(context),
                 width: 52,
                 height: 30,
                 decoration: BoxDecoration(
                   color: isActive ? colors.primarySoft : Colors.transparent,
-                  borderRadius: BorderRadius.circular(15),
+                  borderRadius: BorderRadius.circular(
+                    AppRadius.navigationIndicator,
+                  ),
                 ),
                 child: Icon(tab.icon, size: 22, color: foregroundColor),
               ),
@@ -150,7 +153,7 @@ class _ChatTabButton extends StatelessWidget {
             child: Transform.translate(
               offset: const Offset(0, -9),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
+                duration: AppMotion.short(context),
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(

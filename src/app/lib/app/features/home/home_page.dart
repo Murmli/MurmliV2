@@ -52,7 +52,7 @@ class _HomeHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
+      padding: const EdgeInsetsDirectional.fromSTEB(
         AppSpacing.screenMargin,
         AppSpacing.space8,
         AppSpacing.space8,
