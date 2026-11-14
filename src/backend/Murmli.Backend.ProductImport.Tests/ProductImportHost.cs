@@ -10,7 +10,13 @@ namespace Murmli.Backend.ProductImport.Tests;
 
 internal static class ProductImportHost
 {
-    public static IHost Create(string connectionString, byte[]? export = null, int? productLimit = null)
+    public static IHost Create(
+        string connectionString,
+        byte[]? export = null,
+        int? productLimit = null,
+        TimeProvider? timeProvider = null,
+        Func<CancellationToken, Task>? onExportRequested = null
+    )
     {
         var builder = Host.CreateApplicationBuilder(
             new HostApplicationBuilderSettings { EnvironmentName = Environments.Production }
@@ -23,9 +29,14 @@ internal static class ProductImportHost
             }
         );
         builder.AddProductImport();
+        if (timeProvider is not null)
+        {
+            builder.Services.AddSingleton(timeProvider);
+        }
+
         builder
             .Services.AddHttpClient<OpenFoodFactsExportReader>()
-            .ConfigurePrimaryHttpMessageHandler(() => new ExportHttpMessageHandler(export ?? []));
+            .ConfigurePrimaryHttpMessageHandler(() => new ExportHttpMessageHandler(export ?? [], onExportRequested));
         return builder.Build();
     }
 
@@ -36,6 +47,16 @@ internal static class ProductImportHost
             .ServiceProvider.GetRequiredService<MurmliDbContext>()
             .Products.AsNoTracking()
             .OrderBy(product => product.Code)
+            .ToArrayAsync(TestContext.Current.CancellationToken);
+    }
+
+    public static async Task<ProductImportRun[]> ReadRunsAsync(IHost host)
+    {
+        await using var scope = host.Services.CreateAsyncScope();
+        return await scope
+            .ServiceProvider.GetRequiredService<MurmliDbContext>()
+            .ProductImportRuns.AsNoTracking()
+            .OrderBy(run => run.Id)
             .ToArrayAsync(TestContext.Current.CancellationToken);
     }
 }

@@ -9,4 +9,6 @@ internal static class LogEvents
     public const int ProductsSynchronized = 1002;
 
     public const int UnknownSchemaVersion = 1003;
+
+    public const int RunFailureNotRecorded = 1004;
 }

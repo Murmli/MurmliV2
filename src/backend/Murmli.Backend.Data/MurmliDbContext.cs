@@ -7,6 +7,8 @@ public class MurmliDbContext(DbContextOptions<MurmliDbContext> options) : DbCont
 {
     public DbSet<Product> Products => Set<Product>();
 
+    public DbSet<ProductImportRun> ProductImportRuns => Set<ProductImportRun>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(MurmliDbContext).Assembly);
 }

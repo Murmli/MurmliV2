@@ -6,9 +6,13 @@ public sealed partial class ProductImporter
         EventId = LogEvents.ProductImportStarted,
         EventName = nameof(LogEvents.ProductImportStarted),
         Level = LogLevel.Information,
-        Message = "Starting the product import with the product limit {" + LogProperties.ProductLimit + "}"
+        Message = "Starting the product import run {"
+            + LogProperties.RunId
+            + "} with the product limit {"
+            + LogProperties.ProductLimit
+            + "}"
     )]
-    private partial void LogProductImportStarted(int? productLimit);
+    private partial void LogProductImportStarted(long runId, int? productLimit);
 
     [LoggerMessage(
         EventId = LogEvents.GermanProductsRead,
@@ -35,4 +39,12 @@ public sealed partial class ProductImporter
             + "} deleted"
     )]
     private partial void LogProductsSynchronized(int insertedCount, int updatedCount, int deletedCount);
+
+    [LoggerMessage(
+        EventId = LogEvents.RunFailureNotRecorded,
+        EventName = nameof(LogEvents.RunFailureNotRecorded),
+        Level = LogLevel.Error,
+        Message = "Could not record the failure of the product import run {" + LogProperties.RunId + "}"
+    )]
+    private partial void LogRunFailureNotRecorded(Exception exception, long runId);
 }

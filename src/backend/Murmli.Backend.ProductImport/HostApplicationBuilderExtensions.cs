@@ -20,6 +20,7 @@ public static class HostApplicationBuilderExtensions
             client.DefaultRequestHeaders.UserAgent.ParseAdd("Murmli/1.0 (+https://github.com/Murmli/MurmliV2)")
         );
 
+        builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<ProductSynchronizer>();
         builder.Services.AddScoped<ProductImporter>();
     }
