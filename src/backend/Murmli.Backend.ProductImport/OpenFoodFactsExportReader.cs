@@ -10,10 +10,14 @@ namespace Murmli.Backend.ProductImport;
 
 public sealed partial class OpenFoodFactsExportReader(
     HttpClient httpClient,
+    TimeProvider timeProvider,
     ILogger<OpenFoodFactsExportReader> logger
 )
 {
     private const int LastKnownSchemaVersion = 1004;
+
+    // HttpClient.Timeout only covers the response headers, a stalled body would block the read forever
+    private static readonly TimeSpan InactivityTimeout = TimeSpan.FromMinutes(2);
 
     private static readonly Uri ExportUri = new(
         "https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz"
@@ -38,13 +42,23 @@ public sealed partial class OpenFoodFactsExportReader(
             CompressionMode.Decompress
         );
         var pipeReader = PipeReader.Create(export, new StreamPipeReaderOptions(bufferSize: 1024 * 1024));
+        using var inactivitySource = new CancellationTokenSource(Timeout.InfiniteTimeSpan, timeProvider);
+        using var readSource = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            inactivitySource.Token
+        );
         var hasReadLine = false;
         var hasLoggedUnknownSchemaVersion = false;
         try
         {
             while (true)
             {
-                var result = await pipeReader.ReadAsync(cancellationToken);
+                var result = await ReadWithInactivityTimeoutAsync(
+                    pipeReader,
+                    inactivitySource,
+                    readSource.Token,
+                    cancellationToken
+                );
                 var buffer = result.Buffer;
 
                 while (TryReadLine(ref buffer, result.IsCompleted, out var line))
@@ -88,6 +102,32 @@ public sealed partial class OpenFoodFactsExportReader(
         finally
         {
             await pipeReader.CompleteAsync();
+        }
+    }
+
+    private static async ValueTask<ReadResult> ReadWithInactivityTimeoutAsync(
+        PipeReader pipeReader,
+        CancellationTokenSource inactivitySource,
+        CancellationToken readCancellationToken,
+        CancellationToken cancellationToken
+    )
+    {
+        inactivitySource.CancelAfter(InactivityTimeout);
+        try
+        {
+            return await pipeReader.ReadAsync(readCancellationToken);
+        }
+        catch (OperationCanceledException exception)
+            when (inactivitySource.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"The Open Food Facts export sent no data for {InactivityTimeout.TotalMinutes} minutes.",
+                exception
+            );
+        }
+        finally
+        {
+            inactivitySource.CancelAfter(Timeout.InfiniteTimeSpan);
         }
     }
 

@@ -2,8 +2,10 @@ using System.Net;
 
 namespace Murmli.Backend.ProductImport.Tests;
 
-internal sealed class ExportHttpMessageHandler(byte[] export, Func<CancellationToken, Task>? onExportRequested = null)
-    : HttpMessageHandler
+internal sealed class ExportHttpMessageHandler(
+    Func<Stream> openExport,
+    Func<CancellationToken, Task>? onExportRequested = null
+) : HttpMessageHandler
 {
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
@@ -15,6 +17,6 @@ internal sealed class ExportHttpMessageHandler(byte[] export, Func<CancellationT
             await onExportRequested(cancellationToken);
         }
 
-        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(export) };
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(openExport()) };
     }
 }
