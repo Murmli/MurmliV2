@@ -291,7 +291,7 @@ class _SettingsRow extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 58),
           child: Row(
-            spacing: AppSpacing.space14,
+            spacing: AppSpacing.space12,
             children: [
               IconTile(icon: icon),
               Expanded(
