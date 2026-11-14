@@ -4,6 +4,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Products;
+using Murmli.Backend.ProductImport.Configuration;
+using Murmli.Backend.ProductImport.OpenFoodFacts;
+using Murmli.Backend.ProductImport.Synchronization;
 
 namespace Murmli.Backend.ProductImport;
 

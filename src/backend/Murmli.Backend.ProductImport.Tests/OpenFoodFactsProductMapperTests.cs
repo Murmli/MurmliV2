@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Murmli.Backend.Data.Products;
+using Murmli.Backend.ProductImport.OpenFoodFacts;
 
 namespace Murmli.Backend.ProductImport.Tests;
 

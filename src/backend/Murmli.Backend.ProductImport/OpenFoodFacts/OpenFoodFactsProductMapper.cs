@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Murmli.Backend.Data.Products;
 
-namespace Murmli.Backend.ProductImport;
+namespace Murmli.Backend.ProductImport.OpenFoodFacts;
 
 public static class OpenFoodFactsProductMapper
 {

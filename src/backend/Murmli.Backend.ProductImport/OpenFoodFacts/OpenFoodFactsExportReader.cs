@@ -6,7 +6,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Murmli.Backend.Data.Products;
 
-namespace Murmli.Backend.ProductImport;
+namespace Murmli.Backend.ProductImport.OpenFoodFacts;
 
 public sealed partial class OpenFoodFactsExportReader(
     HttpClient httpClient,

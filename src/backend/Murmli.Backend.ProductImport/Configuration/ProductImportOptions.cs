@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Murmli.Backend.ProductImport;
+namespace Murmli.Backend.ProductImport.Configuration;
 
 public sealed class ProductImportOptions
 {

@@ -1,6 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Murmli.Backend.Data.Extensions;
+using Murmli.Backend.ProductImport.Configuration;
+using Murmli.Backend.ProductImport.OpenFoodFacts;
+using Murmli.Backend.ProductImport.Synchronization;
 
 namespace Murmli.Backend.ProductImport.Extensions;
 

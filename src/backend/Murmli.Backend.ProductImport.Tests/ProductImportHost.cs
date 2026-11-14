@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Products;
 using Murmli.Backend.ProductImport.Extensions;
+using Murmli.Backend.ProductImport.OpenFoodFacts;
 
 namespace Murmli.Backend.ProductImport.Tests;
 

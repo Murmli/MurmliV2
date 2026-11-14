@@ -5,7 +5,7 @@ using Murmli.Backend.Data.Products;
 using Npgsql;
 using NpgsqlTypes;
 
-namespace Murmli.Backend.ProductImport;
+namespace Murmli.Backend.ProductImport.Synchronization;
 
 public sealed class ProductSynchronizer(MurmliDbContext context)
 {

@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Murmli.Backend.ProductImport.Diagnostics;
 
-namespace Murmli.Backend.ProductImport;
+namespace Murmli.Backend.ProductImport.OpenFoodFacts;
 
 public sealed partial class OpenFoodFactsExportReader
 {
