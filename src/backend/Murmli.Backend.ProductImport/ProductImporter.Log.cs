@@ -38,15 +38,15 @@ public sealed partial class ProductImporter
             + LogProperties.UpdatedCount
             + "} updated, {"
             + LogProperties.DeletedCount
-            + "} deleted, peak memory {"
+            + "} deleted, peak memory in bytes: {"
             + LogProperties.PeakMemoryBytes
-            + "} bytes"
+            + "}"
     )]
     private partial void LogProductsSynchronized(
         int insertedCount,
         int updatedCount,
         int deletedCount,
-        long peakMemoryBytes
+        long? peakMemoryBytes
     );
 
     [LoggerMessage(

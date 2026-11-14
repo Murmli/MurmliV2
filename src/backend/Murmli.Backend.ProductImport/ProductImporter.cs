@@ -112,10 +112,12 @@ public sealed partial class ProductImporter(
         }
     }
 
-    // The job process runs nothing but the import, so the peak of the process is the peak of the run
-    private static long ReadPeakMemoryBytes()
+    // The job process runs nothing but the import, so the peak of the process is the peak of the run. macOS reports
+    // no peak and returns 0
+    private static long? ReadPeakMemoryBytes()
     {
         using var process = Process.GetCurrentProcess();
-        return process.PeakWorkingSet64;
+        var peakMemoryBytes = process.PeakWorkingSet64;
+        return peakMemoryBytes == 0 ? null : peakMemoryBytes;
     }
 }
