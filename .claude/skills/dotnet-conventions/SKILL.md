@@ -73,6 +73,10 @@ die Defaults hier greifen für neue Projekte und neue Testsuiten.
 - Naming: `{MethodName}_{Scenario}_{ExpectedResult}`.
 - Parametrisierte Fälle per `[Theory]` mit `[InlineData]`/`[MemberData]`
   statt duplizierter Testmethoden.
+- Testprojekte spiegeln Ordner und Namespaces der getesteten Library.
+  Gemeinsame Test-Helfer liegen unter `Infrastructure/`, gemeinsame
+  Testdaten unter `Fixtures/`. Kein Ordner- oder Namespace-Segment `Host`
+  (es verdeckt `Host.CreateApplicationBuilder`), stattdessen `Hosting/`.
 - Tests mit `dotnet test` vor jedem Commit.
 
 ## NuGet
