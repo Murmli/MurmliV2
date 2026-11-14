@@ -21,7 +21,8 @@ Kurzfassung der offiziellen Flutter-AI-Rules:
 
 ## Projekt-Konventionen
 
-- Abstände, Radien, Textstile und Animationsdauern nur aus `lib/app/core/theme/` (`AppSpacing`, `AppRadius`, `AppTypography`, `AppMotion`); Komponentenmaße (Breiten, Höhen, Icon-Größen) bleiben lokal im Widget. `AppMotion` liefert bei reduzierter Bewegung `Duration.zero`.
+- Styling kommt aus dem Theme (`lib/app/core/theme/app_theme.dart`): Widgets nutzen Material-Widgets ohne Instanz-Styles (`FilledButton`, `OutlinedButton`, `ListTile`, `Chip`, `Divider`) und Textrollen über `TextTheme.of(context)`. Fehlt etwas, wird das Component-Theme erweitert, nicht das Widget gestylt.
+- Konstanten nur für Layout und Custom-Elemente: Abstände aus `AppSpacing` (4px-Raster), Animationsdauern aus `AppMotion` (bei reduzierter Bewegung `Duration.zero`); `AppTypography` und `AppRadius` direkt nur in selbst gezeichneten Elementen (Navigationsleiste, Logo, `IconTile`, Karten mit `cardShadow`). Komponentenmaße bleiben lokal im Widget.
 - Insets und Ausrichtung direktional (`EdgeInsetsDirectional`, `AlignmentDirectional`).
 - Future-liefernde Callbacks an `VoidCallback` explizit mit `unawaited(...)` – die Lints `discarded_futures`/`unawaited_futures` erkennen Arrow-Callbacks nicht. Fehler daraus landen über `PlatformDispatcher.onError` im Talker-Log (`main.dart`).
 - Eigene `Semantics(excludeSemantics: true)` um Tap-Ziele brauchen `onTap`, sonst können Screenreader sie nicht auslösen.
