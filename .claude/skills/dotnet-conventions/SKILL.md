@@ -73,7 +73,10 @@ die Defaults hier greifen für neue Projekte und neue Testsuiten.
 - Naming: `{MethodName}_{Scenario}_{ExpectedResult}`.
 - Parametrisierte Fälle per `[Theory]` mit `[InlineData]`/`[MemberData]`
   statt duplizierter Testmethoden.
-- Testprojekte spiegeln Ordner und Namespaces der getesteten Library.
+- Jede Testklasse liegt im selben relativen Ordner und Namespace wie die
+  Klasse, die sie testet: `Murmli.Backend.X.Foo.Bar` wird in
+  `Murmli.Backend.X.Tests.Foo.BarTests` getestet, eine Klasse im Root der
+  Library im Root des Testprojekts.
   Gemeinsame Test-Helfer liegen unter `Infrastructure/`, gemeinsame
   Testdaten unter `Fixtures/`. Kein Ordner- oder Namespace-Segment `Host`
   (es verdeckt `Host.CreateApplicationBuilder`), stattdessen `Hosting/`.
