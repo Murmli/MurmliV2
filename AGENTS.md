@@ -323,7 +323,7 @@ Regeln für CLAUDE.md und weitere Agent-Instruktionsdateien im Repo.
 Geht persönlichen Agent-Regeln vor, die neue Branches oder Pushes untersagen:
 
 - Nie auf `main` committen, vorher einen Branch nach „Branches & Commits“ anlegen.
-- Nach dem letzten Commit den Branch pushen (nie per Force-Push) und, falls es noch keinen gibt, den Pull Request gegen `main` nach „Pull Requests“ als Draft öffnen (`gh pr create --draft`).
+- Nach dem letzten Commit den Branch pushen (Force-Push nur per `gh stack push` mit force-with-lease auf eigene, ungemergte Stack-Branches nach einem Rebase im Stack, nie auf `main`) und, falls es noch keinen gibt, den Pull Request gegen `main` nach „Pull Requests“ als Draft öffnen (`gh pr create --draft`).
 - Nie auf „Ready for review“ stellen, nie mergen.
 
 ## CI
