@@ -1,0 +1,178 @@
+import 'package:material_ui/material_ui.dart';
+
+import '../../../i18n/strings.g.dart';
+import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_typography.dart';
+import 'home_tab.dart';
+
+class FloatingNavigationBar extends StatelessWidget {
+  const FloatingNavigationBar({
+    required this.activeTab,
+    required this.onTabSelected,
+    super.key,
+  });
+
+  final HomeTab activeTab;
+  final ValueChanged<HomeTab> onTabSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(bottom: AppSpacing.space20),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.space16,
+          AppSpacing.space16,
+          AppSpacing.space16,
+          0,
+        ),
+        child: Container(
+          height: 68,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: BorderRadius.circular(34),
+            border: Border.all(color: colors.line),
+            boxShadow: colors.navigationShadow,
+          ),
+          child: Row(
+            spacing: 2,
+            children: [
+              for (final tab in HomeTab.values)
+                if (tab == HomeTab.chat)
+                  _ChatTabButton(
+                    isActive: tab == activeTab,
+                    onPressed: () => onTabSelected(tab),
+                  )
+                else
+                  Expanded(
+                    child: _TabButton(
+                      tab: tab,
+                      isActive: tab == activeTab,
+                      onPressed: () => onTabSelected(tab),
+                    ),
+                  ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TabButton extends StatelessWidget {
+  const _TabButton({
+    required this.tab,
+    required this.isActive,
+    required this.onPressed,
+  });
+
+  final HomeTab tab;
+  final bool isActive;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final foregroundColor = isActive ? colors.primaryText : colors.inkTertiary;
+    final label = tab.label(context.t);
+    return Semantics(
+      button: true,
+      selected: isActive,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: SizedBox(
+          height: 60,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            spacing: 3,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 52,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: isActive ? colors.primarySoft : Colors.transparent,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Icon(tab.icon, size: 22, color: foregroundColor),
+              ),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.caption.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: foregroundColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatTabButton extends StatelessWidget {
+  const _ChatTabButton({required this.isActive, required this.onPressed});
+
+  final bool isActive;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Semantics(
+      button: true,
+      selected: isActive,
+      label: HomeTab.chat.label(context.t),
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: SizedBox(
+          width: 72,
+          height: 60,
+          child: Center(
+            child: Transform.translate(
+              offset: const Offset(0, -9),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: colors.primary,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: colors.primary.withValues(alpha: 0.55),
+                      offset: const Offset(0, 10),
+                      blurRadius: 20,
+                      spreadRadius: -6,
+                    ),
+                    BoxShadow(
+                      color: isActive ? colors.primarySoft : Colors.transparent,
+                      spreadRadius: 4,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  HomeTab.chat.icon,
+                  size: 26,
+                  color: colors.onPrimary,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
