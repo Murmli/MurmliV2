@@ -26,6 +26,6 @@ class AppRouter extends RootStackRouter {
         AutoRoute(page: CaloriesRoute.page),
       ],
     ),
-    AutoRoute(page: SettingsRoute.page),
+    AutoRoute(page: SettingsRoute.page, guards: [onboardingGuard]),
   ];
 }
