@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:auto_route/auto_route.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -65,8 +67,9 @@ class _LanguageSection extends ConsumerWidget {
               AppLanguage.english => translations.english,
             },
             isSelected: language == selectedLanguage,
-            onTap: () =>
-                ref.read(selectedAppLanguageProvider.notifier).select(language),
+            onTap: () => unawaited(
+              ref.read(selectedAppLanguageProvider.notifier).select(language),
+            ),
           ),
       ],
     );
@@ -96,8 +99,9 @@ class _ThemeSection extends ConsumerWidget {
               ThemeMode.dark => translations.dark,
             },
             isSelected: themeMode == selectedThemeMode,
-            onTap: () =>
-                ref.read(appThemeModeProvider.notifier).select(themeMode),
+            onTap: () => unawaited(
+              ref.read(appThemeModeProvider.notifier).select(themeMode),
+            ),
           ),
       ],
     );
@@ -124,7 +128,7 @@ class _OnboardingSection extends ConsumerWidget {
           icon: Icons.replay,
           label: translations.showAgain,
           trailing: const _ChevronIcon(),
-          onTap: () => _showOnboardingAgain(context, ref),
+          onTap: () => unawaited(_showOnboardingAgain(context, ref)),
         ),
       ],
     );
