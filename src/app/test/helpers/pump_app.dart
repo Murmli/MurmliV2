@@ -5,13 +5,24 @@ import 'package:material_ui/material_ui.dart';
 import 'package:app/app/app.dart';
 import 'package:app/i18n/strings.g.dart';
 
-Future<void> pumpApp(WidgetTester tester) async {
+import 'preferences.dart';
+import 'provider_container.dart';
+
+Future<void> pumpApp(
+  WidgetTester tester, {
+  Map<String, Object> storedPreferences = const {},
+}) async {
   tester.platformDispatcher.localesTestValue = const [Locale('de', 'DE')];
   addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+
+  final container = createContainer(await createPreferences(storedPreferences));
   await LocaleSettings.useDeviceLocale();
 
   await tester.pumpWidget(
-    ProviderScope(child: TranslationProvider(child: const MurmliApp())),
+    UncontrolledProviderScope(
+      container: container,
+      child: TranslationProvider(child: const MurmliApp()),
+    ),
   );
   await tester.pumpAndSettle();
 }
