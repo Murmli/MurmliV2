@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Murmli.Backend.ProductImport.Diagnostics;
 
 namespace Murmli.Backend.ProductImport;
 

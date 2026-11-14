@@ -1,4 +1,4 @@
-namespace Murmli.Backend.ProductImport;
+namespace Murmli.Backend.ProductImport.Diagnostics;
 
 internal static class LogEvents
 {

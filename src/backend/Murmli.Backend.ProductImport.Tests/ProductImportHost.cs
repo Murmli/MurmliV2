@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Products;
+using Murmli.Backend.ProductImport.Extensions;
 
 namespace Murmli.Backend.ProductImport.Tests;
 

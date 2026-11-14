@@ -1,4 +1,5 @@
 using Murmli.Backend.ProductImport;
+using Murmli.Backend.ProductImport.Extensions;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.AddProductImport();
