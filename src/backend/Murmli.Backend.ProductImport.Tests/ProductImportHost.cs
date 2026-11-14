@@ -15,7 +15,8 @@ internal static class ProductImportHost
         byte[]? export = null,
         int? productLimit = null,
         TimeProvider? timeProvider = null,
-        Func<CancellationToken, Task>? onExportRequested = null
+        Func<CancellationToken, Task>? onExportRequested = null,
+        Func<Stream>? openExport = null
     )
     {
         var builder = Host.CreateApplicationBuilder(
@@ -36,7 +37,9 @@ internal static class ProductImportHost
 
         builder
             .Services.AddHttpClient<OpenFoodFactsExportReader>()
-            .ConfigurePrimaryHttpMessageHandler(() => new ExportHttpMessageHandler(export ?? [], onExportRequested));
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new ExportHttpMessageHandler(openExport ?? (() => new MemoryStream(export ?? [])), onExportRequested)
+            );
         return builder.Build();
     }
 

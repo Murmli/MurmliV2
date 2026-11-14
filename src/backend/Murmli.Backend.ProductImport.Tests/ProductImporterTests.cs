@@ -172,6 +172,74 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
         Assert.Equal(StartTime + ImportDuration, runs[1].FinishedAt);
     }
 
+    [Fact(Timeout = 30_000)]
+    public async Task ImportAsync_ExportStalls_ThrowsTimeoutAndRecordsFailedRun()
+    {
+        var seededProducts = await SeedProductsAsync();
+        var exportStalled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var host = ProductImportHost.Create(
+            connectionString,
+            timeProvider: timeProvider,
+            openExport: () =>
+                new ChunkedExportStream(
+                    CompressedExport.Create(
+                        [
+                            CreateExportLine("4000000000013", "Butter", 83),
+                            CreateExportLine("4000000000014", "Käse", 28.5),
+                        ]
+                    ),
+                    chunkCount: 2,
+                    async (chunkIndex, cancellationToken) =>
+                    {
+                        if (chunkIndex == 0)
+                        {
+                            return;
+                        }
+
+                        exportStalled.SetResult();
+                        await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                    }
+                )
+        );
+
+        var import = ImportAsync(host);
+        await Task.WhenAny(exportStalled.Task, import).WaitAsync(TestContext.Current.CancellationToken);
+        timeProvider.Advance(TimeSpan.FromMinutes(2));
+
+        await Assert.ThrowsAsync<TimeoutException>(() => import);
+
+        Assert.Equivalent(seededProducts, await ProductImportHost.ReadProductsAsync(host), strict: true);
+        Assert.Equal(
+            [ProductImportRunStatus.Succeeded, ProductImportRunStatus.Failed],
+            (await ProductImportHost.ReadRunsAsync(host)).Select(run => run.Status)
+        );
+    }
+
+    [Fact]
+    public async Task ImportAsync_SlowButSteadyExport_ImportsProducts()
+    {
+        // Enough lines that each chunk decompresses to data, otherwise GZipStream reads two chunks (180 s) at once
+        var codes = Enumerable.Range(10, 50).Select(index => $"40000000000{index}").ToArray();
+        using var host = ProductImportHost.Create(
+            connectionString,
+            timeProvider: timeProvider,
+            openExport: () =>
+                new ChunkedExportStream(
+                    CompressedExport.Create(codes.Select(code => CreateExportLine(code, $"Produkt {code}", 1))),
+                    chunkCount: 4,
+                    (_, _) =>
+                    {
+                        timeProvider.Advance(TimeSpan.FromSeconds(90));
+                        return Task.CompletedTask;
+                    }
+                )
+        );
+
+        await ImportAsync(host);
+
+        Assert.Equal(codes, (await ProductImportHost.ReadProductsAsync(host)).Select(product => product.Code));
+    }
+
     [Theory]
     [MemberData(nameof(EmptyExports))]
     public async Task ImportAsync_EmptyExport_ThrowsAndKeepsProducts(byte[] export)
