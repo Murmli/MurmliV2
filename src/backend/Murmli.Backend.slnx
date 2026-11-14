@@ -4,6 +4,7 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="Murmli.Backend.Api/Murmli.Backend.Api.csproj" />
+    <Project Path="Murmli.Backend.Api.Host/Murmli.Backend.Api.Host.csproj" />
     <Project Path="Murmli.Backend.Aspire/Murmli.Backend.Aspire.csproj" />
   </Folder>
   <Folder Name="/tests/">

@@ -10,7 +10,7 @@ public static class Extensions
         IResourceBuilder<AzureUserAssignedIdentityResource> identity
     ) =>
         builder
-            .AddProject<Projects.Murmli_Backend_Api>("api")
+            .AddProject<Projects.Murmli_Backend_Api_Host>("api")
             .WithReference(database)
             .WaitFor(database)
             .WithAzureUserAssignedIdentity(identity)

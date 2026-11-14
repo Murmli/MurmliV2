@@ -15,7 +15,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Murmli.Backend.Api\Murmli.Backend.Api.csproj" />
+        <ProjectReference Include="..\Murmli.Backend.Api.Host\Murmli.Backend.Api.Host.csproj" />
     </ItemGroup>
 
 </Project>

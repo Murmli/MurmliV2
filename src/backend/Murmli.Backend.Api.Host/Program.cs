@@ -1,9 +1,11 @@
+using Murmli.Backend.Api;
+
 var builder = WebApplication.CreateBuilder(args);
 
-builder.AddAzureNpgsqlDataSource("murmli");
+builder.AddApi();
 
 var app = builder.Build();
 
-app.MapHealthChecks("/health");
+app.MapApi();
 
 app.Run();

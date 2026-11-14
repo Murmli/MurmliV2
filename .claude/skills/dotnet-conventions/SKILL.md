@@ -96,3 +96,7 @@ die Defaults hier greifen für neue Projekte und neue Testsuiten.
   `Murmli.Backend.slnx` gehören Produktivprojekte in den Solution-Ordner
   `/src/`, Testprojekte (`*.Tests`) in `/tests/`; die Ordner sind rein
   virtuell, Pfade in CI, `deploy.yml` und ProjectReferences bleiben gleich.
+- Ausführbare Services (`*.Host`) enthalten nur Start und Host-Konfiguration
+  (`Program.cs`, `launchSettings.json`, `appsettings*.json`,
+  Runtime-Optionen); die Logik liegt in einer Bibliothek, die der Host
+  referenziert.
