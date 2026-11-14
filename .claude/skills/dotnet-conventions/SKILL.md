@@ -90,4 +90,9 @@ die Defaults hier greifen für neue Projekte und neue Testsuiten.
   Testprojekt, das den AppHost referenziert, nicht umgekehrt) danach von Hand
   auf dieselbe Version ziehen.
 
-<!-- TODO: Projektspezifische Konventionen ergänzen (Architektur, Analyzer, ...) -->
+## Solution
+
+- Projekte liegen physisch flach unter `src/backend/<Projekt>/`. In
+  `Murmli.Backend.slnx` gehören Produktivprojekte in den Solution-Ordner
+  `/src/`, Testprojekte (`*.Tests`) in `/tests/`; die Ordner sind rein
+  virtuell, Pfade in CI, `deploy.yml` und ProjectReferences bleiben gleich.
