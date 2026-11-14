@@ -43,14 +43,23 @@ jobs:
             az account get-access-token --resource "$resource" --output none
           done
       - name: Deploy
+        id: deploy
         env:
           Azure__SubscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           # The default 13 seconds for each az call time out on GitHub runners: https://github.com/microsoft/aspire/issues/13904
           Azure__CredentialProcessTimeoutSeconds: 120
         run: |
+          # Re-runs and slower CI runs of older commits must not overwrite a newer deploy.
+          main_head=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$main_head" != "$GITHUB_SHA" ]; then
+            echo "::notice::Skipped, main has moved on to $main_head."
+            exit 0
+          fi
           apphost=src/backend/Murmli.Backend.Aspire/Murmli.Backend.Aspire.csproj
           aspire_version=$(sed -n 's|.*Sdk="Aspire.AppHost.Sdk/\([^"]*\)".*|\1|p' "$apphost")
+          # Without a version dnx would silently run the latest CLI.
+          : "${aspire_version:?Aspire.AppHost.Sdk version not found in $apphost}"
           dnx --yes "aspire.cli@$aspire_version" -- deploy --apphost "$apphost" --environment azure-dev --non-interactive
       - name: Print Aspire CLI log
-        if: failure()
+        if: failure() && steps.deploy.outcome == 'failure'
         run: cat ~/.aspire/logs/cli_*.log
