@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:auto_route/auto_route.dart';
 
 import 'app_router.dart';
@@ -13,7 +15,7 @@ class OnboardingGuard extends AutoRouteGuard {
       resolver.next();
       return;
     }
-    router.replaceAll([const OnboardingRoute()]);
+    unawaited(router.replaceAll([const OnboardingRoute()]));
     resolver.next(false);
   }
 }

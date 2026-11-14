@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:talker_flutter/talker_flutter.dart';
 
 import 'app/app.dart';
 import 'app/core/storage/preference_keys.dart';
@@ -12,6 +13,16 @@ import 'i18n/strings.g.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final talker = TalkerFlutter.init();
+  FlutterError.onError = (details) => talker.handle(
+    details.exception,
+    details.stack,
+    details.context?.toString(),
+  );
+  PlatformDispatcher.instance.onError = (error, stack) {
+    talker.handle(error, stack);
+    return true;
+  };
   LicenseRegistry.addLicense(_fontLicenses);
 
   final sharedPreferences = await SharedPreferencesWithCache.create(

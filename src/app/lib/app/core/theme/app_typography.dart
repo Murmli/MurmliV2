@@ -15,6 +15,32 @@ abstract final class AppTypography {
     fontVariations: [FontVariation.opticalSize(34)],
   );
 
+  static const hero = TextStyle(
+    fontFamily: displayFontFamily,
+    fontWeight: FontWeight.w700,
+    fontSize: 36,
+    height: 40 / 36,
+    letterSpacing: -0.72,
+    fontVariations: [FontVariation.opticalSize(36)],
+  );
+
+  static const brand = TextStyle(
+    fontFamily: displayFontFamily,
+    fontWeight: FontWeight.w700,
+    fontSize: 26,
+    height: 1,
+    fontVariations: [FontVariation.opticalSize(26)],
+  );
+
+  static const wordmark = TextStyle(
+    fontFamily: displayFontFamily,
+    fontWeight: FontWeight.w700,
+    fontSize: 26,
+    height: 1,
+    letterSpacing: -0.52,
+    fontVariations: [FontVariation.opticalSize(26)],
+  );
+
   static const title = TextStyle(
     fontFamily: displayFontFamily,
     fontWeight: FontWeight.w700,
@@ -28,6 +54,20 @@ abstract final class AppTypography {
     fontWeight: FontWeight.w700,
     fontSize: 17,
     height: 24 / 17,
+  );
+
+  static const bodyLarge = TextStyle(
+    fontFamily: bodyFontFamily,
+    fontWeight: FontWeight.w500,
+    fontSize: 16,
+    height: 24 / 16,
+  );
+
+  static const button = TextStyle(
+    fontFamily: bodyFontFamily,
+    fontWeight: FontWeight.w700,
+    fontSize: 16,
+    height: 24 / 16,
   );
 
   static const body = TextStyle(

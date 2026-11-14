@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../i18n/strings.g.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_motion.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import 'home_tab.dart';
@@ -23,39 +24,42 @@ class FloatingNavigationBar extends StatelessWidget {
       top: false,
       minimum: const EdgeInsets.only(bottom: AppSpacing.space20),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
+        padding: const EdgeInsetsDirectional.fromSTEB(
           AppSpacing.space16,
           AppSpacing.space16,
           AppSpacing.space16,
           0,
         ),
         child: Container(
-          height: 68,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          constraints: const BoxConstraints(minHeight: 68),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space8),
           decoration: BoxDecoration(
             color: colors.surface,
-            borderRadius: BorderRadius.circular(34),
+            borderRadius: BorderRadius.circular(AppRadius.navigationBar),
             border: Border.all(color: colors.line),
             boxShadow: colors.navigationShadow,
           ),
-          child: Row(
-            spacing: 2,
-            children: [
-              for (final tab in HomeTab.values)
-                if (tab == HomeTab.chat)
-                  _ChatTabButton(
-                    isActive: tab == activeTab,
-                    onPressed: () => onTabSelected(tab),
-                  )
-                else
-                  Expanded(
-                    child: _TabButton(
-                      tab: tab,
+          child: Material(
+            type: MaterialType.transparency,
+            child: Row(
+              spacing: AppSpacing.space4,
+              children: [
+                for (final tab in HomeTab.values)
+                  if (tab == HomeTab.chat)
+                    _ChatTabButton(
                       isActive: tab == activeTab,
                       onPressed: () => onTabSelected(tab),
+                    )
+                  else
+                    Expanded(
+                      child: _TabButton(
+                        tab: tab,
+                        isActive: tab == activeTab,
+                        onPressed: () => onTabSelected(tab),
+                      ),
                     ),
-                  ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -84,22 +88,26 @@ class _TabButton extends StatelessWidget {
       selected: isActive,
       label: label,
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      onTap: onPressed,
+      child: InkWell(
         onTap: onPressed,
-        child: SizedBox(
-          height: 60,
+        borderRadius: BorderRadius.circular(AppRadius.navigationTab),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 60),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
-            spacing: 3,
+            spacing: AppSpacing.space4,
             children: [
               AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
+                duration: AppMotion.short(context),
                 width: 52,
                 height: 30,
                 decoration: BoxDecoration(
                   color: isActive ? colors.primarySoft : Colors.transparent,
-                  borderRadius: BorderRadius.circular(15),
+                  borderRadius: BorderRadius.circular(
+                    AppRadius.navigationIndicator,
+                  ),
                 ),
                 child: Icon(tab.icon, size: 22, color: foregroundColor),
               ),
@@ -134,17 +142,18 @@ class _ChatTabButton extends StatelessWidget {
       selected: isActive,
       label: HomeTab.chat.label(context.t),
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      onTap: onPressed,
+      child: InkWell(
         onTap: onPressed,
-        child: SizedBox(
-          width: 72,
-          height: 60,
+        borderRadius: BorderRadius.circular(AppRadius.navigationTab),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 72, minHeight: 60),
           child: Center(
+            heightFactor: 1,
             child: Transform.translate(
               offset: const Offset(0, -9),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
+                duration: AppMotion.short(context),
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
