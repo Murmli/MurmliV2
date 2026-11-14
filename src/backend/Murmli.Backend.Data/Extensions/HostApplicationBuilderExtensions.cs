@@ -1,7 +1,7 @@
 using Aspire.Azure.Npgsql.EntityFrameworkCore.PostgreSQL;
 using Microsoft.Extensions.Hosting;
 
-namespace Murmli.Backend.Data;
+namespace Murmli.Backend.Data.Extensions;
 
 public static class HostApplicationBuilderExtensions
 {

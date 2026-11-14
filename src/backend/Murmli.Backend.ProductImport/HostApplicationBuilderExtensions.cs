@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Murmli.Backend.Data;
+using Murmli.Backend.Data.Extensions;
 
 namespace Murmli.Backend.ProductImport;
 
