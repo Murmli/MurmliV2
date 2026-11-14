@@ -14,5 +14,9 @@ internal static class LogProperties
 
     public const string DeletedCount = "DeletedCount";
 
+    public const string PeakMemoryBytes = "PeakMemoryBytes";
+
     public const string SchemaVersion = "SchemaVersion";
+
+    public const string RunId = "RunId";
 }

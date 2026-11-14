@@ -2,13 +2,21 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Time.Testing;
+using Murmli.Backend.Data;
 using Murmli.Backend.Data.Products;
 
 namespace Murmli.Backend.ProductImport.Tests;
 
 public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<PostgresFixture>
 {
+    private static readonly DateTimeOffset StartTime = new(2026, 11, 14, 3, 0, 0, TimeSpan.Zero);
+
+    private static readonly TimeSpan ImportDuration = TimeSpan.FromMinutes(45);
+
     private readonly string connectionString = postgres.CreateDatabaseConnectionString();
+
+    private readonly FakeTimeProvider timeProvider = new(StartTime);
 
     public static TheoryData<byte[]> EmptyExports => new() { Array.Empty<byte>(), CompressedExport.Create([]) };
 
@@ -144,11 +152,10 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
     }
 
     [Fact]
-    public async Task ImportAsync_TruncatedExport_ThrowsAndKeepsProducts()
+    public async Task ImportAsync_TruncatedExport_ThrowsKeepsProductsAndRecordsFailedRun()
     {
         var seededProducts = await SeedProductsAsync();
-        using var host = ProductImportHost.Create(
-            connectionString,
+        using var host = CreateHostWithAdvancingClock(
             CompressedExport.CreateTruncated(
                 [CreateExportLine("4000000000013", "Butter", 83), CreateExportLine("4000000000014", "Käse", 28.5)]
             )
@@ -157,6 +164,13 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
         await Assert.ThrowsAsync<InvalidDataException>(() => ImportAsync(host));
 
         Assert.Equivalent(seededProducts, await ProductImportHost.ReadProductsAsync(host), strict: true);
+        var runs = await ProductImportHost.ReadRunsAsync(host);
+        Assert.Equal(
+            [ProductImportRunStatus.Succeeded, ProductImportRunStatus.Failed],
+            runs.Select(run => run.Status)
+        );
+        Assert.Equal(StartTime + ImportDuration, runs[1].FinishedAt);
+        Assert.True(runs[1].PeakMemoryBytes > 0);
     }
 
     [Theory]
@@ -258,6 +272,106 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
         Assert.Equal(["4000000000011", "4000000000012"], products.Select(product => product.Code));
     }
 
+    [Fact]
+    public async Task ImportAsync_SuccessfulRun_RecordsSucceededRunWithStartFinishAndPeakMemory()
+    {
+        using var host = CreateHostWithAdvancingClock(
+            CompressedExport.Create([CreateExportLine("4000000000011", "Apfel", 0.2)])
+        );
+
+        await ImportAsync(host);
+
+        var run = Assert.Single(await ProductImportHost.ReadRunsAsync(host));
+        Assert.Equal(ProductImportRunStatus.Succeeded, run.Status);
+        Assert.Equal(StartTime, run.StartedAt);
+        Assert.Equal(StartTime + ImportDuration, run.FinishedAt);
+        Assert.True(run.PeakMemoryBytes > 0);
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhileReadingExport_RunIsRecordedAsRunning()
+    {
+        var exportRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var exportReleased = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var host = ProductImportHost.Create(
+            connectionString,
+            CompressedExport.Create([CreateExportLine("4000000000011", "Apfel", 0.2)]),
+            onExportRequested: async cancellationToken =>
+            {
+                exportRequested.SetResult();
+                await exportReleased.Task.WaitAsync(cancellationToken);
+            }
+        );
+
+        var import = ImportAsync(host);
+        // Also completes when the import fails before requesting the export, so the test fails instead of waiting
+        await Task.WhenAny(exportRequested.Task, import).WaitAsync(TestContext.Current.CancellationToken);
+        var runsWhileReadingExport = await ProductImportHost.ReadRunsAsync(host);
+        exportReleased.SetResult();
+        await import;
+
+        var run = Assert.Single(runsWhileReadingExport);
+        Assert.Equal(ProductImportRunStatus.Running, run.Status);
+        Assert.Null(run.FinishedAt);
+    }
+
+    [Fact]
+    public async Task ImportAsync_Cancelled_RecordsFailedRun()
+    {
+        using var cancellationSource = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken
+        );
+        using var host = ProductImportHost.Create(
+            connectionString,
+            CompressedExport.Create([CreateExportLine("4000000000011", "Apfel", 0.2)]),
+            timeProvider: timeProvider,
+            onExportRequested: cancellationToken =>
+            {
+                timeProvider.Advance(ImportDuration);
+                cancellationSource.Cancel();
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.CompletedTask;
+            }
+        );
+        await using var scope = host.Services.CreateAsyncScope();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            scope.ServiceProvider.GetRequiredService<ProductImporter>().ImportAsync(cancellationSource.Token)
+        );
+
+        var run = Assert.Single(await ProductImportHost.ReadRunsAsync(host));
+        Assert.Equal(ProductImportRunStatus.Failed, run.Status);
+        Assert.Equal(StartTime + ImportDuration, run.FinishedAt);
+    }
+
+    [Fact]
+    public async Task ImportAsync_PreviousRunStillRunning_MarksItFailedWithoutFinishOrPeakMemory()
+    {
+        await SeedProductsAsync();
+        using var host = ProductImportHost.Create(
+            connectionString,
+            CompressedExport.Create([CreateExportLine("4000000000011", "Apfel", 0.2)])
+        );
+        await using (var scope = host.Services.CreateAsyncScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<MurmliDbContext>();
+            context.ProductImportRuns.Add(
+                new ProductImportRun { StartedAt = StartTime, Status = ProductImportRunStatus.Running }
+            );
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await ImportAsync(host);
+
+        var runs = await ProductImportHost.ReadRunsAsync(host);
+        Assert.Equal(
+            [ProductImportRunStatus.Succeeded, ProductImportRunStatus.Failed, ProductImportRunStatus.Succeeded],
+            runs.Select(run => run.Status)
+        );
+        Assert.Null(runs[1].FinishedAt);
+        Assert.Null(runs[1].PeakMemoryBytes);
+    }
+
     private static string CreateExportLine(
         string code,
         string name,
@@ -299,6 +413,18 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
             ["source"] = source,
             ["source_per"] = per,
         };
+
+    private IHost CreateHostWithAdvancingClock(byte[] export) =>
+        ProductImportHost.Create(
+            connectionString,
+            export,
+            timeProvider: timeProvider,
+            onExportRequested: _ =>
+            {
+                timeProvider.Advance(ImportDuration);
+                return Task.CompletedTask;
+            }
+        );
 
     private Task<Product[]> SeedProductsAsync() =>
         ImportAndReadProductsAsync(
