@@ -2,7 +2,11 @@
   <Folder Name="/root/">
     <File Path="Directory.Packages.props" />
   </Folder>
-  <Project Path="Murmli.Backend.Api/Murmli.Backend.Api.csproj" />
-  <Project Path="Murmli.Backend.Aspire.Tests/Murmli.Backend.Aspire.Tests.csproj" />
-  <Project Path="Murmli.Backend.Aspire/Murmli.Backend.Aspire.csproj" />
+  <Folder Name="/src/">
+    <Project Path="Murmli.Backend.Api/Murmli.Backend.Api.csproj" />
+    <Project Path="Murmli.Backend.Aspire/Murmli.Backend.Aspire.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="Murmli.Backend.Aspire.Tests/Murmli.Backend.Aspire.Tests.csproj" />
+  </Folder>
 </Solution>
