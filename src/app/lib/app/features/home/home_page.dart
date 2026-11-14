@@ -7,7 +7,6 @@ import '../../../i18n/strings.g.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_typography.dart';
 import 'floating_navigation_bar.dart';
 import 'home_tab.dart';
 
@@ -63,7 +62,7 @@ class _HomeHeader extends StatelessWidget {
           Expanded(
             child: Text(
               title,
-              style: AppTypography.title.copyWith(color: colors.ink),
+              style: TextTheme.of(context).titleLarge,
               overflow: TextOverflow.ellipsis,
             ),
           ),

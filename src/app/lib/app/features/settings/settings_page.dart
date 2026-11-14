@@ -8,7 +8,6 @@ import '../../../i18n/strings.g.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_typography.dart';
 import '../../core/widgets/icon_tile.dart';
 import '../onboarding/onboarding_completed_provider.dart';
 import 'app_language.dart';
@@ -56,7 +55,7 @@ class _LanguageSection extends ConsumerWidget {
       title: translations.section,
       children: [
         for (final language in AppLanguage.values)
-          _OptionRow(
+          _SettingsRow(
             icon: switch (language) {
               AppLanguage.system => Icons.smartphone_outlined,
               AppLanguage.german || AppLanguage.english => Icons.translate,
@@ -87,7 +86,7 @@ class _ThemeSection extends ConsumerWidget {
       title: translations.section,
       children: [
         for (final themeMode in ThemeMode.values)
-          _OptionRow(
+          _SettingsRow(
             icon: switch (themeMode) {
               ThemeMode.system => Icons.brightness_auto_outlined,
               ThemeMode.light => Icons.light_mode_outlined,
@@ -127,7 +126,7 @@ class _OnboardingSection extends ConsumerWidget {
         _SettingsRow(
           icon: Icons.replay,
           label: translations.showAgain,
-          trailing: const _ChevronIcon(),
+          trailing: const Icon(Icons.chevron_right),
           onTap: () => unawaited(_showOnboardingAgain(context, ref)),
         ),
       ],
@@ -152,7 +151,7 @@ class _AboutSection extends StatelessWidget {
         _SettingsRow(
           icon: Icons.description_outlined,
           label: translations.licenses,
-          trailing: const _ChevronIcon(),
+          trailing: const Icon(Icons.chevron_right),
           onTap: () => showLicensePage(context: context),
         ),
       ],
@@ -165,22 +164,12 @@ class _AppVersionText extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = context.colors;
     return switch (ref.watch(appVersionProvider)) {
-      AsyncData(:final value) => Text(
-        value,
-        style: AppTypography.label.copyWith(color: colors.inkSecondary),
-      ),
-      AsyncError() => Text(
-        context.t.settings.about.versionUnavailable,
-        style: AppTypography.label.copyWith(color: colors.inkSecondary),
-      ),
-      _ => SizedBox.square(
+      AsyncData(:final value) => Text(value),
+      AsyncError() => Text(context.t.settings.about.versionUnavailable),
+      _ => const SizedBox.square(
         dimension: 16,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: colors.inkTertiary,
-        ),
+        child: CircularProgressIndicator(),
       ),
     };
   }
@@ -203,7 +192,8 @@ class _SettingsSection extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space4),
           child: Text(
             title,
-            style: AppTypography.label.copyWith(color: colors.inkSecondary),
+            style: TextTheme.of(context).labelLarge
+                ?.copyWith(color: colors.inkSecondary),
           ),
         ),
         DecoratedBox(
@@ -221,12 +211,9 @@ class _SettingsSection extends StatelessWidget {
                 children: [
                   for (final (index, child) in children.indexed) ...[
                     if (index > 0)
-                      Divider(
-                        height: 1,
-                        thickness: 1,
+                      const Divider(
                         indent: AppSpacing.space16,
                         endIndent: AppSpacing.space16,
-                        color: colors.line,
                       ),
                     child,
                   ],
@@ -240,83 +227,31 @@ class _SettingsSection extends StatelessWidget {
   }
 }
 
-class _OptionRow extends StatelessWidget {
-  const _OptionRow({
-    required this.icon,
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      selected: isSelected,
-      child: _SettingsRow(
-        icon: icon,
-        label: label,
-        trailing: isSelected
-            ? Icon(Icons.check, color: context.colors.primaryText)
-            : null,
-        onTap: onTap,
-      ),
-    );
-  }
-}
-
 class _SettingsRow extends StatelessWidget {
   const _SettingsRow({
     required this.icon,
     required this.label,
+    this.isSelected = false,
     this.trailing,
     this.onTap,
   });
 
   final IconData icon;
   final String label;
+  final bool isSelected;
   final Widget? trailing;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return ListTile(
+      leading: IconTile(icon: icon),
+      title: Text(label),
+      selected: isSelected,
+      trailing: isSelected
+          ? Icon(Icons.check, color: context.colors.primaryText)
+          : trailing,
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 58),
-          child: Row(
-            spacing: AppSpacing.space12,
-            children: [
-              IconTile(icon: icon),
-              Expanded(
-                child: Text(
-                  label,
-                  style: AppTypography.body.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: context.colors.ink,
-                  ),
-                ),
-              ),
-              ?trailing,
-            ],
-          ),
-        ),
-      ),
     );
-  }
-}
-
-class _ChevronIcon extends StatelessWidget {
-  const _ChevronIcon();
-
-  @override
-  Widget build(BuildContext context) {
-    return Icon(Icons.chevron_right, color: context.colors.inkTertiary);
   }
 }

@@ -40,20 +40,24 @@ class OnboardingPage extends StatelessWidget {
                     const SizedBox(height: AppSpacing.space32),
                     Text(
                       translations.headline,
-                      style: AppTypography.hero.copyWith(color: colors.ink),
+                      style: TextTheme.of(context).displayMedium,
                     ),
                     const SizedBox(height: AppSpacing.space16),
                     Text(
                       translations.subline,
-                      style: AppTypography.bodyLarge.copyWith(
-                        color: colors.inkSecondary,
-                      ),
+                      style: TextTheme.of(context).bodyLarge
+                          ?.copyWith(color: colors.inkSecondary),
                     ),
                     const SizedBox(height: AppSpacing.space32),
                     const _FeatureCard(),
                     const Spacer(),
                     const SizedBox(height: AppSpacing.space24),
-                    const Center(child: _StartTokensChip()),
+                    Center(
+                      child: Chip(
+                        avatar: const Icon(Icons.adjust),
+                        label: Text(translations.startTokens),
+                      ),
+                    ),
                     const SizedBox(height: AppSpacing.space16),
                     const _SignInButtons(),
                     const SizedBox(height: AppSpacing.space16),
@@ -64,10 +68,8 @@ class OnboardingPage extends StatelessWidget {
                       child: Text(
                         translations.legalNote,
                         textAlign: TextAlign.center,
-                        style: AppTypography.caption.copyWith(
-                          fontWeight: FontWeight.w500,
-                          color: colors.inkSecondary,
-                        ),
+                        style: TextTheme.of(context).bodySmall
+                            ?.copyWith(color: colors.inkSecondary),
                       ),
                     ),
                   ],
@@ -123,12 +125,12 @@ class _FeatureCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final features = context.t.onboarding.features;
-    final divider = Divider(height: 1, thickness: 1, color: colors.line);
+    const divider = Divider(
+      indent: AppSpacing.space16,
+      endIndent: AppSpacing.space16,
+    );
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.space16,
-        vertical: AppSpacing.space8,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.space8),
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(AppRadius.featureCard),
@@ -178,71 +180,10 @@ class _FeatureRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 58),
-      child: Row(
-        spacing: AppSpacing.space12,
-        children: [
-          IconTile(icon: icon),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: AppTypography.body.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: colors.ink,
-                  ),
-                ),
-                Text(
-                  subtitle,
-                  style: AppTypography.label.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: colors.inkSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StartTokensChip extends StatelessWidget {
-  const _StartTokensChip();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Container(
-      height: 36,
-      padding: const EdgeInsetsDirectional.only(
-        start: AppSpacing.space12,
-        end: AppSpacing.space16,
-      ),
-      decoration: BoxDecoration(
-        color: colors.primarySoft,
-        borderRadius: BorderRadius.circular(AppRadius.chip),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        spacing: AppSpacing.space8,
-        children: [
-          Icon(Icons.adjust, size: 18, color: colors.primaryText),
-          Text(
-            context.t.onboarding.startTokens,
-            style: AppTypography.label.copyWith(
-              fontWeight: FontWeight.w700,
-              color: colors.primaryText,
-            ),
-          ),
-        ],
-      ),
+    return ListTile(
+      leading: IconTile(icon: icon),
+      title: Text(title),
+      subtitle: Text(subtitle),
     );
   }
 }
@@ -265,51 +206,19 @@ class _SignInButtons extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: AppSpacing.space12,
       children: [
-        _PillButton(
-          label: translations.continueWithApple,
-          backgroundColor: colors.ink,
-          foregroundColor: colors.background,
+        FilledButton(
           onPressed: () => unawaited(_completeOnboarding(context, ref)),
+          style: FilledButton.styleFrom(
+            backgroundColor: colors.ink,
+            foregroundColor: colors.background,
+          ),
+          child: Text(translations.continueWithApple),
         ),
-        _PillButton(
-          label: translations.continueWithGoogle,
-          backgroundColor: colors.surface,
-          foregroundColor: colors.ink,
-          border: BorderSide(color: colors.line),
+        OutlinedButton(
           onPressed: () => unawaited(_completeOnboarding(context, ref)),
+          child: Text(translations.continueWithGoogle),
         ),
       ],
-    );
-  }
-}
-
-class _PillButton extends StatelessWidget {
-  const _PillButton({
-    required this.label,
-    required this.backgroundColor,
-    required this.foregroundColor,
-    required this.onPressed,
-    this.border = BorderSide.none,
-  });
-
-  final String label;
-  final Color backgroundColor;
-  final Color foregroundColor;
-  final BorderSide border;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return FilledButton(
-      onPressed: onPressed,
-      style: FilledButton.styleFrom(
-        backgroundColor: backgroundColor,
-        foregroundColor: foregroundColor,
-        minimumSize: const Size.fromHeight(56),
-        shape: StadiumBorder(side: border),
-        textStyle: AppTypography.button,
-      ),
-      child: Text(label),
     );
   }
 }
