@@ -34,6 +34,6 @@ public static class Extensions
 
                 infrastructure.Add(allowedExtensions);
             })
-            .RunAsContainer(postgres => postgres.WithImageTag("18"))
+            .RunAsContainer(postgres => postgres.WithImageTag("18").WithHostPort(60123))
             .AddDatabase("murmli");
 }
