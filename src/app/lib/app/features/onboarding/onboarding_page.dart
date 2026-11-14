@@ -37,26 +37,26 @@ class OnboardingPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const _Brand(),
-                    const SizedBox(height: AppSpacing.space28),
+                    const SizedBox(height: AppSpacing.space32),
                     Text(
                       translations.headline,
                       style: AppTypography.hero.copyWith(color: colors.ink),
                     ),
-                    const SizedBox(height: AppSpacing.space14),
+                    const SizedBox(height: AppSpacing.space16),
                     Text(
                       translations.subline,
                       style: AppTypography.bodyLarge.copyWith(
                         color: colors.inkSecondary,
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.space28),
+                    const SizedBox(height: AppSpacing.space32),
                     const _FeatureCard(),
                     const Spacer(),
                     const SizedBox(height: AppSpacing.space24),
                     const Center(child: _StartTokensChip()),
-                    const SizedBox(height: AppSpacing.space14),
+                    const SizedBox(height: AppSpacing.space16),
                     const _SignInButtons(),
-                    const SizedBox(height: AppSpacing.space14),
+                    const SizedBox(height: AppSpacing.space16),
                     Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.space8,
@@ -89,7 +89,7 @@ class _Brand extends StatelessWidget {
     final colors = context.colors;
     final translations = context.t.app;
     return Row(
-      spacing: AppSpacing.space10,
+      spacing: AppSpacing.space12,
       children: [
         Container(
           width: 44,
@@ -182,7 +182,7 @@ class _FeatureRow extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 58),
       child: Row(
-        spacing: AppSpacing.space14,
+        spacing: AppSpacing.space12,
         children: [
           IconTile(icon: icon),
           Expanded(
@@ -222,7 +222,7 @@ class _StartTokensChip extends StatelessWidget {
     return Container(
       height: 36,
       padding: const EdgeInsetsDirectional.only(
-        start: AppSpacing.space10,
+        start: AppSpacing.space12,
         end: AppSpacing.space16,
       ),
       decoration: BoxDecoration(
@@ -263,7 +263,7 @@ class _SignInButtons extends ConsumerWidget {
     final translations = context.t.onboarding;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: AppSpacing.space10,
+      spacing: AppSpacing.space12,
       children: [
         _PillButton(
           label: translations.continueWithApple,

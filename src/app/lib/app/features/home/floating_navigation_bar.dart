@@ -32,7 +32,7 @@ class FloatingNavigationBar extends StatelessWidget {
         ),
         child: Container(
           constraints: const BoxConstraints(minHeight: 68),
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space6),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space8),
           decoration: BoxDecoration(
             color: colors.surface,
             borderRadius: BorderRadius.circular(AppRadius.navigationBar),
@@ -42,7 +42,7 @@ class FloatingNavigationBar extends StatelessWidget {
           child: Material(
             type: MaterialType.transparency,
             child: Row(
-              spacing: AppSpacing.space2,
+              spacing: AppSpacing.space4,
               children: [
                 for (final tab in HomeTab.values)
                   if (tab == HomeTab.chat)
@@ -97,7 +97,7 @@ class _TabButton extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
-            spacing: AppSpacing.space3,
+            spacing: AppSpacing.space4,
             children: [
               AnimatedContainer(
                 duration: AppMotion.short(context),
