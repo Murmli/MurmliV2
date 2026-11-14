@@ -59,9 +59,9 @@ die Defaults hier greifen für neue Projekte und neue Testsuiten.
 - Message-Template-Platzhalter aus gemeinsamen Konstanten, nie als
   Inline-Literale – dasselbe Konzept loggt immer unter demselben Namen.
 - Jede `[LoggerMessage]` ab Level `Information` bekommt eine eindeutige
-  Event-ID aus einem zentralen Register (z.B. eine `LogEvents`-Klasse;
-  anlegen, falls das Repo noch keins hat) plus `EventName`; `Debug`/`Trace`
-  dürfen sie weglassen.
+  Event-ID aus einem zentralen Register (z.B. eine `LogEvents`-Klasse in
+  `Diagnostics`; anlegen, falls das Repo noch keins hat) plus `EventName`;
+  `Debug`/`Trace` dürfen sie weglassen.
 
 ## Tests
 
@@ -100,3 +100,6 @@ die Defaults hier greifen für neue Projekte und neue Testsuiten.
   (`Program.cs`, `launchSettings.json`, `appsettings*.json`,
   Runtime-Optionen); die Logik liegt in einer Bibliothek, die der Host
   referenziert.
+- Ordner entsprechen immer dem Namespace. Extension-Klassen liegen im
+  Ordner und Namespace `Extensions`, die zentralen Logging-Register
+  (`LogEvents`, `LogProperties`) in `Diagnostics`.
