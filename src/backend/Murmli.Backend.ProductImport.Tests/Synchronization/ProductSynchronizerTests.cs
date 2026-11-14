@@ -4,8 +4,9 @@ using Microsoft.Extensions.Hosting;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Products;
 using Murmli.Backend.ProductImport.Synchronization;
+using Murmli.Backend.ProductImport.Tests.Infrastructure;
 
-namespace Murmli.Backend.ProductImport.Tests;
+namespace Murmli.Backend.ProductImport.Tests.Synchronization;
 
 public sealed class ProductSynchronizerTests(PostgresFixture postgres) : IClassFixture<PostgresFixture>, IDisposable
 {

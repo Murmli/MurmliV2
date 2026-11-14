@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 
-namespace Murmli.Backend.ProductImport.Tests;
+namespace Murmli.Backend.ProductImport.Tests.Infrastructure;
 
 internal static class CompressedExport
 {

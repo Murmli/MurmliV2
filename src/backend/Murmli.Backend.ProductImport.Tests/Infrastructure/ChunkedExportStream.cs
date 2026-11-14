@@ -1,4 +1,4 @@
-namespace Murmli.Backend.ProductImport.Tests;
+namespace Murmli.Backend.ProductImport.Tests.Infrastructure;
 
 internal sealed class ChunkedExportStream(
     byte[] export,

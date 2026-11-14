@@ -1,6 +1,6 @@
 using System.Net;
 
-namespace Murmli.Backend.ProductImport.Tests;
+namespace Murmli.Backend.ProductImport.Tests.Infrastructure;
 
 internal sealed class ExportHttpMessageHandler(
     Func<Stream> openExport,

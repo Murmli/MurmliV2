@@ -1,6 +1,6 @@
 using Murmli.Backend.Data.Products;
 
-namespace Murmli.Backend.ProductImport.Tests;
+namespace Murmli.Backend.ProductImport.Tests.Fixtures;
 
 internal static class OatFlakes
 {

@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 
-namespace Murmli.Backend.ProductImport.Tests;
+namespace Murmli.Backend.ProductImport.Tests.Hosting;
 
 public class RuntimeConfigurationTests
 {

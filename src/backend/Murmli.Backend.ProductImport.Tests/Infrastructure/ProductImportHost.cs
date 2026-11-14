@@ -8,7 +8,7 @@ using Murmli.Backend.Data.Products;
 using Murmli.Backend.ProductImport.Extensions;
 using Murmli.Backend.ProductImport.OpenFoodFacts;
 
-namespace Murmli.Backend.ProductImport.Tests;
+namespace Murmli.Backend.ProductImport.Tests.Infrastructure;
 
 internal static class ProductImportHost
 {

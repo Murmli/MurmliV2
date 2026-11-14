@@ -1,8 +1,9 @@
 using System.Text.Json;
 using Murmli.Backend.Data.Products;
 using Murmli.Backend.ProductImport.OpenFoodFacts;
+using Murmli.Backend.ProductImport.Tests.Fixtures;
 
-namespace Murmli.Backend.ProductImport.Tests;
+namespace Murmli.Backend.ProductImport.Tests.OpenFoodFacts;
 
 public class OpenFoodFactsProductMapperTests
 {
