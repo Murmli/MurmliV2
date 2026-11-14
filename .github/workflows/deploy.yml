@@ -59,7 +59,14 @@ jobs:
           aspire_version=$(sed -n 's|.*Sdk="Aspire.AppHost.Sdk/\([^"]*\)".*|\1|p' "$apphost")
           # Without a version dnx would silently run the latest CLI.
           : "${aspire_version:?Aspire.AppHost.Sdk version not found in $apphost}"
-          dnx --yes "aspire.cli@$aspire_version" -- deploy --apphost "$apphost" --environment azure-dev --non-interactive
+          deploy() {
+            dnx --yes "aspire.cli@$aspire_version" -- deploy --apphost "$apphost" --environment azure-dev --non-interactive
+          }
+          # Aspire provisions the Postgres admin of each app in parallel, Flexible Server can reject that with ServerIsBusy; the retry reuses the local deploy state.
+          if ! deploy; then
+            echo "::warning::Deploy failed, retrying once."
+            deploy
+          fi
       - name: Print Aspire CLI log
         if: failure() && steps.deploy.outcome == 'failure'
         run: cat ~/.aspire/logs/cli_*.log
