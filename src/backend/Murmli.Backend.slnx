@@ -5,4 +5,5 @@
   <Project Path="Murmli.Backend.Api/Murmli.Backend.Api.csproj" />
   <Project Path="Murmli.Backend.Aspire.Tests/Murmli.Backend.Aspire.Tests.csproj" />
   <Project Path="Murmli.Backend.Aspire/Murmli.Backend.Aspire.csproj" />
+  <Project Path="Murmli.Backend.Data/Murmli.Backend.Data.csproj" />
 </Solution>
