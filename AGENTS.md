@@ -327,7 +327,7 @@ Regeln für CLAUDE.md und weitere Agent-Instruktionsdateien im Repo.
 
 ## CI
 
-GitHub Actions unter `.github/`: `ci.yml` (Push auf `main`, Pull Requests) ruft die wiederverwendbaren Workflows `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf; der Vulnerability-Scan läuft zusätzlich nächtlich um 00:05 Europe/Berlin. Die Flutter-Version kommt aus `src/app/.fvmrc`, das .NET-SDK aus `src/backend/global.json`. Flutter-Setup samt Lockfile-Check steckt in der Composite-Action `.github/actions/setup-app`.
+GitHub Actions unter `.github/`: `ci.yml` (Push auf `main`, Pull Requests) ruft die wiederverwendbaren Workflows `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf; der Vulnerability-Scan läuft zusätzlich nächtlich um 00:05 Europe/Berlin. Bei Pushes auf `main` ruft `ci.yml` nach allen Checks zusätzlich `deploy.yml` auf, das Dev deployt und sich auch von Hand starten lässt (siehe „Umgebungen“). Die Flutter-Version kommt aus `src/app/.fvmrc`, das .NET-SDK aus `src/backend/global.json`. Flutter-Setup samt Lockfile-Check steckt in der Composite-Action `.github/actions/setup-app`.
 
 Dieselben Checks lokal:
 
@@ -340,17 +340,23 @@ Vulnerability-Scan:
 - Ein `dart pub audit` existiert nicht; die App prüft osv-scanner anhand von `src/app/pubspec.lock`. Warum das Backend per NuGetAudit statt osv-scanner oder `dotnet package list --vulnerable` geprüft wird, steht als Kommentar in `vulnerability-scan.yml`.
 - Funde ohne verfügbaren Fix bewusst unterdrücken: im Backend per `<NuGetAuditSuppress Include="<Advisory-URL>" />` im csproj, in der App per `[[IgnoredVulns]]` in `src/app/osv-scanner.toml`.
 
-Concurrency nur im Caller (`ci.yml`) setzen: In Called Workflows meint `github.workflow` den Caller, eine Concurrency-Gruppe dort cancelt oder blockiert den Caller.
+Concurrency nur im Caller (`ci.yml`) setzen: In Called Workflows meint `github.workflow` den Caller, eine Concurrency-Gruppe dort cancelt oder blockiert den Caller. Einzige Ausnahme ist `deploy.yml`: CI und manueller Start teilen sich dieselbe Sperre, deshalb setzt der Job dort die feste Gruppe `deploy-dev` mit `cancel-in-progress: false` (ein Abbruch bräche laufende ARM-Deployments ab). Jeder weitere Workflow, der Dev ändert, nutzt dieselbe Gruppe; am aufrufenden Job in `ci.yml` steht sie nicht noch einmal.
 
 ## Aspire und Azure
 
-Aspire-Befehle, die in Azure etwas anlegen, ändern oder löschen, führt nur ein Mensch aus, nie ein KI-Agent: `aspire deploy`, `aspire destroy` und `aspire do` mit Provisionierungs- oder Deploy-Steps. `aspire publish` erzeugt nur lokale Artefakte (nach `aspire-output/`, git-ignoriert) und ist erlaubt; ohne installierte Aspire-CLI per `dnx --yes aspire.cli@<SDK-Version des AppHost> -- publish --apphost <csproj> --output-path <Ordner> --non-interactive`.
+Aspire-Befehle, die in Azure etwas anlegen, ändern oder löschen, führt nur ein Mensch aus, nie ein KI-Agent: `aspire deploy`, `aspire destroy` und `aspire do` mit Provisionierungs- oder Deploy-Steps. Agents lösen auch keinen Deploy-Lauf in GitHub Actions aus: kein `gh workflow run deploy.yml`, kein Re-run von CI- oder Deploy-Läufen auf `main`. `aspire publish` erzeugt nur lokale Artefakte (nach `aspire-output/`, git-ignoriert) und ist erlaubt; ohne installierte Aspire-CLI per `dnx --yes aspire.cli@<SDK-Version des AppHost> -- publish --apphost <csproj> --output-path <Ordner> --non-interactive`.
 
 Auch `aspire run` und `dotnet test` (der Integrationstest startet den AppHost) legen echte Azure-Ressourcen an, sobald eine Azure-Ressource im AppHost lokal weder als Container noch als Emulator läuft. In dem Fall startet ein Agent den AppHost nicht. Derzeit trifft das auf keine Ressource zu: PostgreSQL läuft per `RunAsContainer` lokal als Container, die Container-Apps-Umgebung samt Registry existiert nur beim Publish. Jede neue Azure-Ressource braucht deshalb einen Container oder Emulator für den lokalen Lauf.
 
 ### Umgebungen
 
-Wie Menschen deployen, steht im BackOffice-Repo unter [docs/03_Betrieb/Deployment.md](https://github.com/Murmli/BackOffice/blob/main/docs/03_Betrieb/Deployment.md); das Repo hier enthält nur Technisches. Azure-Umgebungen heißen `azure-<name>` (derzeit nur `azure-dev` mit Resource Group `rg-murmli-dev`) und werden per `aspire deploy --environment azure-<name>` angesprochen; ohne `--environment` deployt Aspire als Production. Ihr Deploy-Ziel (`Azure:Location`, `Azure:ResourceGroup`) steht in `src/backend/Murmli.Backend.Aspire/appsettings.azure-<name>.json`, die Subscription-ID kommt per Umgebungsvariable `Azure__SubscriptionId`, weil das Repo öffentlich ist. Alle appsettings ohne `azure-`-Präfix sind lokal: `Azure:*`-Werte gehören nie in `appsettings.json`, `appsettings.Development.json` oder die User Secrets, sonst bindet sie auch `aspire run`. User Secrets liest der AppHost ohnehin nur in der Umgebung Development, also nie beim Deploy.
+Einrichtung und Betrieb der Deploys stehen im BackOffice-Repo unter [docs/03_Betrieb/Deployment.md](https://github.com/Murmli/BackOffice/blob/main/docs/03_Betrieb/Deployment.md); das Repo hier enthält nur Technisches. Azure-Umgebungen heißen `azure-<name>` (derzeit nur `azure-dev` mit Resource Group `rg-murmli-dev`) und werden per `aspire deploy --environment azure-<name>` angesprochen; ohne `--environment` deployt Aspire als Production. Ihr Deploy-Ziel (`Azure:Location`, `Azure:ResourceGroup`) steht in `src/backend/Murmli.Backend.Aspire/appsettings.azure-<name>.json`, die Subscription-ID kommt per Umgebungsvariable `Azure__SubscriptionId` aus einem Secret, weil das Repo öffentlich ist. Alle appsettings ohne `azure-`-Präfix sind lokal: `Azure:*`-Werte gehören nie in `appsettings.json`, `appsettings.Development.json` oder die User Secrets, sonst bindet sie auch `aspire run`. User Secrets liest der AppHost ohnehin nur in der Umgebung Development, also nie beim Deploy.
+
+Dev deployt ausschließlich `.github/workflows/deploy.yml`, nie ein lokaler Rechner (ein lokaler Deploy liefe an der Sperre `deploy-dev` vorbei). Der Job läuft im GitHub-Environment `development`, das nur `main` nutzen darf und Client-, Tenant- und Subscription-ID als Secrets hält: Variablen stünden unmaskiert in den öffentlichen Logs, und Aspire loggt Subscription und Tenant. Die Anmeldung läuft per OIDC als User-assigned Managed Identity mit Contributor und eingeschränktem Role Based Access Control Administrator auf `rg-murmli-dev`. Ein Lauf deployt nur, wenn sein Commit noch der Stand von `main` ist. Fallstricke:
+
+- Aspire 13.6.5 meldet sich beim Deploy nur über die Session der Azure CLI an (`AzureCliCredential`); `AZURE_CLIENT_ID`, `AZURE_FEDERATED_TOKEN_FILE` und Workload Identity wirken dort nicht. Aspire holt Tokens erst bei Bedarf, die OIDC-Assertion von GitHub gilt aber nur fünf Minuten ([microsoft/aspire#19560](https://github.com/microsoft/aspire/issues/19560)). Der Workflow holt deshalb direkt nach dem Login die Tokens für `https://management.azure.com`, `https://graph.windows.net` und `https://containerregistry.azure.net`, ohne Schrägstrich am Ende, sonst verfehlen sie den Token-Cache der Azure CLI. Braucht eine neue Aspire-Version eine weitere Audience, scheitert der Deploy mit AADSTS700024.
+- Die Version der Aspire-CLI liest der Workflow aus `Aspire.AppHost.Sdk` im AppHost-csproj; `aspire update` hält sie damit synchron. Steht die Version dort nicht mehr, bricht der Deploy ab.
+- Ein Runner hat keinen Deploy-Stand (`~/.aspire/deployments`), jeder Lauf wendet deshalb alle Module erneut an. Den Stand nicht cachen: Er enthält Subscription und Ressourcen-IDs.
 
 ### Ressourcen
 
@@ -366,6 +372,8 @@ Der AppHost beschreibt für Dev:
 `/health` der API meldet, ob die Datenbank erreichbar ist, und ist in allen Umgebungen öffentlich. Container-Apps-Probes setzt der AppHost bewusst nicht (`WithHttpProbe` ist experimentell), und ServiceDefaults fehlen bewusst: Ohne Dashboard exportiert OpenTelemetry in Azure nichts. Beides kommt mit dem ersten konkreten Bedarf.
 
 Nicht verwenden, weil Preview oder mit Zusatzkosten: ACA Express, Dedicated Workload Profiles, Private Endpoints, geplante Wartungsfenster.
+
+Die Deploy-Identität darf nur AcrPull an Service Principals vergeben (Bedingung an ihrer Rolle Role Based Access Control Administrator), mehr Rollenzuweisungen legt der AppHost derzeit nicht an. Vergibt er eine weitere Rolle, scheitert der Deploy mit `AuthorizationFailed`, bis ein Mensch die Bedingung erweitert hat. Ebenso registriert ein Mensch jeden neuen Resource Provider, und die Deploy-Identität legt keine Resource Group an. Die Registry muss im klassischen RBAC-Modus bleiben: Im ABAC-Modus (`roleAssignmentMode`) wirken weder Contributor für den Push noch AcrPull für den Pull.
 
 ### Stabile Namen
 
