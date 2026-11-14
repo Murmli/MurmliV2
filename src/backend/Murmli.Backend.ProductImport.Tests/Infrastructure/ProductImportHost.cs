@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -7,6 +8,9 @@ using Murmli.Backend.Data;
 using Murmli.Backend.Data.Products;
 using Murmli.Backend.ProductImport.Extensions;
 using Murmli.Backend.ProductImport.OpenFoodFacts;
+using Murmli.Backend.Telemetry.Extensions;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Trace;
 
 namespace Murmli.Backend.ProductImport.Tests.Infrastructure;
 
@@ -18,7 +22,9 @@ internal static class ProductImportHost
         int? productLimit = null,
         TimeProvider? timeProvider = null,
         Func<CancellationToken, Task>? onExportRequested = null,
-        Func<Stream>? openExport = null
+        Func<Stream>? openExport = null,
+        ICollection<Activity>? activities = null,
+        ICollection<LogRecord>? logRecords = null
     )
     {
         var builder = Host.CreateApplicationBuilder(
@@ -31,10 +37,21 @@ internal static class ProductImportHost
                 ["ProductImport:ProductLimit"] = productLimit?.ToString(CultureInfo.InvariantCulture),
             }
         );
+        builder.AddTelemetry();
         builder.AddProductImport();
         if (timeProvider is not null)
         {
             builder.Services.AddSingleton(timeProvider);
+        }
+
+        if (activities is not null)
+        {
+            builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddInMemoryExporter(activities));
+        }
+
+        if (logRecords is not null)
+        {
+            builder.Services.ConfigureOpenTelemetryLoggerProvider(logging => logging.AddInMemoryExporter(logRecords));
         }
 
         builder

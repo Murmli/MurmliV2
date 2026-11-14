@@ -57,4 +57,12 @@ public sealed partial class ProductImporter
         Message = "Could not record the failure of the product import run {" + LogProperties.RunId + "}"
     )]
     private partial void LogRunFailureNotRecorded(Exception exception, long runId);
+
+    [LoggerMessage(
+        EventId = LogEvents.ProductImportFailed,
+        EventName = nameof(LogEvents.ProductImportFailed),
+        Level = LogLevel.Error,
+        Message = "The product import failed"
+    )]
+    private partial void LogProductImportFailed(Exception exception);
 }
