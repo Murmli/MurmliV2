@@ -1,6 +1,34 @@
 {
   "app": {
-    "title": "Murmli"
+    "title": "Murmli",
+    "wordmark": "murmli",
+    "logoInitial": "m"
+  },
+  "onboarding": {
+    "headline": "Dein Alltag rund ums Essen, an einem Ort.",
+    "subline": "Rezepte, Wochenplan, Einkauf und Kalorien. Oder sag Murmli einfach, was du brauchst.",
+    "features": {
+      "assistant": {
+        "title": "Sag es Murmli",
+        "subtitle": "Per Text, Sprache oder Foto"
+      },
+      "calories": {
+        "title": "Kalorien im Blick",
+        "subtitle": "Mit Barcode-Scan ohne Tokens"
+      },
+      "shopping": {
+        "title": "Einkauf, der mitdenkt",
+        "subtitle": "Nach Laufweg sortiert und geteilt"
+      },
+      "planning": {
+        "title": "Rezepte und Wochenplan",
+        "subtitle": "Zutaten landen auf der Liste"
+      }
+    },
+    "startTokens": "50 Start-Tokens geschenkt",
+    "continueWithApple": "Weiter mit Apple",
+    "continueWithGoogle": "Weiter mit Google",
+    "legalNote": "Mit der Anmeldung stimmst du den AGB und der Datenschutzerklärung zu."
   },
   "home": {
     "comingSoon": "Kommt bald",
