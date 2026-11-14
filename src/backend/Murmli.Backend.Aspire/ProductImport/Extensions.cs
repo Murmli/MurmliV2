@@ -8,8 +8,9 @@ public static class Extensions
         this IDistributedApplicationBuilder builder,
         IResourceBuilder<AzurePostgresFlexibleServerDatabaseResource> database,
         IResourceBuilder<AzureUserAssignedIdentityResource> identity
-    ) =>
-        builder
+    )
+    {
+        var productImport = builder
             .AddProject<Projects.Murmli_Backend_ProductImport>("product-import")
             .WithReference(database)
             .WaitFor(database)
@@ -29,4 +30,13 @@ public static class Extensions
                     container.Resources.Memory = "1Gi";
                 }
             );
+
+        // Lets agents limit local runs, the Azure job always imports the full export
+        if (builder.ExecutionContext.IsRunMode && builder.Configuration["ProductImport:ProductLimit"] is { } productLimit)
+        {
+            productImport.WithEnvironment("ProductImport__ProductLimit", productLimit);
+        }
+
+        return productImport;
+    }
 }
