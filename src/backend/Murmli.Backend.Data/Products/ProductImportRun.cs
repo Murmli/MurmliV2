@@ -9,4 +9,6 @@ public class ProductImportRun
     public DateTimeOffset? FinishedAt { get; set; }
 
     public required ProductImportRunStatus Status { get; set; }
+
+    public long? PeakMemoryBytes { get; set; }
 }

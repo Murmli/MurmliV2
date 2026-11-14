@@ -17,5 +17,6 @@ internal sealed class ProductImportRunConfiguration : IEntityTypeConfiguration<P
             .Property(run => run.Status)
             .HasColumnName("status")
             .HasConversion(status => status.Key, key => ProductImportRunStatus.Get(key));
+        builder.Property(run => run.PeakMemoryBytes).HasColumnName("peak_memory_bytes");
     }
 }

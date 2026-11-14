@@ -170,6 +170,7 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
             runs.Select(run => run.Status)
         );
         Assert.Equal(StartTime + ImportDuration, runs[1].FinishedAt);
+        Assert.True(runs[1].PeakMemoryBytes > 0);
     }
 
     [Fact(Timeout = 30_000)]
@@ -340,7 +341,7 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
     }
 
     [Fact]
-    public async Task ImportAsync_SuccessfulRun_RecordsSucceededRunWithStartAndFinish()
+    public async Task ImportAsync_SuccessfulRun_RecordsSucceededRunWithStartFinishAndPeakMemory()
     {
         using var host = CreateHostWithAdvancingClock(
             CompressedExport.Create([CreateExportLine("4000000000011", "Apfel", 0.2)])
@@ -352,6 +353,7 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
         Assert.Equal(ProductImportRunStatus.Succeeded, run.Status);
         Assert.Equal(StartTime, run.StartedAt);
         Assert.Equal(StartTime + ImportDuration, run.FinishedAt);
+        Assert.True(run.PeakMemoryBytes > 0);
     }
 
     [Fact]
@@ -411,7 +413,7 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
     }
 
     [Fact]
-    public async Task ImportAsync_PreviousRunStillRunning_MarksItFailedWithoutFinish()
+    public async Task ImportAsync_PreviousRunStillRunning_MarksItFailedWithoutFinishOrPeakMemory()
     {
         await SeedProductsAsync();
         using var host = ProductImportHost.Create(
@@ -435,6 +437,7 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
             runs.Select(run => run.Status)
         );
         Assert.Null(runs[1].FinishedAt);
+        Assert.Null(runs[1].PeakMemoryBytes);
     }
 
     private static string CreateExportLine(

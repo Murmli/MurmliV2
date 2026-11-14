@@ -36,9 +36,16 @@ public sealed partial class ProductImporter
             + LogProperties.UpdatedCount
             + "} updated, {"
             + LogProperties.DeletedCount
-            + "} deleted"
+            + "} deleted, peak memory {"
+            + LogProperties.PeakMemoryBytes
+            + "} bytes"
     )]
-    private partial void LogProductsSynchronized(int insertedCount, int updatedCount, int deletedCount);
+    private partial void LogProductsSynchronized(
+        int insertedCount,
+        int updatedCount,
+        int deletedCount,
+        long peakMemoryBytes
+    );
 
     [LoggerMessage(
         EventId = LogEvents.RunFailureNotRecorded,

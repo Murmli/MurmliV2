@@ -120,6 +120,10 @@ namespace Murmli.Backend.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("finished_at");
 
+                    b.Property<long?>("PeakMemoryBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("peak_memory_bytes");
+
                     b.Property<DateTimeOffset>("StartedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("started_at");

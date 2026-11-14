@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Murmli.Backend.Data;
@@ -75,13 +76,16 @@ public sealed partial class ProductImporter(
             cancellationToken
         );
 
+        var peakMemoryBytes = ReadPeakMemoryBytes();
+
         // Saved in the import transaction, so the products and the success only become visible together
         run.Status = ProductImportRunStatus.Succeeded;
         run.FinishedAt = timeProvider.GetUtcNow();
+        run.PeakMemoryBytes = peakMemoryBytes;
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        LogProductsSynchronized(result.InsertedCount, result.UpdatedCount, result.DeletedCount);
+        LogProductsSynchronized(result.InsertedCount, result.UpdatedCount, result.DeletedCount, peakMemoryBytes);
     }
 
     private async Task RecordFailureAsync(long runId)
@@ -96,7 +100,8 @@ public sealed partial class ProductImporter(
                     setters =>
                         setters
                             .SetProperty(run => run.Status, ProductImportRunStatus.Failed)
-                            .SetProperty(run => run.FinishedAt, timeProvider.GetUtcNow()),
+                            .SetProperty(run => run.FinishedAt, timeProvider.GetUtcNow())
+                            .SetProperty(run => run.PeakMemoryBytes, ReadPeakMemoryBytes()),
                     CancellationToken.None
                 );
         }
@@ -104,5 +109,12 @@ public sealed partial class ProductImporter(
         {
             LogRunFailureNotRecorded(exception, runId);
         }
+    }
+
+    // The job process runs nothing but the import, so the peak of the process is the peak of the run
+    private static long ReadPeakMemoryBytes()
+    {
+        using var process = Process.GetCurrentProcess();
+        return process.PeakWorkingSet64;
     }
 }
