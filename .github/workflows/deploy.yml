@@ -1,0 +1,65 @@
+name: Deploy
+
+on:
+  workflow_call:
+    secrets:
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_TENANT_ID:
+        required: true
+      AZURE_SUBSCRIPTION_ID:
+        required: true
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dev:
+    name: Dev
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    # Fixed group shared by both entry points; a cancelled deploy would abort in-flight ARM deployments.
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: src/backend/global.json
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      # Aspire 13.6.5 requests these tokens lazily, after the five-minute GitHub OIDC assertion has expired: https://github.com/microsoft/aspire/issues/19560
+      - name: Pre-acquire Azure tokens
+        run: |
+          for resource in https://management.azure.com https://graph.windows.net https://containerregistry.azure.net; do
+            az account get-access-token --resource "$resource" --output none
+          done
+      - name: Deploy
+        id: deploy
+        env:
+          Azure__SubscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          # The default 13 seconds for each az call time out on GitHub runners: https://github.com/microsoft/aspire/issues/13904
+          Azure__CredentialProcessTimeoutSeconds: 120
+        run: |
+          # Re-runs and slower CI runs of older commits must not overwrite a newer deploy.
+          main_head=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$main_head" != "$GITHUB_SHA" ]; then
+            echo "::notice::Skipped, main has moved on to $main_head."
+            exit 0
+          fi
+          apphost=src/backend/Murmli.Backend.Aspire/Murmli.Backend.Aspire.csproj
+          aspire_version=$(sed -n 's|.*Sdk="Aspire.AppHost.Sdk/\([^"]*\)".*|\1|p' "$apphost")
+          # Without a version dnx would silently run the latest CLI.
+          : "${aspire_version:?Aspire.AppHost.Sdk version not found in $apphost}"
+          dnx --yes "aspire.cli@$aspire_version" -- deploy --apphost "$apphost" --environment azure-dev --non-interactive
+      - name: Print Aspire CLI log
+        if: failure() && steps.deploy.outcome == 'failure'
+        run: cat ~/.aspire/logs/cli_*.log

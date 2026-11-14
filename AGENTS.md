@@ -320,53 +320,34 @@ Regeln für CLAUDE.md und weitere Agent-Instruktionsdateien im Repo.
 
 ## Branch-Schutz
 
-`main` ist geschützt: Änderungen kommen ausschließlich per Pull Request hinein, direkte Pushes auf `main` lehnt GitHub ab. Agents arbeiten deshalb so, auch wenn persönliche Agent-Regeln neue Branches oder Pushes sonst untersagen:
+`main` ist geschützt, Änderungen kommen nur per Pull Request hinein. Das gilt auch, wenn persönliche Agent-Regeln neue Branches oder Pushes sonst untersagen:
 
-- Nie auf `main` committen: Steht der Checkout auf `main`, vor dem ersten Commit einen Branch nach „Branches & Commits" anlegen.
-- Nach dem letzten Commit einer Aufgabe den Branch selbst pushen (nie per Force-Push) und, falls es noch keinen gibt, den Pull Request gegen `main` nach „Pull Requests" öffnen.
+- Nie auf `main` committen, vorher einen Branch nach „Branches & Commits" anlegen.
+- Nach dem letzten Commit den Branch selbst pushen (nie per Force-Push) und, falls es noch keinen gibt, den Pull Request gegen `main` nach „Pull Requests" als Draft öffnen (`gh pr create --draft`). Auf „Ready for review" stellt ihn ein Mensch, und nur ein Mensch merged, denn jeder Merge auf `main` deployt Dev.
 
 ## CI
 
-GitHub Actions unter `.github/`: `ci.yml` (Push auf `main`, Pull Requests) ruft die wiederverwendbaren Workflows `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf; der Vulnerability-Scan läuft zusätzlich nächtlich um 00:05 Europe/Berlin. Die Flutter-Version kommt aus `src/app/.fvmrc`, das .NET-SDK aus `src/backend/global.json`. Flutter-Setup samt Lockfile-Check steckt in der Composite-Action `.github/actions/setup-app`.
+`ci.yml` (Push auf `main`, Pull Requests) ruft `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf, auf `main` danach `deploy.yml`. Dieselben Checks lokal:
 
-Dieselben Checks lokal:
+- App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze`, `fvm flutter test`.
+- Backend (`src/backend`): `dotnet format --verify-no-changes`, `dotnet test` (braucht Docker und beim ersten Build Netzwerk für `dnx aspire.cli`, sonst ASPIRE009) und `dotnet restore --force -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904` (ohne `--force` keine neuen Advisories).
+- Funde ohne Fix unterdrücken: Backend per `<NuGetAuditSuppress>` im csproj, App per `[[IgnoredVulns]]` in `src/app/osv-scanner.toml`.
 
-- App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze` (Infos sind fatal), `fvm flutter test`.
-- Backend (`src/backend`): `dotnet format --verify-no-changes`, `dotnet test` und als Audit `dotnet restore --force -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904`. Ohne `--force` spielt ein No-op-Restore nur die Funde des letzten echten Restores erneut ab; neu veröffentlichte Advisories sieht erst ein erzwungener Restore.
-- `dotnet test` läuft per `src/backend/global.json` auf Microsoft.Testing.Platform (das Paket `xunit.v3` ab 4.0 unterstützt `dotnet test` nur dort). Der Integrationstest startet den AppHost samt PostgreSQL-Container und braucht Docker. Der AppHost-Build holt sich wegen `AspireUseCliBundle` DCP und Dashboard aus dem Bundle einer Aspire-CLI: Liegt `aspire` im PATH, nimmt er deren Bundle (in deren Version); sonst lädt er beim ersten Build per `dnx` `aspire.cli` in der SDK-Version des AppHost nach `~/.aspire` und braucht dafür Netzwerk, sonst bricht er mit ASPIRE009 ab. CI und Sandbox haben keine Aspire-CLI im PATH und nehmen den `dnx`-Weg.
-
-Vulnerability-Scan:
-
-- Ein `dart pub audit` existiert nicht; die App prüft osv-scanner anhand von `src/app/pubspec.lock`. Warum das Backend per NuGetAudit statt osv-scanner oder `dotnet package list --vulnerable` geprüft wird, steht als Kommentar in `vulnerability-scan.yml`.
-- Funde ohne verfügbaren Fix bewusst unterdrücken: im Backend per `<NuGetAuditSuppress Include="<Advisory-URL>" />` im csproj, in der App per `[[IgnoredVulns]]` in `src/app/osv-scanner.toml`.
-
-Concurrency nur im Caller (`ci.yml`) setzen: In Called Workflows meint `github.workflow` den Caller, eine Concurrency-Gruppe dort cancelt oder blockiert den Caller.
+Concurrency nur in `ci.yml` setzen, in Called Workflows blockiert oder cancelt sie den Caller. Einzige Ausnahme: Der Job in `deploy.yml` nutzt die feste Gruppe `deploy-dev` mit `cancel-in-progress: false` (ein Abbruch bräche laufende ARM-Deployments ab), ebenso jeder weitere Workflow, der Dev ändert. Am aufrufenden `deploy`-Job in `ci.yml` steht die Gruppe nicht noch einmal, sonst wartet der Deploy auf eine Sperre, die sein eigener Caller hält.
 
 ## Aspire und Azure
 
-Aspire-Befehle, die in Azure etwas anlegen, ändern oder löschen, führt nur ein Mensch aus, nie ein KI-Agent: `aspire deploy`, `aspire destroy` und `aspire do` mit Provisionierungs- oder Deploy-Steps. `aspire publish` erzeugt nur lokale Artefakte (nach `aspire-output/`, git-ignoriert) und ist erlaubt; ohne installierte Aspire-CLI per `dnx --yes aspire.cli@<SDK-Version des AppHost> -- publish --apphost <csproj> --output-path <Ordner> --non-interactive`.
-
-Auch `aspire run` und `dotnet test` (der Integrationstest startet den AppHost) legen echte Azure-Ressourcen an, sobald eine Azure-Ressource im AppHost lokal weder als Container noch als Emulator läuft. In dem Fall startet ein Agent den AppHost nicht. Derzeit trifft das auf keine Ressource zu: PostgreSQL läuft per `RunAsContainer` lokal als Container, die Container-Apps-Umgebung samt Registry existiert nur beim Publish. Jede neue Azure-Ressource braucht deshalb einen Container oder Emulator für den lokalen Lauf.
-
-### Umgebungen
-
-Wie Menschen deployen, steht im BackOffice-Repo unter [docs/03_Betrieb/Deployment.md](https://github.com/Murmli/BackOffice/blob/main/docs/03_Betrieb/Deployment.md); das Repo hier enthält nur Technisches. Azure-Umgebungen heißen `azure-<name>` (derzeit nur `azure-dev` mit Resource Group `rg-murmli-dev`) und werden per `aspire deploy --environment azure-<name>` angesprochen; ohne `--environment` deployt Aspire als Production. Ihr Deploy-Ziel (`Azure:Location`, `Azure:ResourceGroup`) steht in `src/backend/Murmli.Backend.Aspire/appsettings.azure-<name>.json`, die Subscription-ID kommt per Umgebungsvariable `Azure__SubscriptionId`, weil das Repo öffentlich ist. Alle appsettings ohne `azure-`-Präfix sind lokal: `Azure:*`-Werte gehören nie in `appsettings.json`, `appsettings.Development.json` oder die User Secrets, sonst bindet sie auch `aspire run`. User Secrets liest der AppHost ohnehin nur in der Umgebung Development, also nie beim Deploy.
+- Was in Azure etwas anlegt, ändert oder löscht, führt nur ein Mensch aus: `aspire deploy`, `aspire destroy`, `aspire do` mit Provisionierungs- oder Deploy-Steps. Agents lösen auch keinen Deploy aus, also kein `gh workflow run deploy.yml` und kein Re-run von Läufen auf `main`. Erlaubt ist `aspire publish`, ohne CLI per `dnx --yes aspire.cli@<SDK-Version des AppHost> -- publish --apphost <csproj> --output-path <Ordner> --non-interactive`.
+- `aspire run` und `dotnet test` startet ein Agent nur, solange jede Azure-Ressource lokal als Container oder Emulator läuft (derzeit erfüllt), sonst legen sie echte Azure-Ressourcen an. Jede neue Azure-Ressource braucht deshalb einen Container oder Emulator.
+- Betriebsdoku (Einrichtung, Deploy-Ablauf) liegt im BackOffice unter [docs/03_Betrieb/Deployment.md](https://github.com/Murmli/BackOffice/blob/main/docs/03_Betrieb/Deployment.md), hier steht nur Technisches.
+- Azure-Umgebungen heißen `azure-<name>` (derzeit `azure-dev` in `rg-murmli-dev`). Ihr Ziel steht in `src/backend/Murmli.Backend.Aspire/appsettings.azure-<name>.json`, die Subscription-ID kommt per `Azure__SubscriptionId` aus einem Secret, weil das Repo öffentlich ist. `Azure:*`-Werte nie in andere appsettings oder User Secrets, sonst bindet sie auch `aspire run`.
+- Dev deployt nur `deploy.yml`: GitHub-Environment `development` (nur `main`), OIDC als Managed Identity mit Contributor und einem auf AcrPull beschränkten RBAC Administrator auf `rg-murmli-dev`. Die Azure-IDs liegen dort als Secrets, nie als Variablen.
+- Aspire 13.6.5 meldet sich beim Deploy nur über die `az`-Session an, `AZURE_CLIENT_ID`, `AZURE_FEDERATED_TOKEN_FILE` und Workload Identity wirken nicht. Weil die OIDC-Assertion nur fünf Minuten gilt, holt der Workflow die Tokens direkt nach dem Login ([microsoft/aspire#19560](https://github.com/microsoft/aspire/issues/19560)), Resource-Strings ohne Schrägstrich am Ende, sonst verfehlen sie den Cache. Braucht Aspire eine weitere Audience, scheitert der Deploy mit AADSTS700024.
+- Die Version von `Aspire.AppHost.Sdk` bleibt im `Sdk`-Attribut des AppHost-csproj, `deploy.yml` liest dort die CLI-Version. Den Deploy-Stand `~/.aspire/deployments` nie cachen oder hochladen, er enthält Subscription und Ressourcen-IDs.
+- Eine neue Rollenzuweisung im AppHost oder ein neuer Resource Provider braucht vorher einen Menschen in Azure (Bedingung erweitern bzw. Provider registrieren), sonst scheitert der Deploy. Die Registry bleibt im RBAC-Modus, im ABAC-Modus scheitern Push und Pull.
 
 ### Ressourcen
 
-Jeder Service hat im AppHost (`src/backend/Murmli.Backend.Aspire`) einen eigenen Ordner mit einer `Extensions.cs`, die ihn per `Add<Service>`-Extension-Methode auf `IDistributedApplicationBuilder` anlegt (Namespace `Murmli.Backend.Aspire.<Ordner>`); `AppHost.cs` verdrahtet nur. Neue Services folgen demselben Schema.
-
-Der AppHost beschreibt für Dev:
-
-- `env`: Container-Apps-Umgebung nur mit Consumption-Profil und ohne Aspire-Dashboard (kostet in Azure extra). Aspire legt dazu implizit eine Container Registry Basic, einen Log-Analytics-Workspace und eine Managed Identity für den Image-Pull an. Die SKU der Registry lässt sich pro Umgebung per `ContainerRegistry:Sku` in `appsettings.azure-<name>.json` überschreiben (`azure-dev` nutzt Standard); `ContainerAppEnvironment/Extensions.cs` setzt sie nachträglich, weil Aspire die Registry nur intern anlegt.
-- `postgres`: PostgreSQL Flexible Server Burstable B1ms mit den Aspire-Standardwerten (32 GB Speicher, 7 Tage Backup, ohne HA und Geo-Backup), nur Entra-Anmeldung, Firewall-Regel für Azure-Dienste. Die Version ist auf 18 überschrieben (Aspire-Default 16), damit sie zum lokalen Container `postgres:18` passt; dafür nutzt der Server die API-Version 2025-08-01, die erste stabile mit PostgreSQL 18.
-- `murmli`: die Datenbank auf `postgres`, zugleich der Connection-String-Name, unter dem die API sie per `AddAzureNpgsqlDataSource` bezieht.
-- `api`: `Murmli.Backend.Api` als Container App mit 0,25 vCPU, 0,5 GiB und null bis einer Instanz, öffentlich per HTTPS (ohne Vorgabe liefe dauerhaft eine Instanz, bis zu zehn). Die Managed Identity `api-identity` meldet sich ohne Passwort an der Datenbank an; Aspire macht sie zum Entra-Admin des Servers, eine schwächere Rolle bietet es nicht.
-
-`/health` der API meldet, ob die Datenbank erreichbar ist, und ist in allen Umgebungen öffentlich. Container-Apps-Probes setzt der AppHost bewusst nicht (`WithHttpProbe` ist experimentell), und ServiceDefaults fehlen bewusst: Ohne Dashboard exportiert OpenTelemetry in Azure nichts. Beides kommt mit dem ersten konkreten Bedarf.
-
-Nicht verwenden, weil Preview oder mit Zusatzkosten: ACA Express, Dedicated Workload Profiles, Private Endpoints, geplante Wartungsfenster.
-
-### Stabile Namen
-
-Die Aspire-Ressourcennamen (`env`, `postgres`, `murmli`, `api`) bestimmen zusammen mit der Resource Group die Namen in Azure und bleiben nach dem ersten Deploy unverändert, ebenso das Naming-Schema der Umgebung (kein nachträgliches `WithAzdResourceNaming`, `WithCompactResourceNaming` oder `WithUniqueResourceNaming`). Eine Umbenennung legt in Azure einen neuen, leeren Server bzw. eine neue Datenbank an; die alte Ressource bleibt liegen und kostet weiter. Aspire löscht beim Deploy nie etwas: Wird eine Ressource aus dem AppHost entfernt, muss sie in Azure von Hand gelöscht oder Dev neu aufgebaut werden.
+- Pro Service ein Ordner im AppHost (`src/backend/Murmli.Backend.Aspire`) mit `Extensions.cs` und `Add<Service>`-Extension, `AppHost.cs` verdrahtet nur.
+- Die Ressourcennamen `env`, `postgres`, `murmli` und `api` und das Naming-Schema der Umgebung bleiben unverändert: Eine Umbenennung legt in Azure neue, leere Ressourcen an, die alten bleiben und kosten weiter. Aspire löscht beim Deploy nie etwas.
+- Nie verwenden (Preview oder Zusatzkosten): Aspire-Dashboard in Azure, ACA Express, Dedicated Workload Profiles, Private Endpoints, geplante Wartungsfenster. Container-Apps-Probes und ServiceDefaults fehlen nur bis zum ersten konkreten Bedarf (ohne Dashboard exportiert OpenTelemetry nichts).
