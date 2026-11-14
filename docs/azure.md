@@ -28,4 +28,4 @@ Betriebsdoku (Einrichtung, Deploy-Ablauf): [BackOffice, docs/03_Betrieb/Deployme
 | Ressourcennamen und Naming-Schema bleiben | Eine Umbenennung legt in Azure neue, leere Ressourcen an, die alten bleiben und kosten weiter. Aspire löscht beim Deploy nie etwas. |
 | Gemeinsame Identity `backend-identity` | Aspire macht jede Identity zu einem eigenen Postgres-Entra-Admin und damit zu einer eigenen Rolle, Tabellen gehören der Rolle, die migriert. Verworfen: getrennte Identities, sie verteilten die Tabellen auf mehrere Rollen, deren gegenseitiger Zugriff nur über Azure-spezifisches Verhalten von `azure_pg_admin` geht und lokal nicht testbar ist. |
 | Ausgeschlossene Azure-Features | Preview oder Zusatzkosten. |
-| Keine Container-Apps-Probes, keine ServiceDefaults | Ohne Dashboard exportiert OpenTelemetry nichts. Gilt bis zum ersten konkreten Bedarf. |
+| Keine Container-Apps-Probes | Gilt bis zum ersten konkreten Bedarf. |

@@ -360,7 +360,7 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 - Die Ressourcennamen `env`, `postgres`, `murmli`, `api`, `backend-identity` und `product-import` und das Naming-Schema der Umgebung nie ändern.
 - Jede App mit Datenbankzugriff bekommt `backend-identity` (`WithAzureUserAssignedIdentity`).
 - Nie verwenden: Aspire-Dashboard in Azure, ACA Express, Dedicated Workload Profiles, Private Endpoints, geplante Wartungsfenster.
-- Container-Apps-Probes und ServiceDefaults erst beim ersten konkreten Bedarf ergänzen.
+- Container-Apps-Probes erst beim ersten konkreten Bedarf ergänzen. Kein ServiceDefaults-Template, Telemetrie siehe „Telemetrie“.
 
 ## Datenbank
 
@@ -374,6 +374,19 @@ Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 - Smart Enums (`[SmartEnum<string>]`) per `HasConversion(status => status.Key, key => <Typ>.Get(key))` als `text` speichern, nicht über das Thinktecture-EF-Paket.
 - Namenssuche nur per `EF.Functions.ILike(product.Name, "%" + term + "%", "\\")` mit selbst escaptem `%`, `_` und `\` und mindestens 3 Zeichen, nie per `Contains` oder `ToLower().Contains`.
 - Neue Postgres-Extensions in `azure.extensions` in `Database/Extensions.cs` des AppHost eintragen (`DependsOn` behalten), nie im Portal.
+
+## Telemetrie
+
+Hintergrund und Entscheidungen: [docs/telemetry.md](docs/telemetry.md)
+
+- Jeder Host ruft `builder.AddTelemetry()` nach dem Hinzufügen aller Konfigurationsquellen und vor `Build()` auf (es liest `Telemetry:RecordSensitiveData` beim Aufruf), jede App-Ressource im AppHost bekommt `.WithTelemetry()`.
+- Eigene `ActivitySource`s und `Meter` heißen `Murmli.*`.
+- Keine Gesundheitsdaten in Logs, Span-Attributen, Span-Namen oder URLs.
+- SQL-Werte nur als Parameter, nie in SQL einsetzen (kein `FromSqlRaw` mit zusammengesetztem SQL).
+- Sensible Daten (LLM-Inhalte, SQL-Parameterwerte) nur über `Telemetry:RecordSensitiveData` (`IConfiguration.RecordsSensitiveData()`), nie fest im Code.
+- Kein `ConfigureHttpClientDefaults` mit Resilience-Handlern.
+- Job-Hosts entsorgen den Host (`using var host`), sonst geht die zuletzt gepufferte Telemetrie verloren.
+- `/health` nicht aus den Traces filtern, bis die Bedingung in [docs/telemetry.md](docs/telemetry.md) eintritt.
 
 ## Produktimport
 
