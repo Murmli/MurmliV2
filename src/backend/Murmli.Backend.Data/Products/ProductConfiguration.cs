@@ -9,6 +9,7 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
     {
         builder.ToTable("products");
         builder.HasKey(product => product.Code).HasName("pk_products");
+        builder.HasIndex(product => product.Name).HasDatabaseName("ix_products_name_trigram").HasMethod("gin").HasOperators("gin_trgm_ops");
 
         builder.Property(product => product.Code).HasColumnName("code");
         builder.Property(product => product.Name).HasColumnName("name");

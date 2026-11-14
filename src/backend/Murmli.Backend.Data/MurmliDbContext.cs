@@ -9,6 +9,9 @@ public class MurmliDbContext(DbContextOptions<MurmliDbContext> options) : DbCont
 
     public DbSet<ProductImportRun> ProductImportRuns => Set<ProductImportRun>();
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder) =>
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasPostgresExtension("pg_trgm");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(MurmliDbContext).Assembly);
+    }
 }

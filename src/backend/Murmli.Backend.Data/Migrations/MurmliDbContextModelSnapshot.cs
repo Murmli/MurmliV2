@@ -20,6 +20,7 @@ namespace Murmli.Backend.Data.Migrations
                 .HasAnnotation("ProductVersion", "10.0.15")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pg_trgm");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("Murmli.Backend.Data.Products.Product", b =>
@@ -103,6 +104,12 @@ namespace Murmli.Backend.Data.Migrations
 
                     b.HasKey("Code")
                         .HasName("pk_products");
+
+                    b.HasIndex("Name")
+                        .HasDatabaseName("ix_products_name_trigram");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Name"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Name"), new[] { "gin_trgm_ops" });
 
                     b.ToTable("products", (string)null);
                 });
