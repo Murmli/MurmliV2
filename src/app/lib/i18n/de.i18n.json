@@ -1,0 +1,30 @@
+{
+  "app": {
+    "title": "Murmli"
+  },
+  "home": {
+    "comingSoon": "Kommt bald",
+    "tabs": {
+      "recipes": {
+        "label": "Rezepte",
+        "title": "Rezepte"
+      },
+      "planner": {
+        "label": "Planer",
+        "title": "Wochenplan"
+      },
+      "chat": {
+        "label": "Murmli Chat",
+        "title": "Murmli"
+      },
+      "shoppingList": {
+        "label": "Liste",
+        "title": "Einkaufsliste"
+      },
+      "calories": {
+        "label": "Kalorien",
+        "title": "Kalorien"
+      }
+    }
+  }
+}
