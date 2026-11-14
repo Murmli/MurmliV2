@@ -13,4 +13,8 @@
         <PackageReference Include="Thinktecture.Runtime.Extensions" />
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\Murmli.Backend.Telemetry\Murmli.Backend.Telemetry.csproj" />
+    </ItemGroup>
+
 </Project>

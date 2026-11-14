@@ -12,6 +12,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Murmli.Backend.ProductImport\Murmli.Backend.ProductImport.csproj" />
+        <ProjectReference Include="..\Murmli.Backend.Telemetry\Murmli.Backend.Telemetry.csproj" />
     </ItemGroup>
 
     <ItemGroup>
