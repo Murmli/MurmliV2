@@ -7,7 +7,7 @@ internal sealed class ProductImportRunConfiguration : IEntityTypeConfiguration<P
 {
     public void Configure(EntityTypeBuilder<ProductImportRun> builder)
     {
-        builder.ToTable("product_import_runs");
+        builder.ToTable("product_import_runs", ProductsSchema.Name);
         builder.HasKey(run => run.Id).HasName("pk_product_import_runs");
 
         builder.Property(run => run.Id).HasColumnName("id");

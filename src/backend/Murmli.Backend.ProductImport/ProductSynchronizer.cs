@@ -9,7 +9,7 @@ namespace Murmli.Backend.ProductImport;
 
 public sealed class ProductSynchronizer(MurmliDbContext context)
 {
-    private const string CreateImportTableSql = "CREATE TEMP TABLE product_import (LIKE products) ON COMMIT DROP";
+    private const string CreateImportTableSql = "CREATE TEMP TABLE product_import (LIKE products.products) ON COMMIT DROP";
 
     private const string CopySql = """
         COPY product_import (
@@ -39,7 +39,7 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
 
     private const string MergeSql = """
         WITH merged AS (
-            MERGE INTO products AS target
+            MERGE INTO products.products AS target
             USING product_import AS source
             ON target.code = source.code
             WHEN MATCHED AND (

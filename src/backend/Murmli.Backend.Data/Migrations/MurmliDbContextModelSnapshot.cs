@@ -111,7 +111,7 @@ namespace Murmli.Backend.Data.Migrations
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Name"), "gin");
                     NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Name"), new[] { "gin_trgm_ops" });
 
-                    b.ToTable("products", (string)null);
+                    b.ToTable("products", "products");
                 });
 
             modelBuilder.Entity("Murmli.Backend.Data.Products.ProductImportRun", b =>
@@ -143,7 +143,7 @@ namespace Murmli.Backend.Data.Migrations
                     b.HasKey("Id")
                         .HasName("pk_product_import_runs");
 
-                    b.ToTable("product_import_runs", (string)null);
+                    b.ToTable("product_import_runs", "products");
                 });
 #pragma warning restore 612, 618
         }

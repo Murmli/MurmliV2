@@ -7,7 +7,7 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
 {
     public void Configure(EntityTypeBuilder<Product> builder)
     {
-        builder.ToTable("products");
+        builder.ToTable("products", ProductsSchema.Name);
         builder.HasKey(product => product.Code).HasName("pk_products");
         builder.HasIndex(product => product.Name).HasDatabaseName("ix_products_name_trigram").HasMethod("gin").HasOperators("gin_trgm_ops");
 
