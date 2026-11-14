@@ -68,7 +68,7 @@ namespace Murmli.Backend.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("fat_is_estimated");
 
-                    b.Property<bool?>("IsPerHundredMilliliters")
+                    b.Property<bool>("IsPerHundredMilliliters")
                         .HasColumnType("boolean")
                         .HasColumnName("is_per_hundred_milliliters");
 

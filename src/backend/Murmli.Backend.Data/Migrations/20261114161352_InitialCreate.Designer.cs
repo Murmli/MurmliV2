@@ -11,7 +11,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Murmli.Backend.Data.Migrations
 {
     [DbContext(typeof(MurmliDbContext))]
-    [Migration("20261114144134_InitialCreate")]
+    [Migration("20261114161352_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -71,7 +71,7 @@ namespace Murmli.Backend.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("fat_is_estimated");
 
-                    b.Property<bool?>("IsPerHundredMilliliters")
+                    b.Property<bool>("IsPerHundredMilliliters")
                         .HasColumnType("boolean")
                         .HasColumnName("is_per_hundred_milliliters");
 

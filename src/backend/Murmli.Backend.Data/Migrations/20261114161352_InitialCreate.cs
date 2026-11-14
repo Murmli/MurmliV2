@@ -23,7 +23,7 @@ namespace Murmli.Backend.Data.Migrations
                 {
                     code = table.Column<string>(type: "text", nullable: false),
                     name = table.Column<string>(type: "text", nullable: false),
-                    is_per_hundred_milliliters = table.Column<bool>(type: "boolean", nullable: true),
+                    is_per_hundred_milliliters = table.Column<bool>(type: "boolean", nullable: false),
                     energy_kilojoules = table.Column<double>(type: "double precision", nullable: true),
                     energy_kilojoules_is_estimated = table.Column<bool>(type: "boolean", nullable: false),
                     energy_kilocalories = table.Column<double>(type: "double precision", nullable: true),

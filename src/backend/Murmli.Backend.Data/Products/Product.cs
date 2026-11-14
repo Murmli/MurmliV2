@@ -10,10 +10,7 @@ public class Product
 
     public required string Name { get; set; }
 
-    /// <summary>
-    /// Null when the product has no nutrient value.
-    /// </summary>
-    public bool? IsPerHundredMilliliters { get; set; }
+    public bool IsPerHundredMilliliters { get; set; }
 
     public double? EnergyKilojoules { get; set; }
 
