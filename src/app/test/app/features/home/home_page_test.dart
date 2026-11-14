@@ -25,5 +25,24 @@ void main() {
       expect(find.text(translations.shoppingList.title), findsWidgets);
       expect(find.text(translations.chat.title), findsNothing);
     });
+
+    testWidgets(
+      'activating a navigation bar tab through the screen reader shows that tab',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        await pumpApp(
+          tester,
+          storedPreferences: {PreferenceKeys.onboardingCompleted: true},
+        );
+
+        tester.semantics.tap(
+          find.semantics.byLabel(translations.shoppingList.label),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ShoppingListPage), findsOneWidget);
+        semantics.dispose();
+      },
+    );
   });
 }

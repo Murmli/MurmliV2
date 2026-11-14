@@ -11,4 +11,5 @@ abstract final class AppSpacing {
 
 abstract final class AppRadius {
   static const double card = 24;
+  static const double navigationTab = 30;
 }

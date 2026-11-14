@@ -30,7 +30,7 @@ class FloatingNavigationBar extends StatelessWidget {
           0,
         ),
         child: Container(
-          height: 68,
+          constraints: const BoxConstraints(minHeight: 68),
           padding: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
             color: colors.surface,
@@ -38,24 +38,27 @@ class FloatingNavigationBar extends StatelessWidget {
             border: Border.all(color: colors.line),
             boxShadow: colors.navigationShadow,
           ),
-          child: Row(
-            spacing: 2,
-            children: [
-              for (final tab in HomeTab.values)
-                if (tab == HomeTab.chat)
-                  _ChatTabButton(
-                    isActive: tab == activeTab,
-                    onPressed: () => onTabSelected(tab),
-                  )
-                else
-                  Expanded(
-                    child: _TabButton(
-                      tab: tab,
+          child: Material(
+            type: MaterialType.transparency,
+            child: Row(
+              spacing: 2,
+              children: [
+                for (final tab in HomeTab.values)
+                  if (tab == HomeTab.chat)
+                    _ChatTabButton(
                       isActive: tab == activeTab,
                       onPressed: () => onTabSelected(tab),
+                    )
+                  else
+                    Expanded(
+                      child: _TabButton(
+                        tab: tab,
+                        isActive: tab == activeTab,
+                        onPressed: () => onTabSelected(tab),
+                      ),
                     ),
-                  ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -84,12 +87,14 @@ class _TabButton extends StatelessWidget {
       selected: isActive,
       label: label,
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      onTap: onPressed,
+      child: InkWell(
         onTap: onPressed,
-        child: SizedBox(
-          height: 60,
+        borderRadius: BorderRadius.circular(AppRadius.navigationTab),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 60),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             spacing: 3,
             children: [
@@ -134,13 +139,14 @@ class _ChatTabButton extends StatelessWidget {
       selected: isActive,
       label: HomeTab.chat.label(context.t),
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      onTap: onPressed,
+      child: InkWell(
         onTap: onPressed,
-        child: SizedBox(
-          width: 72,
-          height: 60,
+        borderRadius: BorderRadius.circular(AppRadius.navigationTab),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 72, minHeight: 60),
           child: Center(
+            heightFactor: 1,
             child: Transform.translate(
               offset: const Offset(0, -9),
               child: AnimatedContainer(
