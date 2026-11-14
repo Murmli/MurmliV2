@@ -357,7 +357,7 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 ### Ressourcen
 
 - Pro Service ein Ordner im AppHost (`src/backend/Murmli.Backend.Aspire`) mit `Extensions.cs` und `Add<Service>`-Extension, `AppHost.cs` verdrahtet nur.
-- Die Ressourcennamen `env`, `postgres`, `murmli`, `api`, `backend-identity` und `product-import` und das Naming-Schema der Umgebung nie ändern.
+- Die Ressourcennamen `env`, `postgres`, `murmli`, `api`, `backend-identity`, `product-import` und `app-insights` und das Naming-Schema der Umgebung nie ändern.
 - Jede App mit Datenbankzugriff bekommt `backend-identity` (`WithAzureUserAssignedIdentity`).
 - Nie verwenden: Aspire-Dashboard in Azure, ACA Express, Dedicated Workload Profiles, Private Endpoints, geplante Wartungsfenster.
 - Container-Apps-Probes erst beim ersten konkreten Bedarf ergänzen. Kein ServiceDefaults-Template, Telemetrie siehe „Telemetrie“.
@@ -379,7 +379,8 @@ Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 
 Hintergrund und Entscheidungen: [docs/telemetry.md](docs/telemetry.md)
 
-- Jeder Host ruft `builder.AddTelemetry()` nach dem Hinzufügen aller Konfigurationsquellen und vor `Build()` auf (es liest `Telemetry:RecordSensitiveData` beim Aufruf), jede App-Ressource im AppHost bekommt `.WithTelemetry()`.
+- Jeder Host ruft `builder.AddTelemetry()` nach dem Hinzufügen aller Konfigurationsquellen und vor `Build()` auf (es liest `Telemetry:RecordSensitiveData` beim Aufruf), jede App-Ressource im AppHost bekommt `.WithTelemetry(applicationInsights)`.
+- Application Insights und die tägliche Obergrenze des Workspaces nur über `AddApplicationInsights` in `ApplicationInsights/Extensions.cs` des AppHost, den Wert der Obergrenze pro Umgebung nur in `appsettings.azure-<name>.json` (`LogAnalytics:DailyQuotaGb`). Der AppHost fügt Application Insights nur im Publish-Mode hinzu, nie im Run-Mode, sonst provisioniert Aspire es bei `aspire run` und `dotnet test` in Azure.
 - Eigene `ActivitySource`s und `Meter` heißen `Murmli.*`.
 - Keine Gesundheitsdaten in Logs, Span-Attributen, Span-Namen oder URLs.
 - SQL-Werte nur als Parameter, nie in SQL einsetzen (kein `FromSqlRaw` mit zusammengesetztem SQL).

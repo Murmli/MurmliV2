@@ -1,6 +1,6 @@
 # Telemetrie
 
-`src/backend/Murmli.Backend.Telemetry` richtet OpenTelemetry für alle Backend-Hosts gemeinsam ein. Jeder Host ruft `builder.AddTelemetry()` nach dem Hinzufügen aller Konfigurationsquellen und vor `Build()` auf, weil es `Telemetry:RecordSensitiveData` beim Aufruf liest. Jede App-Ressource im AppHost bekommt `.WithTelemetry()`.
+`src/backend/Murmli.Backend.Telemetry` richtet OpenTelemetry für alle Backend-Hosts gemeinsam ein. Jeder Host ruft `builder.AddTelemetry()` nach dem Hinzufügen aller Konfigurationsquellen und vor `Build()` auf, weil es `Telemetry:RecordSensitiveData` beim Aufruf liest. Jede App-Ressource im AppHost bekommt `.WithTelemetry(applicationInsights)`.
 
 ## Was aufgezeichnet wird
 
@@ -12,8 +12,9 @@ Quelle und Meter `Npgsql` registrieren die Aspire-Integrationen selbst, `AddTele
 
 ## Export
 
-- OTLP nur, wenn `OTEL_EXPORTER_OTLP_ENDPOINT` gesetzt ist. Aspire setzt den Endpunkt im Run-Mode, lokal landet die Telemetrie damit im Dashboard. Ohne Endpunkt zeichnen die Apps auf, exportieren aber nichts.
-- Export nach Azure: noch nicht gebaut, folgt mit [#24](https://github.com/Murmli/MurmliV2/issues/24).
+- OTLP nur, wenn `OTEL_EXPORTER_OTLP_ENDPOINT` gesetzt ist. Aspire setzt den Endpunkt im Run-Mode, lokal landet die Telemetrie damit im Dashboard.
+- Azure Monitor nur, wenn `APPLICATIONINSIGHTS_CONNECTION_STRING` gesetzt ist. Das passiert nur in Azure: Im Publish-Mode legt der AppHost die Ressource `app-insights` an, `WithTelemetry(applicationInsights)` reicht den Connection String an die Apps weiter. Die Telemetrie landet damit in Application Insights am Log Analytics Workspace der Container-Apps-Umgebung.
+- Ohne beides zeichnen die Apps auf, exportieren aber nichts.
 
 ## Sensible Daten
 
@@ -22,7 +23,7 @@ Der Schalter `Telemetry:RecordSensitiveData` (Standard aus) steuert alles, was I
 - LLM-Inhalte (Prompts und Antworten) über `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`.
 - SQL-Parameterwerte in den Command-Logs von EF Core über `EnableSensitiveDataLogging`.
 
-Npgsql-Spans enthalten nie Parameterwerte. Eingeschaltet ist der Schalter nur lokal: `appsettings.Development.json` des AppHost setzt ihn, `WithTelemetry()` reicht ihn als `Telemetry__RecordSensitiveData` an die Apps weiter. Für Azure Dev ist das Einschalten entschieden, aber noch nicht gebaut (`appsettings.azure-dev.json` setzt ihn nicht). Eingeschaltet wird er mit [#24](https://github.com/Murmli/MurmliV2/issues/24), dann entfällt dieser Hinweis.
+Npgsql-Spans enthalten nie Parameterwerte. Eingeschaltet ist der Schalter nur lokal und in Azure Dev, dort gibt es nur Testdaten: `appsettings.Development.json` und `appsettings.azure-dev.json` des AppHost setzen ihn, `WithTelemetry()` reicht ihn als `Telemetry__RecordSensitiveData` an die Apps weiter. In jeder anderen Umgebung bleibt er aus.
 
 ## Entscheidungen
 
@@ -36,3 +37,12 @@ Npgsql-Spans enthalten nie Parameterwerte. Eingeschaltet ist der Schalter nur lo
 | `ActivityTrackingOptions.None` | Der OpenTelemetry-Logger hängt Trace- und Span-ID selbst an, die Standardoptionen des Generic Host ergänzten sie doppelt als Scope-Attribute (`TraceId`, `SpanId`, `ParentId`). |
 | `/health` bleibt in den Traces | Derzeit der einzige Request mit Datenbankzugriff. Filtern, sobald ein echter Endpunkt mit Datenbankzugriff existiert oder Container-Apps-Probes `/health` regelmäßig aufrufen. |
 | Job-Hosts entsorgen den Host (`using var host`) | Erst das Entsorgen schreibt die gepufferte Telemetrie raus, `StopAsync` nicht. Das wartet pro Signal höchstens 5 s. |
+| Application Insights am Workspace der Container-Apps-Umgebung | Kein zweiter Workspace, die Namen der Umgebung und des Workspaces bleiben gleich. Ohne `WithLogAnalyticsWorkspace` legte Aspire einen zweiten Workspace an. Die Umgebung legt ihren Workspace selbst an, für ihre Bicep-Ausgabe `AZURE_LOG_ANALYTICS_WORKSPACE_ID` hat Aspire keinen öffentlichen Zugriff, deshalb steht der Name als String im Code. |
+| Application Insights nur im Publish-Mode | Im Run-Mode legte Aspire die Ressource in Azure an. `aspire run` und `dotnet test` kommen ohne Azure aus, lokal bleibt es beim Dashboard. |
+| Exporter `Azure.Monitor.OpenTelemetry.Exporter` statt der Distro | Die Distro zieht die Instrumentierung von ASP.NET Core und SqlClient in den Worker des Produktimports und schaltet das Schwärzen von Query-Parametern in URLs ab. |
+| Live Metrics aus | Zusätzliche ausgehende Verbindung, die Details zu Anfragen und Exceptions live überträgt. Für eine auf null skalierende Dev-API ohne Nutzen, gespeichert werden die Daten ohnehin nicht. |
+| Sampling des Exporters aus (`TracesPerSecond = null`, `SamplingRatio = 1`, `EnableTraceBasedLogsSampler = false`) | Jede Anfrage muss über ihren Support-Code (die Trace-ID) auffindbar sein. Der Standard zeichnet höchstens 5 Traces pro Sekunde auf und verwirft die Logs nicht aufgezeichneter Traces. Der Exporter registriert seinen Sampler nach `AlwaysOn` und gewinnt. Mit diesen Optionen zeichnet er jeden Trace auf, auch bei Sampled-Flag `00`. |
+| `DisablePersistOnShutdown` | Was beim Beenden noch nicht gesendet ist, schriebe der Exporter sonst auf die Platte. Die ist im Job und in der auf null skalierenden API flüchtig, die Daten wären trotzdem verloren. Das Beenden wartet pro Signal höchstens 5 s auf den Versand. |
+| `OTEL_SERVICE_NAME` setzt der AppHost im Publish-Mode | Aspire setzt den Dienstnamen nur im Run-Mode, in Azure fehlte er sonst. Der Wert ist wie lokal der Ressourcenname (`api`, `product-import`). |
+| Konsole in Azure nur ab Warnung (`Logging__Console__LogLevel__Default=Warning`) | Container Apps schreibt die Konsole in denselben Workspace, Logs kämen sonst doppelt an. Warnungen und Fehler bleiben, damit Abstürze beim Start sichtbar sind. Der Schalter gilt nur für die Konsole, die OpenTelemetry-Logs bleiben bei `Information`. |
+| Tägliche Obergrenze `LogAnalytics:DailyQuotaGb` pro Umgebung, in Dev 0,2 GB | Schutz vor Kostenspitzen. Ist sie erreicht, nimmt der Workspace bis zum Folgetag nichts mehr auf, auch keine Konsolenlogs. Sobald es LLM-Aufrufe gibt, erreicht Dev die Grenze schneller, weil der Schalter `Telemetry:RecordSensitiveData` dort die LLM-Inhalte mitschreibt. Ohne Wert bleibt der Workspace ohne Obergrenze. |
