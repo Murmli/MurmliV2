@@ -5,6 +5,9 @@ namespace Murmli.Backend.Aspire.Tests.Infrastructure;
 
 internal static class AppHostEnvironment
 {
+    // --clear-cache keeps the model from reading local deployment state
+    public static readonly string[] PublishModeArguments = ["--operation", "publish", "--clear-cache", "true"];
+
     public static async Task<Dictionary<string, string>> GetAsync(string resourceName, string[] args)
     {
         var cancellationToken = TestContext.Current.CancellationToken;

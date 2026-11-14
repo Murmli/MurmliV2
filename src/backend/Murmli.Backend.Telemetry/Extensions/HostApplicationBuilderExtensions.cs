@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Azure.Monitor.OpenTelemetry.Exporter;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -43,6 +44,20 @@ public static class HostApplicationBuilderExtensions
         if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
         {
             openTelemetry.UseOtlpExporter();
+        }
+
+        if (!string.IsNullOrWhiteSpace(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
+        {
+            // Container disks are ephemeral, telemetry persisted at shutdown would never be sent
+            AppContext.SetSwitch("Azure.Monitor.OpenTelemetry.Exporter.DisablePersistOnShutdown", true);
+            openTelemetry.UseAzureMonitorExporter(options =>
+            {
+                options.EnableLiveMetrics = false;
+                // The defaults record at most 5 traces per second and drop the logs of unrecorded traces
+                options.TracesPerSecond = null;
+                options.SamplingRatio = 1.0F;
+                options.EnableTraceBasedLogsSampler = false;
+            });
         }
     }
 }

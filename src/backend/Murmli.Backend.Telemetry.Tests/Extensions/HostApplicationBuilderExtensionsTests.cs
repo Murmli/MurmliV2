@@ -18,12 +18,23 @@ public class HostApplicationBuilderExtensionsTests
 
     private const string CaptureMessageContentVariable = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
 
-    [Fact]
-    public async Task AddTelemetry_RequestWithUnsampledTraceparent_RecordsRequestUnderIncomingTraceId()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AddTelemetry_RequestWithUnsampledTraceparent_RecordsRequestUnderIncomingTraceId(bool applicationInsightsConfigured)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         List<Activity> activities = [];
+        await using var ingestion = applicationInsightsConfigured ? LocalWebApplication.CreateBuilder().Build() : null;
         var builder = LocalWebApplication.CreateBuilder();
+        if (ingestion is not null)
+        {
+            ingestion.MapPost("/v2.1/track", () => Results.Ok());
+            var ingestionAddress = await LocalWebApplication.StartAsync(ingestion);
+            builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"] =
+                $"InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint={ingestionAddress}";
+        }
+
         builder.AddTelemetry();
         builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddInMemoryExporter(activities));
         await using var application = builder.Build();
@@ -37,8 +48,15 @@ public class HostApplicationBuilderExtensionsTests
         response.EnsureSuccessStatusCode();
         await application.StopAsync(cancellationToken);
 
-        var requestActivity = Assert.Single(activities, activity => activity.Source.Name == "Microsoft.AspNetCore");
-        Assert.Equal(IncomingTraceId, requestActivity.TraceId.ToHexString());
+        var requestActivity = Assert.Single(
+            activities,
+            activity => activity.Source.Name == "Microsoft.AspNetCore" && activity.TraceId.ToHexString() == IncomingTraceId
+        );
+        if (applicationInsightsConfigured)
+        {
+            // The exporter's rate-limited default sampler tags every span it keeps, a sampling ratio of 1 never does
+            Assert.Null(requestActivity.GetTagItem("microsoft.sample_rate"));
+        }
     }
 
     [Fact]
