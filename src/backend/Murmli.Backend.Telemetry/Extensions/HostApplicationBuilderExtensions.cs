@@ -33,10 +33,7 @@ public static class HostApplicationBuilderExtensions
 
         var openTelemetry = builder
             .Services.AddOpenTelemetry()
-            .WithTracing(tracing =>
-                // Ignores the caller's sampled flag on purpose, so every request is findable by its trace ID
-                tracing.SetSampler(new AlwaysOnSampler()).AddSource("Microsoft.AspNetCore", "System.Net.Http", "Murmli.*")
-            )
+            .WithTracing(tracing => tracing.AddSource("Microsoft.AspNetCore", "System.Net.Http", "Murmli.*"))
             .WithMetrics(metrics =>
                 metrics.AddMeter("Microsoft.AspNetCore.*", "System.Net.Http", "System.Net.NameResolution", "System.Runtime", "Murmli.*")
             );
@@ -53,11 +50,16 @@ public static class HostApplicationBuilderExtensions
             openTelemetry.UseAzureMonitorExporter(options =>
             {
                 options.EnableLiveMetrics = false;
-                // The defaults record at most 5 traces per second and drop the logs of unrecorded traces
-                options.TracesPerSecond = null;
-                options.SamplingRatio = 1.0F;
+                // The default drops the logs of unrecorded traces
                 options.EnableTraceBasedLogsSampler = false;
             });
         }
+
+        var sampler = new HealthCheckExcludingSampler();
+        // Records unsampled callers on purpose, ParentBased makes child spans follow their request
+        // Registered last because the Azure Monitor exporter sets its own sampler and the last one wins
+        builder.Services.ConfigureOpenTelemetryTracerProvider(tracing =>
+            tracing.SetSampler(new ParentBasedSampler(rootSampler: sampler, remoteParentSampled: sampler, remoteParentNotSampled: sampler))
+        );
     }
 }

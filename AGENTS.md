@@ -401,7 +401,7 @@ Hintergrund und Entscheidungen: [docs/telemetry.md](docs/telemetry.md)
 - Sensible Daten (LLM-Inhalte, SQL-Parameterwerte) nur über `Telemetry:RecordSensitiveData` (`IConfiguration.RecordsSensitiveData()`), nie fest im Code.
 - Kein `ConfigureHttpClientDefaults` mit Resilience-Handlern.
 - Hosts, die außerhalb von `RunAsync()` arbeiten (Job-Hosts, die API mit der Migration beim Start), entsorgen den Host selbst (`using var host` bzw. `await using var app`), sonst geht die zuletzt gepufferte Telemetrie verloren.
-- Noch nicht gebaut: `/health` aus den Traces filtern ([#49](https://github.com/Murmli/MurmliV2/issues/49), siehe [docs/telemetry.md](docs/telemetry.md)). Die Notiz entfällt, sobald der Filter gebaut ist.
+- Den Sampler nur in `AddTelemetry()` setzen und nach allen Exportern registrieren, er verwirft `/health` samt Kind-Spans.
 
 ## Produktimport
 
