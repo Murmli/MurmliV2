@@ -43,19 +43,41 @@ public class EndpointRouteBuilderExtensionsTests(PostgresFixture postgres) : ICl
 
         using var document = await ReadDocumentAsync(api);
 
-        var userEndpoints = document.RootElement.GetProperty("paths").GetProperty("/users/me");
+        var userEndpoints = document.RootElement.GetProperty("paths").GetProperty("/v1/users/me");
         Assert.True(userEndpoints.TryGetProperty("get", out _));
         Assert.True(userEndpoints.TryGetProperty("delete", out _));
+    }
+
+    [Fact]
+    public async Task MapApi_OpenApiEnabled_DescribesOnlyVersionedPaths()
+    {
+        await using var api = await ApiHost.StartAsync(connectionString, OpenApiEnabled);
+
+        using var document = await ReadDocumentAsync(api);
+
+        var pathNames = document.RootElement.GetProperty("paths").EnumerateObject().Select(path => path.Name).ToArray();
+        Assert.NotEmpty(pathNames);
+        Assert.All(pathNames, pathName => Assert.StartsWith("/v1/", pathName));
+    }
+
+    [Theory]
+    [InlineData("GET")]
+    [InlineData("DELETE")]
+    public async Task MapApi_UnversionedUserPath_ReturnsNotFound(string method)
+    {
+        await using var api = await ApiHost.StartAsync(connectionString);
+
+        using var response = await SendWithTokenAsync(api, new HttpMethod(method), "/users/me");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     [Fact]
     public async Task MapApi_OpenApiDisabledWithToken_ReturnsNotFound()
     {
         await using var api = await ApiHost.StartAsync(connectionString);
-        using var request = new HttpRequestMessage(HttpMethod.Get, DocumentPath);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", TestTokens.Create("100000000000000001"));
 
-        using var response = await api.HttpClient.SendAsync(request, TestContext.Current.CancellationToken);
+        using var response = await SendWithTokenAsync(api, HttpMethod.Get, DocumentPath);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -76,5 +98,12 @@ public class EndpointRouteBuilderExtensionsTests(PostgresFixture postgres) : ICl
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         await using var content = await response.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken);
         return await JsonDocument.ParseAsync(content, cancellationToken: TestContext.Current.CancellationToken);
+    }
+
+    private static async Task<HttpResponseMessage> SendWithTokenAsync(ApiHost api, HttpMethod method, string path)
+    {
+        using var request = new HttpRequestMessage(method, path);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", TestTokens.Create("100000000000000001"));
+        return await api.HttpClient.SendAsync(request, TestContext.Current.CancellationToken);
     }
 }

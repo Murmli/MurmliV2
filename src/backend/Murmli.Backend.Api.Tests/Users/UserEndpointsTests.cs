@@ -17,7 +17,7 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
     {
         await using var api = await ApiHost.StartAsync(connectionString);
 
-        using var response = await api.HttpClient.GetAsync("/users/me", TestContext.Current.CancellationToken);
+        using var response = await api.HttpClient.GetAsync("/v1/users/me", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -170,7 +170,7 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
 
     private static async Task<HttpResponseMessage> SendAsync(ApiHost api, HttpMethod method, string token)
     {
-        using var request = new HttpRequestMessage(method, "/users/me");
+        using var request = new HttpRequestMessage(method, "/v1/users/me");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return await api.HttpClient.SendAsync(request, TestContext.Current.CancellationToken);
     }
