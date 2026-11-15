@@ -183,6 +183,19 @@ public class OpenFoodFactsProductMapperTests
         Assert.Equal(expectedBrand, product.Brand);
     }
 
+    [Theory]
+    [InlineData(25950000039, 25950000039d)]
+    [InlineData("12", 12d)]
+    [InlineData(null, null)]
+    [InlineData("abc", null)]
+    public void Map_PopularityKey_ReturnsNumber(object? popularityKey, double? expectedPopularityKey)
+    {
+        var product = Map(CreateExportLine(germanName: "Brot", popularityKey: popularityKey));
+
+        Assert.NotNull(product);
+        Assert.Equal(expectedPopularityKey, product.PopularityKey);
+    }
+
     private static Product? Map(string exportLine)
     {
         using var document = JsonDocument.Parse(exportLine);
@@ -194,7 +207,8 @@ public class OpenFoodFactsProductMapperTests
         string? germanName = null,
         string? englishName = null,
         string? name = null,
-        string? brands = null
+        string? brands = null,
+        object? popularityKey = null
     )
     {
         Dictionary<string, object?> product = new()
@@ -205,6 +219,7 @@ public class OpenFoodFactsProductMapperTests
             ["product_name_en"] = englishName,
             ["product_name"] = name,
             ["brands"] = brands,
+            ["popularity_key"] = popularityKey,
         };
         return JsonSerializer.Serialize(product.Where(property => property.Value is not null).ToDictionary());
     }

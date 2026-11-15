@@ -126,6 +126,121 @@ public class ProductEndpointsTests(PostgresFixture postgres) : IClassFixture<Pos
     }
 
     [Fact]
+    public async Task Search_CodeHitWithoutNutrients_ReturnsCodeHitFirst()
+    {
+        await using var api = await ApiHost.StartAsync(connectionString);
+        await SeedAsync(
+            api,
+            new Product { Code = "4711", Name = "Zitronenwasser" },
+            new Product
+            {
+                Code = "1",
+                Name = "4711 Limonade",
+                EnergyKilojoules = 170,
+                EnergyKilocalories = 40,
+                Fat = 0,
+                SaturatedFat = 0,
+                Carbohydrates = 10,
+                Sugars = 10,
+                AddedSugars = 10,
+                Proteins = 0,
+                PopularityKey = 25950000039,
+            }
+        );
+
+        var results = await SearchAsync(api, "4711");
+
+        Assert.Equal(["4711", "1"], results.Select(result => result.Code));
+    }
+
+    [Fact]
+    public async Task Search_ProductWithoutCalories_ReturnsCaloriesFirst()
+    {
+        await using var api = await ApiHost.StartAsync(connectionString);
+        await SeedAsync(
+            api,
+            new Product
+            {
+                Code = "1",
+                Name = "Kefir Natur",
+                EnergyKilojoules = 207,
+                Fat = 1.5,
+                SaturatedFat = 0.9,
+                Carbohydrates = 4,
+                Sugars = 4,
+                AddedSugars = 0,
+                Proteins = 3.4,
+                PopularityKey = 25950000039,
+            },
+            new Product { Code = "2", Name = "Milder Kefir", EnergyKilocalories = 49 }
+        );
+
+        var results = await SearchAsync(api, "kefir");
+
+        Assert.Equal(["2", "1"], results.Select(result => result.Code));
+    }
+
+    [Fact]
+    public async Task Search_ProductsWithCalories_ReturnsMoreFilledNutrientsFirst()
+    {
+        await using var api = await ApiHost.StartAsync(connectionString);
+        await SeedAsync(
+            api,
+            new Product
+            {
+                Code = "1",
+                Name = "Kefir Natur",
+                EnergyKilocalories = 49,
+                Fat = 1.5,
+                PopularityKey = 25950000039,
+            },
+            new Product
+            {
+                Code = "2",
+                Name = "Milder Kefir",
+                EnergyKilocalories = 49,
+                Fat = 1.5,
+                Proteins = 3.4,
+            }
+        );
+
+        var results = await SearchAsync(api, "kefir");
+
+        Assert.Equal(["2", "1"], results.Select(result => result.Code));
+    }
+
+    [Fact]
+    public async Task Search_EqualNutrients_ReturnsNamePrefixFirst()
+    {
+        await using var api = await ApiHost.StartAsync(connectionString);
+        await SeedAsync(
+            api,
+            new Product { Code = "1", Name = "Fettarmer Kefir", PopularityKey = 25950000039 },
+            new Product { Code = "2", Name = "Kefir Natur" }
+        );
+
+        var results = await SearchAsync(api, "kefir");
+
+        Assert.Equal(["2", "1"], results.Select(result => result.Code));
+    }
+
+    [Fact]
+    public async Task Search_EqualNutrientsAndPrefix_ReturnsMorePopularFirst()
+    {
+        await using var api = await ApiHost.StartAsync(connectionString);
+        await SeedAsync(
+            api,
+            new Product { Code = "1", Name = "Kefir Bio" },
+            new Product { Code = "2", Name = "Kefir Mild", PopularityKey = 1000 },
+            new Product { Code = "3", Name = "Kefir Natur", PopularityKey = 25950000039 }
+        );
+
+        var results = await SearchAsync(api, "kefir");
+
+        Assert.Equal(["3", "2", "1"], results.Select(result => result.Code));
+    }
+
+    [Fact]
     public async Task Search_MoreThan25Matches_Returns25()
     {
         await using var api = await ApiHost.StartAsync(connectionString);

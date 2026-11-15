@@ -23,14 +23,15 @@ public static class OpenFoodFactsProductMapper
             ?? GetCleanText(product, "product_name_en")
             ?? GetCleanText(product, "product_name");
         var brand = GetCleanText(product, "brands");
+        var popularityKey = GetNumber(product, "popularity_key");
         if (code is null || name is null)
         {
             return null;
         }
 
         return HasAggregatedNutrition(product)
-            ? MapAggregatedNutrition(product, code, name, brand)
-            : MapNutriments(product, code, name, brand);
+            ? MapAggregatedNutrition(product, code, name, brand, popularityKey)
+            : MapNutriments(product, code, name, brand, popularityKey);
     }
 
     private static bool IsSoldInGermany(JsonElement product) =>
@@ -44,7 +45,13 @@ public static class OpenFoodFactsProductMapper
         && schemaVersion.TryGetDouble(out var version)
         && version >= FirstAggregatedNutritionSchemaVersion;
 
-    private static Product MapAggregatedNutrition(JsonElement product, string code, string name, string? brand)
+    private static Product MapAggregatedNutrition(
+        JsonElement product,
+        string code,
+        string name,
+        string? brand,
+        double? popularityKey
+    )
     {
         var aggregatedSet = GetObject(GetObject(product, "nutrition"), "aggregated_set");
         var nutrients =
@@ -54,6 +61,7 @@ public static class OpenFoodFactsProductMapper
             code,
             name,
             brand,
+            popularityKey,
             energyKilojoules: GetAggregatedNutrient(nutrients, "energy-kj"),
             energyKilocalories: GetAggregatedNutrient(nutrients, "energy-kcal"),
             fat: GetAggregatedNutrient(nutrients, "fat"),
@@ -74,7 +82,13 @@ public static class OpenFoodFactsProductMapper
         return new Nutrient(value, value is not null && GetString(nutrient, "source") == "estimate");
     }
 
-    private static Product MapNutriments(JsonElement product, string code, string name, string? brand)
+    private static Product MapNutriments(
+        JsonElement product,
+        string code,
+        string name,
+        string? brand,
+        double? popularityKey
+    )
     {
         var nutriments = GetObject(product, "nutriments");
 
@@ -82,6 +96,7 @@ public static class OpenFoodFactsProductMapper
             code,
             name,
             brand,
+            popularityKey,
             energyKilojoules: new Nutrient(
                 GetNumber(nutriments, "energy-kj_100g") ?? GetNumber(nutriments, "energy_100g"),
                 IsEstimated: false
@@ -110,6 +125,7 @@ public static class OpenFoodFactsProductMapper
         string code,
         string name,
         string? brand,
+        double? popularityKey,
         Nutrient energyKilojoules,
         Nutrient energyKilocalories,
         Nutrient fat,
@@ -155,6 +171,7 @@ public static class OpenFoodFactsProductMapper
             AddedSugarsIsEstimated = addedSugars.IsEstimated,
             Proteins = proteins.Value,
             ProteinsIsEstimated = proteins.IsEstimated,
+            PopularityKey = popularityKey,
         };
     }
 

@@ -134,6 +134,10 @@ namespace Murmli.Backend.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<double?>("PopularityKey")
+                        .HasColumnType("double precision")
+                        .HasColumnName("popularity_key");
+
                     b.Property<double?>("Proteins")
                         .HasColumnType("double precision")
                         .HasColumnName("proteins");

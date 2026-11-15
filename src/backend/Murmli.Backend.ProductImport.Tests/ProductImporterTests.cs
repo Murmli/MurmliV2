@@ -109,6 +109,41 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
                     Fat = 0.2,
                 }
             },
+            {
+                CreateExportLine("4000000000011", "Apfel", 0.2),
+                CreateExportLine("4000000000011", "Apfel", 0.2, popularityKey: 25950000039),
+                new Product
+                {
+                    Code = "4000000000011",
+                    Name = "Apfel",
+                    IsPerHundredMilliliters = false,
+                    Fat = 0.2,
+                    PopularityKey = 25950000039,
+                }
+            },
+            {
+                CreateExportLine("4000000000011", "Apfel", 0.2, popularityKey: 25950000039),
+                CreateExportLine("4000000000011", "Apfel", 0.2, popularityKey: 1000),
+                new Product
+                {
+                    Code = "4000000000011",
+                    Name = "Apfel",
+                    IsPerHundredMilliliters = false,
+                    Fat = 0.2,
+                    PopularityKey = 1000,
+                }
+            },
+            {
+                CreateExportLine("4000000000011", "Apfel", 0.2, popularityKey: 25950000039),
+                CreateExportLine("4000000000011", "Apfel", 0.2),
+                new Product
+                {
+                    Code = "4000000000011",
+                    Name = "Apfel",
+                    IsPerHundredMilliliters = false,
+                    Fat = 0.2,
+                }
+            },
             { CreateExportLine("4000000000001", "Haferflocken", 7), OatFlakes.ExportLine, OatFlakes.ExpectedProduct },
         };
 
@@ -536,7 +571,8 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
         string per = "100g",
         string fatSource = "packaging",
         double? proteins = null,
-        string? brands = null
+        string? brands = null,
+        double? popularityKey = null
     )
     {
         var nutrients = new JsonObject { ["fat"] = CreateNutrient(fat, fatSource, per) };
@@ -564,6 +600,11 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
         if (brands is not null)
         {
             product["brands"] = brands;
+        }
+
+        if (popularityKey is not null)
+        {
+            product["popularity_key"] = popularityKey;
         }
 
         return product.ToJsonString();

@@ -32,7 +32,8 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
             added_sugars,
             added_sugars_is_estimated,
             proteins,
-            proteins_is_estimated
+            proteins_is_estimated,
+            popularity_key
         ) FROM STDIN (FORMAT BINARY)
         """;
 
@@ -62,7 +63,8 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
                 target.added_sugars,
                 target.added_sugars_is_estimated,
                 target.proteins,
-                target.proteins_is_estimated
+                target.proteins_is_estimated,
+                target.popularity_key
             ) IS DISTINCT FROM (
                 source.name,
                 source.brand,
@@ -82,7 +84,8 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
                 source.added_sugars,
                 source.added_sugars_is_estimated,
                 source.proteins,
-                source.proteins_is_estimated
+                source.proteins_is_estimated,
+                source.popularity_key
             ) THEN
                 UPDATE SET
                     name = source.name,
@@ -103,7 +106,8 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
                     added_sugars = source.added_sugars,
                     added_sugars_is_estimated = source.added_sugars_is_estimated,
                     proteins = source.proteins,
-                    proteins_is_estimated = source.proteins_is_estimated
+                    proteins_is_estimated = source.proteins_is_estimated,
+                    popularity_key = source.popularity_key
             WHEN NOT MATCHED BY TARGET THEN
                 INSERT (
                     code,
@@ -125,7 +129,8 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
                     added_sugars,
                     added_sugars_is_estimated,
                     proteins,
-                    proteins_is_estimated
+                    proteins_is_estimated,
+                    popularity_key
                 ) VALUES (
                     source.code,
                     source.name,
@@ -146,7 +151,8 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
                     source.added_sugars,
                     source.added_sugars_is_estimated,
                     source.proteins,
-                    source.proteins_is_estimated
+                    source.proteins_is_estimated,
+                    source.popularity_key
                 )
             WHEN NOT MATCHED BY SOURCE AND @delete_missing THEN
                 DELETE
@@ -209,6 +215,7 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
             await importer.WriteAsync(product.AddedSugarsIsEstimated, NpgsqlDbType.Boolean, cancellationToken);
             await importer.WriteAsync(product.Proteins, NpgsqlDbType.Double, cancellationToken);
             await importer.WriteAsync(product.ProteinsIsEstimated, NpgsqlDbType.Boolean, cancellationToken);
+            await importer.WriteAsync(product.PopularityKey, NpgsqlDbType.Double, cancellationToken);
         }
 
         await importer.CompleteAsync(cancellationToken);

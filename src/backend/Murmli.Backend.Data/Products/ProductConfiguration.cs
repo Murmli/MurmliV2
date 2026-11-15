@@ -32,5 +32,6 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(product => product.AddedSugarsIsEstimated).HasColumnName("added_sugars_is_estimated");
         builder.Property(product => product.Proteins).HasColumnName("proteins");
         builder.Property(product => product.ProteinsIsEstimated).HasColumnName("proteins_is_estimated");
+        builder.Property(product => product.PopularityKey).HasColumnName("popularity_key");
     }
 }

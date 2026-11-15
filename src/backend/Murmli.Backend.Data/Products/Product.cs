@@ -45,4 +45,6 @@ public class Product
     public double? Proteins { get; set; }
 
     public bool ProteinsIsEstimated { get; set; }
+
+    public double? PopularityKey { get; set; }
 }

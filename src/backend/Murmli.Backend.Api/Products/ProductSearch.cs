@@ -29,11 +29,20 @@ internal sealed class ProductSearch(MurmliDbContext context)
 
         return await codeMatches
             .Union(wordMatches)
-            .OrderBy(product =>
-                codes.Contains(product.Code) ? 0
-                : EF.Functions.ILike(product.Name, namePrefixPattern, "\\") ? 1
-                : 2
+            .OrderBy(product => codes.Contains(product.Code) ? 0 : 1)
+            .ThenBy(product => product.EnergyKilocalories == null ? 1 : 0)
+            .ThenByDescending(product =>
+                (product.EnergyKilojoules == null ? 0 : 1)
+                + (product.EnergyKilocalories == null ? 0 : 1)
+                + (product.Fat == null ? 0 : 1)
+                + (product.SaturatedFat == null ? 0 : 1)
+                + (product.Carbohydrates == null ? 0 : 1)
+                + (product.Sugars == null ? 0 : 1)
+                + (product.AddedSugars == null ? 0 : 1)
+                + (product.Proteins == null ? 0 : 1)
             )
+            .ThenBy(product => EF.Functions.ILike(product.Name, namePrefixPattern, "\\") ? 0 : 1)
+            .ThenByDescending(product => product.PopularityKey ?? 0)
             .ThenBy(product => product.Name)
             .ThenBy(product => product.Code)
             .Take(25)
