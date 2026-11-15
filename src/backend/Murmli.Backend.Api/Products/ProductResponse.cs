@@ -4,6 +4,7 @@ public sealed record ProductResponse(
     string Code,
     string Name,
     string? Brand,
+    string? GenericName,
     bool IsPerHundredMilliliters,
     NutrientResponse? EnergyKilojoules,
     NutrientResponse? EnergyKilocalories,

@@ -15,6 +15,7 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(product => product.Code).HasColumnName("code");
         builder.Property(product => product.Name).HasColumnName("name");
         builder.Property(product => product.Brand).HasColumnName("brand");
+        builder.Property(product => product.GenericName).HasColumnName("generic_name");
         builder.Property(product => product.IsPerHundredMilliliters).HasColumnName("is_per_hundred_milliliters");
         builder.Property(product => product.EnergyKilojoules).HasColumnName("energy_kilojoules");
         builder.Property(product => product.EnergyKilojoulesIsEstimated).HasColumnName("energy_kilojoules_is_estimated");

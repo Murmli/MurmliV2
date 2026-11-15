@@ -111,6 +111,41 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
             },
             {
                 CreateExportLine("4000000000011", "Apfel", 0.2),
+                CreateExportLine("4000000000011", "Apfel", 0.2, genericName: "Apfel aus Bodensee-Anbau"),
+                new Product
+                {
+                    Code = "4000000000011",
+                    Name = "Apfel",
+                    GenericName = "Apfel aus Bodensee-Anbau",
+                    IsPerHundredMilliliters = false,
+                    Fat = 0.2,
+                }
+            },
+            {
+                CreateExportLine("4000000000011", "Apfel", 0.2, genericName: "Apfel aus Bodensee-Anbau"),
+                CreateExportLine("4000000000011", "Apfel", 0.2, genericName: "Tafelapfel"),
+                new Product
+                {
+                    Code = "4000000000011",
+                    Name = "Apfel",
+                    GenericName = "Tafelapfel",
+                    IsPerHundredMilliliters = false,
+                    Fat = 0.2,
+                }
+            },
+            {
+                CreateExportLine("4000000000011", "Apfel", 0.2, genericName: "Tafelapfel"),
+                CreateExportLine("4000000000011", "Apfel", 0.2),
+                new Product
+                {
+                    Code = "4000000000011",
+                    Name = "Apfel",
+                    IsPerHundredMilliliters = false,
+                    Fat = 0.2,
+                }
+            },
+            {
+                CreateExportLine("4000000000011", "Apfel", 0.2),
                 CreateExportLine("4000000000011", "Apfel", 0.2, popularityKey: 25950000039),
                 new Product
                 {
@@ -572,6 +607,7 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
         string fatSource = "packaging",
         double? proteins = null,
         string? brands = null,
+        string? genericName = null,
         double? popularityKey = null
     )
     {
@@ -600,6 +636,11 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
         if (brands is not null)
         {
             product["brands"] = brands;
+        }
+
+        if (genericName is not null)
+        {
+            product["generic_name_de"] = genericName;
         }
 
         if (popularityKey is not null)

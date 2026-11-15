@@ -12,6 +12,8 @@ public class Product
 
     public string? Brand { get; set; }
 
+    public string? GenericName { get; set; }
+
     public bool IsPerHundredMilliliters { get; set; }
 
     public double? EnergyKilojoules { get; set; }

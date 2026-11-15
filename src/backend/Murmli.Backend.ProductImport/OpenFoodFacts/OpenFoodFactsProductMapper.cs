@@ -23,6 +23,7 @@ public static class OpenFoodFactsProductMapper
             ?? GetCleanText(product, "product_name_en")
             ?? GetCleanText(product, "product_name");
         var brand = GetCleanText(product, "brands");
+        var genericName = GetCleanText(product, "generic_name_de") ?? GetCleanText(product, "generic_name");
         var popularityKey = GetNumber(product, "popularity_key");
         if (code is null || name is null)
         {
@@ -30,8 +31,8 @@ public static class OpenFoodFactsProductMapper
         }
 
         return HasAggregatedNutrition(product)
-            ? MapAggregatedNutrition(product, code, name, brand, popularityKey)
-            : MapNutriments(product, code, name, brand, popularityKey);
+            ? MapAggregatedNutrition(product, code, name, brand, genericName, popularityKey)
+            : MapNutriments(product, code, name, brand, genericName, popularityKey);
     }
 
     private static bool IsSoldInGermany(JsonElement product) =>
@@ -50,6 +51,7 @@ public static class OpenFoodFactsProductMapper
         string code,
         string name,
         string? brand,
+        string? genericName,
         double? popularityKey
     )
     {
@@ -61,6 +63,7 @@ public static class OpenFoodFactsProductMapper
             code,
             name,
             brand,
+            genericName,
             popularityKey,
             energyKilojoules: GetAggregatedNutrient(nutrients, "energy-kj"),
             energyKilocalories: GetAggregatedNutrient(nutrients, "energy-kcal"),
@@ -87,6 +90,7 @@ public static class OpenFoodFactsProductMapper
         string code,
         string name,
         string? brand,
+        string? genericName,
         double? popularityKey
     )
     {
@@ -96,6 +100,7 @@ public static class OpenFoodFactsProductMapper
             code,
             name,
             brand,
+            genericName,
             popularityKey,
             energyKilojoules: new Nutrient(
                 GetNumber(nutriments, "energy-kj_100g") ?? GetNumber(nutriments, "energy_100g"),
@@ -125,6 +130,7 @@ public static class OpenFoodFactsProductMapper
         string code,
         string name,
         string? brand,
+        string? genericName,
         double? popularityKey,
         Nutrient energyKilojoules,
         Nutrient energyKilocalories,
@@ -154,6 +160,7 @@ public static class OpenFoodFactsProductMapper
             Code = code,
             Name = name,
             Brand = brand,
+            GenericName = genericName,
             IsPerHundredMilliliters = isPerHundredMilliliters && nutrients.Any(nutrient => nutrient.Value is not null),
             EnergyKilojoules = energyKilojoules.Value,
             EnergyKilojoulesIsEstimated = energyKilojoules.IsEstimated,

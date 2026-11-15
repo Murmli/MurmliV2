@@ -50,6 +50,7 @@ internal sealed class ProductSearch(MurmliDbContext context)
                 product.Code,
                 product.Name,
                 product.Brand,
+                product.GenericName,
                 product.IsPerHundredMilliliters,
                 ToNutrientResponse(product.EnergyKilojoules, product.EnergyKilojoulesIsEstimated),
                 ToNutrientResponse(product.EnergyKilocalories, product.EnergyKilocaloriesIsEstimated),

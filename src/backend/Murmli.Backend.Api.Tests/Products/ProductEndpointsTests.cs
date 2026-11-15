@@ -304,6 +304,7 @@ public class ProductEndpointsTests(PostgresFixture postgres) : IClassFixture<Pos
                 Code = "4012345678901",
                 Name = "Fettarmer Kefir",
                 Brand = "ja!",
+                GenericName = "Kefir, 1,5 % Fett",
                 IsPerHundredMilliliters = true,
                 EnergyKilojoules = 207,
                 EnergyKilocalories = 49,
@@ -322,6 +323,7 @@ public class ProductEndpointsTests(PostgresFixture postgres) : IClassFixture<Pos
             "4012345678901",
             "Fettarmer Kefir",
             "ja!",
+            "Kefir, 1,5 % Fett",
             true,
             new NutrientResponse(207, false),
             new NutrientResponse(49, true),
@@ -333,6 +335,17 @@ public class ProductEndpointsTests(PostgresFixture postgres) : IClassFixture<Pos
             new NutrientResponse(3.4, false)
         );
         Assert.Equal(expectedProduct, Assert.Single(results));
+    }
+
+    [Fact]
+    public async Task Search_ProductWithoutGenericName_ReturnsNullGenericName()
+    {
+        await using var api = await ApiHost.StartAsync(connectionString);
+        await SeedAsync(api, new Product { Code = "1", Name = "Kefir" });
+
+        var results = await SearchAsync(api, "kefir");
+
+        Assert.Null(Assert.Single(results).GenericName);
     }
 
     private static Task SeedAsync(ApiHost api, params Product[] products) =>

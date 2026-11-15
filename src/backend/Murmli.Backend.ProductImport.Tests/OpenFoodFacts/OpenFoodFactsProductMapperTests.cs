@@ -184,6 +184,25 @@ public class OpenFoodFactsProductMapperTests
     }
 
     [Theory]
+    [InlineData("Gefüllte Halbbitterschokolade", "Dark chocolate", "Gefüllte Halbbitterschokolade")]
+    [InlineData(null, "Dark chocolate", "Dark chocolate")]
+    [InlineData("  ", "Dark chocolate", "Dark chocolate")]
+    [InlineData(" Scho\u0000kolade ", null, "Schokolade")]
+    [InlineData("", "", null)]
+    [InlineData(null, null, null)]
+    public void Map_GenericName_ReturnsGermanOrMainLanguageGenericName(
+        string? germanGenericName,
+        string? genericName,
+        string? expectedGenericName
+    )
+    {
+        var product = Map(CreateExportLine(germanName: "Brot", germanGenericName: germanGenericName, genericName: genericName));
+
+        Assert.NotNull(product);
+        Assert.Equal(expectedGenericName, product.GenericName);
+    }
+
+    [Theory]
     [InlineData(25950000039, 25950000039d)]
     [InlineData("12", 12d)]
     [InlineData(null, null)]
@@ -208,6 +227,8 @@ public class OpenFoodFactsProductMapperTests
         string? englishName = null,
         string? name = null,
         string? brands = null,
+        string? germanGenericName = null,
+        string? genericName = null,
         object? popularityKey = null
     )
     {
@@ -219,6 +240,8 @@ public class OpenFoodFactsProductMapperTests
             ["product_name_en"] = englishName,
             ["product_name"] = name,
             ["brands"] = brands,
+            ["generic_name_de"] = germanGenericName,
+            ["generic_name"] = genericName,
             ["popularity_key"] = popularityKey,
         };
         return JsonSerializer.Serialize(product.Where(property => property.Value is not null).ToDictionary());

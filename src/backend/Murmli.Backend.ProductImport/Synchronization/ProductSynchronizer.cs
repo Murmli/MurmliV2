@@ -16,6 +16,7 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
             code,
             name,
             brand,
+            generic_name,
             is_per_hundred_milliliters,
             energy_kilojoules,
             energy_kilojoules_is_estimated,
@@ -47,6 +48,7 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
             WHEN MATCHED AND (
                 target.name,
                 target.brand,
+                target.generic_name,
                 target.is_per_hundred_milliliters,
                 target.energy_kilojoules,
                 target.energy_kilojoules_is_estimated,
@@ -68,6 +70,7 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
             ) IS DISTINCT FROM (
                 source.name,
                 source.brand,
+                source.generic_name,
                 source.is_per_hundred_milliliters,
                 source.energy_kilojoules,
                 source.energy_kilojoules_is_estimated,
@@ -90,6 +93,7 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
                 UPDATE SET
                     name = source.name,
                     brand = source.brand,
+                    generic_name = source.generic_name,
                     is_per_hundred_milliliters = source.is_per_hundred_milliliters,
                     energy_kilojoules = source.energy_kilojoules,
                     energy_kilojoules_is_estimated = source.energy_kilojoules_is_estimated,
@@ -113,6 +117,7 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
                     code,
                     name,
                     brand,
+                    generic_name,
                     is_per_hundred_milliliters,
                     energy_kilojoules,
                     energy_kilojoules_is_estimated,
@@ -135,6 +140,7 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
                     source.code,
                     source.name,
                     source.brand,
+                    source.generic_name,
                     source.is_per_hundred_milliliters,
                     source.energy_kilojoules,
                     source.energy_kilojoules_is_estimated,
@@ -198,6 +204,7 @@ public sealed class ProductSynchronizer(MurmliDbContext context)
             await importer.WriteAsync(product.Code, NpgsqlDbType.Text, cancellationToken);
             await importer.WriteAsync(product.Name, NpgsqlDbType.Text, cancellationToken);
             await importer.WriteAsync(product.Brand, NpgsqlDbType.Text, cancellationToken);
+            await importer.WriteAsync(product.GenericName, NpgsqlDbType.Text, cancellationToken);
             await importer.WriteAsync(product.IsPerHundredMilliliters, NpgsqlDbType.Boolean, cancellationToken);
             await importer.WriteAsync(product.EnergyKilojoules, NpgsqlDbType.Double, cancellationToken);
             await importer.WriteAsync(product.EnergyKilojoulesIsEstimated, NpgsqlDbType.Boolean, cancellationToken);
