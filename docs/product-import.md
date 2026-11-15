@@ -15,6 +15,7 @@
 - Code aus `code`.
 - Name aus `product_name_de`, sonst `product_name_en`, sonst `product_name`.
 - Marke aus `brands` als ein Text, wie geliefert (z.B. `ja!, Rewe, ja! Rewe`). Ohne Marke bleibt sie leer (NULL), das Produkt wird trotzdem importiert.
+- Beliebtheit aus `popularity_key` (Zahl, auch als Text geliefert; alles andere gilt als fehlend), weltweite Scans.
 - Code, Name und Marke werden bereinigt: `\0` entfernt, Leerraum am Rand abgeschnitten. Leer gilt als fehlend.
 - Produkte ohne Code oder Name werden übersprungen.
 
@@ -53,3 +54,4 @@
 | Eigenes COPY + `MERGE` | Verworfen (geprüft 2026-11-14): `Thinktecture.EntityFrameworkCore.PostgreSQL`. Version 10.5.0 hat für PostgreSQL weder MERGE noch ein Löschen fehlender Zeilen, ihr Upsert (`ON CONFLICT DO UPDATE` ohne Änderungsprüfung) schrieb im Test mit 450.000 Produkten jede Nacht alle Zeilen neu. Der Nachbau mit dem Query-basierten Bulk-Update verlor in 10.5.0 still Übergänge zwischen NULL und Wert und war nicht schneller (Folgelauf 2,7 s gegenüber 1,9 s). Gilt, bis 10.6.0 stabil ist und Temp-Tabellen oder Bulk-Inserts auch an anderer Stelle gebraucht werden. |
 | Migrationen an `products` additiv und nullable | Solange ein älterer Job noch laufen kann, scheitert sonst dessen COPY oder `MERGE`. |
 | Marke als Text statt Liste | `brands_tags` ist uneinheitlich (`ja`, `Rewe`, `ja! Rewe`). Eine Liste einzelner Marken lohnt sich erst mit einem Filter nach Marke und braucht dann eine Bereinigung. |
+| Beliebtheit aus `popularity_key` | Open Food Facts sortiert selbst danach. Ein Signal nur für Deutschland gibt es nur grob über `popularity_tags` (`top-country-de-scans-<Jahr>`). |

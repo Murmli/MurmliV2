@@ -21,6 +21,17 @@ Die API liefert unter `/openapi/v1.json` ein OpenAPI-3.2-Dokument, das alle Endp
 
 `GET /v1/products?search=<Begriff>` sucht Produkte, die Regeln der Abfrage stehen in [database.md](database.md#produktsuche-und-extensions). Hat kein Wort des Begriffs mindestens 3 Zeichen, antwortet die API mit 400 als Validation Problem mit `errors.search`.
 
+Die Treffer (höchstens 25) sind so sortiert, jede Stufe entscheidet nur bei Gleichstand der vorigen ([#74](https://github.com/Murmli/MurmliV2/issues/74)):
+
+1. Treffer über den Code, auch ohne Nährwerte.
+2. Produkte mit Kalorienwert vor Produkten ohne.
+3. Mehr ausgefüllte Nährwerte (von 8) vor weniger.
+4. Name beginnt mit dem Suchbegriff.
+5. Höhere Beliebtheit (`popularity_key`) vor niedrigerer, ohne Beliebtheit gilt als am wenigsten beliebt.
+6. Name, dann Code.
+
+Produkte ohne Nährwerte bleiben auffindbar, rutschen aber nach hinten. Thekenartikel brauchen keine eigene Regel: Ihr Code wechselt mit jeder Packung und meist fehlen Nährwerte, sie rutschen also ohnehin nach hinten.
+
 ## Tests
 
 - `ProductEndpointsTests` in `Murmli.Backend.Api.Tests` deckt die Produktsuche ab.
