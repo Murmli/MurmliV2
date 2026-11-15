@@ -161,6 +161,12 @@ namespace Murmli.Backend.Data.Migrations
                     b.HasKey("Code")
                         .HasName("pk_products");
 
+                    b.HasIndex("Brand")
+                        .HasDatabaseName("ix_products_brand_trigram");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Brand"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Brand"), new[] { "gin_trgm_ops" });
+
                     b.HasIndex("Name")
                         .HasDatabaseName("ix_products_name_trigram");
 
