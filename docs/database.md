@@ -4,7 +4,7 @@
 
 ## Schemas
 
-- `identity`: Nutzerkonten.
+- `identity`: Nutzerkonten und Löschvermerke.
 - `products`: Produkte und Importläufe.
 - `backend-identity` darf als Entra-Admin Schemas anlegen: `murmli` gehört in Azure `azure_pg_admin`, auf Dev am 2026-11-14 geprüft (`has_database_privilege(..., 'CREATE')` true, `CREATE SCHEMA` läuft).
 

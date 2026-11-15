@@ -348,6 +348,7 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 | `aspire deploy`, `aspire destroy`, `aspire do` mit Provisionierungs- oder Deploy-Steps, `gh workflow run deploy.yml`, Re-run von Läufen auf `main` | nie, nur ein Mensch |
 
 - Jede neue Azure-Ressource, die eine App im Run-Mode referenziert, bekommt einen Container oder Emulator. Ausgenommen sind Ressourcen, die Aspire nur beim Publish anlegt (User-assigned Identities, Postgres-Entra-Admins, Container-Apps-Jobs).
+- Ohne Wert für `zitadel-service-user-token` startet die API bei `aspire run` und in Run-Mode-Tests nicht. Lokal als User-Secret `Parameters:zitadel-service-user-token` des AppHost oder als Umgebungsvariable `Parameters__zitadel_service_user_token`, in Tests als Argument `--Parameters:zitadel-service-user-token=...`. Ein Dummy-Wert reicht, solange niemand die Löschung lokal testet.
 - `Azure:*`-Werte nur in `src/backend/Murmli.Backend.Aspire/appsettings.azure-<name>.json`, nie in andere appsettings oder User Secrets.
 - Subscription-ID und andere Azure-IDs nie ins Repo, im GitHub-Environment `development` nur als Secrets, nie als Variablen. `deploy.yml` reicht die Subscription-ID als `Azure__SubscriptionId` an den AppHost.
 - In `deploy.yml` behalten: einmaliger Retry von `aspire deploy`, Anmeldung über die `az`-Session mit Token-Abruf direkt nach dem Login, Resource-Strings ohne Schrägstrich am Ende. Braucht Aspire eine weitere Audience, sie dort ergänzen (sonst AADSTS700024). `~/.aspire/deployments` nie cachen oder hochladen.
@@ -358,7 +359,7 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 ### Ressourcen
 
 - Pro Service ein Ordner im AppHost (`src/backend/Murmli.Backend.Aspire`) mit `Extensions.cs` und `Add<Service>`-Extension, `AppHost.cs` verdrahtet nur.
-- Die Ressourcennamen `env`, `postgres`, `murmli`, `api`, `backend-identity`, `product-import` und `app-insights` und das Naming-Schema der Umgebung nie ändern.
+- Die Ressourcennamen `env`, `postgres`, `murmli`, `api`, `backend-identity`, `product-import`, `app-insights` und `zitadel-service-user-token` und das Naming-Schema der Umgebung nie ändern.
 - Jede App mit Datenbankzugriff bekommt `backend-identity` (`WithAzureUserAssignedIdentity`).
 - Nie verwenden: Aspire-Dashboard in Azure, ACA Express, Dedicated Workload Profiles, Private Endpoints, geplante Wartungsfenster.
 - Container-Apps-Probes erst beim ersten konkreten Bedarf ergänzen. Kein ServiceDefaults-Template, Telemetrie siehe „Telemetrie“.
@@ -383,9 +384,9 @@ Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 Hintergrund und Entscheidungen: [docs/authentication.md](docs/authentication.md)
 
 - Jeder Endpunkt ist nur mit Anmeldung erreichbar (Fallback-Policy). Ausnahmen per `AllowAnonymous()` nur für `/health` und für Endpunkte, deren Issue ausdrücklich verlangt, dass sie anonym erreichbar sind, nie aus eigenem Ermessen.
-- Nutzerdaten hängen an `identity.users.id`, nie an der Zitadel-ID.
-- `sub`, E-Mail und Token nie selbst loggen und nie in Span-Attribute schreiben. Einzige künftige Ausnahme: die Adresse des Lösch-Aufrufs an Zitadel ([#50](https://github.com/Murmli/MurmliV2/issues/50)).
-- `Zitadel:*`-Werte nur in den `appsettings.<Umgebung>.json` des AppHost.
+- Nutzerdaten hängen an `identity.users.id`, nie an der Zitadel-ID. Jede neue Art von Nutzerdaten gehört in die Löschung: in Postgres per Fremdschlüssel mit `ON DELETE CASCADE` auf `identity.users`, außerhalb von Postgres ausdrücklich in `UserRegistry.DeleteAsync` vor dem Zitadel-Aufruf.
+- `sub`, E-Mail und Token nie selbst loggen und nie in Span-Attribute schreiben. Einzige Ausnahme: die Adresse des Lösch-Aufrufs an Zitadel (`ZitadelUserClient`) trägt die Zitadel-ID und steht so in HttpClient-Logs und -Spans. Antwort-Bodies von Zitadel nie loggen.
+- `Zitadel:*`-Werte nur in den `appsettings.<Umgebung>.json` des AppHost, den PAT des Service-Users nie: Er kommt nur über den Secret-Parameter `zitadel-service-user-token`.
 - Tests stellen eigene Tokens aus (`TestTokens`), kein Test spricht mit Zitadel.
 - `TokenValidationParameters` im Code nie ersetzen, die Werte kommen aus der Bindung von `Authentication:Schemes:Bearer`.
 
