@@ -23,6 +23,58 @@ namespace Murmli.Backend.Data.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "pg_trgm");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Murmli.Backend.Data.Identity.DeletedUser", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("ZitadelUserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("zitadel_user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_deleted_users");
+
+                    b.HasIndex("ZitadelUserId")
+                        .HasDatabaseName("ix_deleted_users_zitadel_user_id");
+
+                    b.ToTable("deleted_users", "identity");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Identity.User", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ZitadelUserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("zitadel_user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_users");
+
+                    b.HasIndex("ZitadelUserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_users_zitadel_user_id");
+
+                    b.ToTable("users", "identity");
+                });
+
             modelBuilder.Entity("Murmli.Backend.Data.Products.Product", b =>
                 {
                     b.Property<string>("Code")

@@ -1,5 +1,6 @@
 using Aspire.Hosting.Azure;
 using Murmli.Backend.Aspire.Telemetry;
+using Murmli.Backend.Aspire.Zitadel;
 
 namespace Murmli.Backend.Aspire.Api;
 
@@ -9,7 +10,8 @@ public static class Extensions
         this IDistributedApplicationBuilder builder,
         IResourceBuilder<AzurePostgresFlexibleServerDatabaseResource> database,
         IResourceBuilder<AzureUserAssignedIdentityResource> identity,
-        IResourceBuilder<AzureApplicationInsightsResource>? applicationInsights
+        IResourceBuilder<AzureApplicationInsightsResource>? applicationInsights,
+        IResourceBuilder<ParameterResource> zitadelServiceUserToken
     ) =>
         builder
             .AddProject<Projects.Murmli_Backend_Api_Host>("api")
@@ -17,6 +19,7 @@ public static class Extensions
             .WaitFor(database)
             .WithAzureUserAssignedIdentity(identity)
             .WithTelemetry(applicationInsights)
+            .WithZitadel(zitadelServiceUserToken)
             .WithExternalHttpEndpoints()
             .WithHttpHealthCheck("/health")
             .PublishAsAzureContainerApp(

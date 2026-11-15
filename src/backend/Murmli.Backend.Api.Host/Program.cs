@@ -1,4 +1,5 @@
 using Murmli.Backend.Api.Extensions;
+using Murmli.Backend.Data.Extensions;
 using Murmli.Backend.Telemetry.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -6,8 +7,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddTelemetry();
 builder.AddApi();
 
-var app = builder.Build();
+await using var app = builder.Build();
+
+await app.MigrateDatabaseAsync();
 
 app.MapApi();
 
-app.Run();
+await app.RunAsync();

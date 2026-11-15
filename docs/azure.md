@@ -5,8 +5,15 @@ Betriebsdoku (Einrichtung, Deploy-Ablauf): [BackOffice, docs/03_Betrieb/Deployme
 ## Umgebungen und Deploy
 
 - Umgebungen heißen `azure-<name>`, derzeit `azure-dev` in `rg-murmli-dev`.
+- `aspire publish` und `aspire deploy` immer mit `--environment azure-<name>`. Ohne läuft der AppHost als Production, dafür gibt es keine Zitadel-Werte und `WithZitadel()` bricht ab.
 - Dev deployt nur `deploy.yml`: GitHub-Environment `development` (nur `main`), OIDC als Managed Identity mit Contributor und einem auf AcrPull beschränkten RBAC Administrator auf `rg-murmli-dev`.
 - `deploy.yml` liest die Aspire-CLI-Version aus dem `Sdk`-Attribut (`Aspire.AppHost.Sdk`) des AppHost-csproj.
+
+## Secret-Parameter
+
+- `zitadel-service-user-token` (PAT des Zitadel-Service-Users, siehe [authentication.md](authentication.md)) ist ein AppHost-Parameter mit `secret: true`.
+- Dev: GitHub-Secret `ZITADEL_SERVICE_USER_TOKEN` im Environment `development`. `ci.yml` reicht es an `deploy.yml`, dort kommt es als `Parameters__zitadel_service_user_token` an den AppHost. Ein fehlendes Secret käme als leerer String an, den Aspire akzeptiert, deshalb bricht `deploy.yml` vorher ab. In Azure wird daraus ein Container-App-Secret.
+- Lokal: User-Secret `Parameters:zitadel-service-user-token` des AppHost. Ohne Wert startet die API nicht, ein Dummy-Wert reicht, solange man die Löschung nicht lokal testet. Aspire-Tests, die den AppHost starten, übergeben einen Dummy als Argument.
 
 ## Anmeldung beim Deploy (Aspire 13.6.5)
 

@@ -343,11 +343,12 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 
 | Befehl | Agent |
 | --- | --- |
-| `aspire publish` (ohne CLI: `dnx --yes aspire.cli@<SDK-Version des AppHost> -- publish --apphost <csproj> --output-path <Ordner> --non-interactive`) | erlaubt |
+| `aspire publish --environment azure-dev` (ohne CLI: `dnx --yes aspire.cli@<SDK-Version des AppHost> -- publish --apphost <csproj> --environment azure-dev --output-path <Ordner> --non-interactive`; ohne `--environment` läuft der AppHost als Production und `WithZitadel()` bricht ab) | erlaubt |
 | `aspire run`, `dotnet test` | nur, solange jede im Run-Mode referenzierte Azure-Ressource lokal als Container oder Emulator läuft (derzeit erfüllt) |
 | `aspire deploy`, `aspire destroy`, `aspire do` mit Provisionierungs- oder Deploy-Steps, `gh workflow run deploy.yml`, Re-run von Läufen auf `main` | nie, nur ein Mensch |
 
 - Jede neue Azure-Ressource, die eine App im Run-Mode referenziert, bekommt einen Container oder Emulator. Ausgenommen sind Ressourcen, die Aspire nur beim Publish anlegt (User-assigned Identities, Postgres-Entra-Admins, Container-Apps-Jobs).
+- Ohne Wert für `zitadel-service-user-token` startet die API bei `aspire run` und in Run-Mode-Tests nicht. Lokal als User-Secret `Parameters:zitadel-service-user-token` des AppHost oder als Umgebungsvariable `Parameters__zitadel_service_user_token`, in Tests als Argument `--Parameters:zitadel-service-user-token=...`. Ein Dummy-Wert reicht, solange niemand die Löschung lokal testet.
 - `Azure:*`-Werte nur in `src/backend/Murmli.Backend.Aspire/appsettings.azure-<name>.json`, nie in andere appsettings oder User Secrets.
 - Subscription-ID und andere Azure-IDs nie ins Repo, im GitHub-Environment `development` nur als Secrets, nie als Variablen. `deploy.yml` reicht die Subscription-ID als `Azure__SubscriptionId` an den AppHost.
 - In `deploy.yml` behalten: einmaliger Retry von `aspire deploy`, Anmeldung über die `az`-Session mit Token-Abruf direkt nach dem Login, Resource-Strings ohne Schrägstrich am Ende. Braucht Aspire eine weitere Audience, sie dort ergänzen (sonst AADSTS700024). `~/.aspire/deployments` nie cachen oder hochladen.
@@ -358,7 +359,7 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 ### Ressourcen
 
 - Pro Service ein Ordner im AppHost (`src/backend/Murmli.Backend.Aspire`) mit `Extensions.cs` und `Add<Service>`-Extension, `AppHost.cs` verdrahtet nur.
-- Die Ressourcennamen `env`, `postgres`, `murmli`, `api`, `backend-identity`, `product-import` und `app-insights` und das Naming-Schema der Umgebung nie ändern.
+- Die Ressourcennamen `env`, `postgres`, `murmli`, `api`, `backend-identity`, `product-import`, `app-insights` und `zitadel-service-user-token` und das Naming-Schema der Umgebung nie ändern.
 - Jede App mit Datenbankzugriff bekommt `backend-identity` (`WithAzureUserAssignedIdentity`).
 - Nie verwenden: Aspire-Dashboard in Azure, ACA Express, Dedicated Workload Profiles, Private Endpoints, geplante Wartungsfenster.
 - Container-Apps-Probes erst beim ersten konkreten Bedarf ergänzen. Kein ServiceDefaults-Template, Telemetrie siehe „Telemetrie“.
@@ -368,13 +369,26 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 
 - Den Context nur per `builder.AddMurmliDbContext()` registrieren.
+- Datenzugriff mit EF Core, eigenes SQL nur, wo EF Core es nicht kann.
 - In `OnConfiguring` keine Optionen ändern (auch kein `EFCore.NamingConventions`), snake_case explizit in den `IEntityTypeConfiguration`-Klassen setzen.
 - Pro Fachbereich ein Schema mit kleingeschriebenem Namen per `ToTable(name, schema)`, `__EFMigrationsHistory` und Extensions in `public` lassen. In Raw SQL Tabellen immer mit Schema nennen (`products.products`).
 - EF-Core-Pakete (auch `Microsoft.EntityFrameworkCore.Design`) bis [#14](https://github.com/Murmli/MurmliV2/issues/14) auf 10.x halten, die direkte Referenz auf `Microsoft.EntityFrameworkCore.Relational` nicht entfernen.
 - Migration anlegen (in `src/backend`): `dnx --yes dotnet-ef@<EF-Version> -- migrations add <Name> --project Murmli.Backend.Data`.
+- `MigrateAsync` nur im Job und beim Start der API aufrufen (`app.MigrateDatabaseAsync()` nach `Build()`, vor `RunAsync()`). Migrationen additiv und nullable halten, solange eine ältere Version von API oder Job noch laufen kann.
 - Smart Enums (`[SmartEnum<string>]`) per `HasConversion(status => status.Key, key => <Typ>.Get(key))` als `text` speichern, nicht über das Thinktecture-EF-Paket.
 - Namenssuche nur per `EF.Functions.ILike(product.Name, "%" + term + "%", "\\")` mit selbst escaptem `%`, `_` und `\` und mindestens 3 Zeichen, nie per `Contains` oder `ToLower().Contains`.
 - Neue Postgres-Extensions in `azure.extensions` in `Database/Extensions.cs` des AppHost eintragen (`DependsOn` behalten), nie im Portal.
+
+## Authentifizierung
+
+Hintergrund und Entscheidungen: [docs/authentication.md](docs/authentication.md)
+
+- Jeder Endpunkt ist nur mit Anmeldung erreichbar (Fallback-Policy). Ausnahmen per `AllowAnonymous()` nur für `/health` und für Endpunkte, deren Issue ausdrücklich verlangt, dass sie anonym erreichbar sind, nie aus eigenem Ermessen.
+- Nutzerdaten hängen an `identity.users.id`, nie an der Zitadel-ID. Jede neue Art von Nutzerdaten gehört in die Löschung: in Postgres per Fremdschlüssel mit `ON DELETE CASCADE` auf `identity.users`, außerhalb von Postgres ausdrücklich in `UserRegistry.DeleteAsync` vor dem Zitadel-Aufruf.
+- `sub`, E-Mail und Token nie selbst loggen und nie in Span-Attribute schreiben. Einzige Ausnahme: die Adresse des Lösch-Aufrufs an Zitadel (`ZitadelUserClient`) trägt die Zitadel-ID und steht so in HttpClient-Logs und -Spans. Antwort-Bodies von Zitadel nie loggen.
+- `Zitadel:*`-Werte nur in den `appsettings.<Umgebung>.json` des AppHost, den PAT des Service-Users nie: Er kommt nur über den Secret-Parameter `zitadel-service-user-token`.
+- Tests stellen eigene Tokens aus (`TestTokens`), kein Test spricht mit Zitadel.
+- `TokenValidationParameters` im Code nie ersetzen, die Werte kommen aus der Bindung von `Authentication:Schemes:Bearer`.
 
 ## Telemetrie
 
@@ -387,8 +401,8 @@ Hintergrund und Entscheidungen: [docs/telemetry.md](docs/telemetry.md)
 - SQL-Werte nur als Parameter, nie in SQL einsetzen (kein `FromSqlRaw` mit zusammengesetztem SQL).
 - Sensible Daten (LLM-Inhalte, SQL-Parameterwerte) nur über `Telemetry:RecordSensitiveData` (`IConfiguration.RecordsSensitiveData()`), nie fest im Code.
 - Kein `ConfigureHttpClientDefaults` mit Resilience-Handlern.
-- Job-Hosts entsorgen den Host (`using var host`), sonst geht die zuletzt gepufferte Telemetrie verloren.
-- `/health` nicht aus den Traces filtern, bis die Bedingung in [docs/telemetry.md](docs/telemetry.md) eintritt.
+- Hosts, die außerhalb von `RunAsync()` arbeiten (Job-Hosts, die API mit der Migration beim Start), entsorgen den Host selbst (`using var host` bzw. `await using var app`), sonst geht die zuletzt gepufferte Telemetrie verloren.
+- Den Sampler nur in `AddTelemetry()` setzen und nach allen Exportern registrieren, er verwirft `/health` samt Kind-Spans.
 
 ## Produktimport
 
@@ -398,4 +412,3 @@ Hintergrund und Entscheidungen: [docs/product-import.md](docs/product-import.md)
 - Nach dem Start in der Logzeile `Starting the product import run … with the product limit 100` das Limit prüfen, fehlt es, die Ressource sofort stoppen.
 - In Tests den Export als Inline-Fixture über einen `HttpMessageHandler`-Stub liefern.
 - Nährwerte nur aus `value` lesen, nie aus `value_computed`, und nur bei `preparation` `as_sold`.
-- `MigrateAsync` nur im Job aufrufen. Soll auch die API migrieren, Migrationen an `products` additiv und nullable halten, solange ein älterer Job noch laufen kann.
