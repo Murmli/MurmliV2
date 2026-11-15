@@ -343,7 +343,7 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 
 | Befehl | Agent |
 | --- | --- |
-| `aspire publish` (ohne CLI: `dnx --yes aspire.cli@<SDK-Version des AppHost> -- publish --apphost <csproj> --output-path <Ordner> --non-interactive`) | erlaubt |
+| `aspire publish --environment azure-dev` (ohne CLI: `dnx --yes aspire.cli@<SDK-Version des AppHost> -- publish --apphost <csproj> --environment azure-dev --output-path <Ordner> --non-interactive`; ohne `--environment` läuft der AppHost als Production und `WithZitadel()` bricht ab) | erlaubt |
 | `aspire run`, `dotnet test` | nur, solange jede im Run-Mode referenzierte Azure-Ressource lokal als Container oder Emulator läuft (derzeit erfüllt) |
 | `aspire deploy`, `aspire destroy`, `aspire do` mit Provisionierungs- oder Deploy-Steps, `gh workflow run deploy.yml`, Re-run von Läufen auf `main` | nie, nur ein Mensch |
 
@@ -368,6 +368,7 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 
 - Den Context nur per `builder.AddMurmliDbContext()` registrieren.
+- Datenzugriff mit EF Core, eigenes SQL nur, wo EF Core es nicht kann.
 - In `OnConfiguring` keine Optionen ändern (auch kein `EFCore.NamingConventions`), snake_case explizit in den `IEntityTypeConfiguration`-Klassen setzen.
 - Pro Fachbereich ein Schema mit kleingeschriebenem Namen per `ToTable(name, schema)`, `__EFMigrationsHistory` und Extensions in `public` lassen. In Raw SQL Tabellen immer mit Schema nennen (`products.products`).
 - EF-Core-Pakete (auch `Microsoft.EntityFrameworkCore.Design`) bis [#14](https://github.com/Murmli/MurmliV2/issues/14) auf 10.x halten, die direkte Referenz auf `Microsoft.EntityFrameworkCore.Relational` nicht entfernen.
@@ -376,6 +377,17 @@ Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 - Smart Enums (`[SmartEnum<string>]`) per `HasConversion(status => status.Key, key => <Typ>.Get(key))` als `text` speichern, nicht über das Thinktecture-EF-Paket.
 - Namenssuche nur per `EF.Functions.ILike(product.Name, "%" + term + "%", "\\")` mit selbst escaptem `%`, `_` und `\` und mindestens 3 Zeichen, nie per `Contains` oder `ToLower().Contains`.
 - Neue Postgres-Extensions in `azure.extensions` in `Database/Extensions.cs` des AppHost eintragen (`DependsOn` behalten), nie im Portal.
+
+## Authentifizierung
+
+Hintergrund und Entscheidungen: [docs/authentication.md](docs/authentication.md)
+
+- Jeder Endpunkt ist über die Fallback-Policy geschützt, ohne Anmeldung erreichbar nur ausdrücklich per `AllowAnonymous()`.
+- Nutzerdaten hängen an `identity.users.id`, nie an der Zitadel-ID.
+- `sub`, E-Mail und Token nie selbst loggen und nie in Span-Attribute schreiben. Einzige künftige Ausnahme: die Adresse des Lösch-Aufrufs an Zitadel ([#50](https://github.com/Murmli/MurmliV2/issues/50)).
+- `Zitadel:*`-Werte nur in den `appsettings.<Umgebung>.json` des AppHost.
+- Tests stellen eigene Tokens aus (`TestTokens`), kein Test spricht mit Zitadel.
+- `TokenValidationParameters` im Code nie ersetzen, die Werte kommen aus der Bindung von `Authentication:Schemes:Bearer`.
 
 ## Telemetrie
 
@@ -389,7 +401,7 @@ Hintergrund und Entscheidungen: [docs/telemetry.md](docs/telemetry.md)
 - Sensible Daten (LLM-Inhalte, SQL-Parameterwerte) nur über `Telemetry:RecordSensitiveData` (`IConfiguration.RecordsSensitiveData()`), nie fest im Code.
 - Kein `ConfigureHttpClientDefaults` mit Resilience-Handlern.
 - Hosts, die außerhalb von `RunAsync()` arbeiten (Job-Hosts, die API mit der Migration beim Start), entsorgen den Host selbst (`using var host` bzw. `await using var app`), sonst geht die zuletzt gepufferte Telemetrie verloren.
-- `/health` nicht aus den Traces filtern, bis die Bedingung in [docs/telemetry.md](docs/telemetry.md) eintritt.
+- Noch nicht gebaut: `/health` aus den Traces filtern ([#49](https://github.com/Murmli/MurmliV2/issues/49), siehe [docs/telemetry.md](docs/telemetry.md)). Die Notiz entfällt, sobald der Filter gebaut ist.
 
 ## Produktimport
 

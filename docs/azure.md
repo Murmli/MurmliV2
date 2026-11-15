@@ -5,6 +5,7 @@ Betriebsdoku (Einrichtung, Deploy-Ablauf): [BackOffice, docs/03_Betrieb/Deployme
 ## Umgebungen und Deploy
 
 - Umgebungen heißen `azure-<name>`, derzeit `azure-dev` in `rg-murmli-dev`.
+- `aspire publish` und `aspire deploy` immer mit `--environment azure-<name>`. Ohne läuft der AppHost als Production, dafür gibt es keine Zitadel-Werte und `WithZitadel()` bricht ab.
 - Dev deployt nur `deploy.yml`: GitHub-Environment `development` (nur `main`), OIDC als Managed Identity mit Contributor und einem auf AcrPull beschränkten RBAC Administrator auf `rg-murmli-dev`.
 - `deploy.yml` liest die Aspire-CLI-Version aus dem `Sdk`-Attribut (`Aspire.AppHost.Sdk`) des AppHost-csproj.
 
