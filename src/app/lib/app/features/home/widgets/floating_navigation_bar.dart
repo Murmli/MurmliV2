@@ -1,11 +1,11 @@
 import 'package:material_ui/material_ui.dart';
 
-import '../../../i18n/strings.g.dart';
-import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_motion.dart';
-import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_typography.dart';
-import 'home_tab.dart';
+import '../../../../i18n/strings.g.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_motion.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
+import '../home_tab.dart';
 
 class FloatingNavigationBar extends StatelessWidget {
   const FloatingNavigationBar({

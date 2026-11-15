@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:app/app/core/router/app_router.dart';
 import 'package:app/app/core/storage/preference_keys.dart';
-import 'package:app/app/features/home/floating_navigation_bar.dart';
+import 'package:app/app/features/home/widgets/floating_navigation_bar.dart';
 import 'package:app/app/features/home/home_page.dart';
 import 'package:app/app/features/home/home_tab.dart';
 import 'package:app/app/features/home/tabs/chat_page.dart';
