@@ -8,9 +8,11 @@
 - `products`: Produkte und Importläufe.
 - `backend-identity` darf als Entra-Admin Schemas anlegen: `murmli` gehört in Azure `azure_pg_admin`, auf Dev am 2026-11-14 geprüft (`has_database_privilege(..., 'CREATE')` true, `CREATE SCHEMA` läuft).
 
-## Namenssuche und Extensions
+## Produktsuche und Extensions
 
-- `products.name` hat einen Trigram-Index (`pg_trgm`, GIN mit `gin_trgm_ops`). `Contains` und `ToLower().Contains` nutzen ihn nicht.
+- `products.name` und `products.brand` haben je einen Trigram-Index (`pg_trgm`, GIN mit `gin_trgm_ops`). `Contains` und `ToLower().Contains` nutzen sie nicht.
+- Jedes Wort des Suchbegriffs ist ein eigener ILIKE-Parameter auf Name oder Marke, so kombiniert Postgres die Indizes (`BitmapOr` pro Wort, `BitmapAnd` über die Wörter). Wörter unter 3 Zeichen ergeben keine Trigramme und filtern nur, deshalb braucht mindestens ein Wort 3 Zeichen.
+- Treffer über den Code laufen über den Primärschlüssel (`code = ANY`), bei UPC-A mit und ohne führende 0, und kommen per `UNION` zu den Worttreffern.
 - Azure verlangt jede Extension im Serverparameter `azure.extensions`.
 - Lokal und in Tests gibt es keine Allowlist, ein fehlender Eintrag fällt erst beim ersten Migrieren in Azure auf.
 
@@ -34,3 +36,4 @@ Postgres-Container auf Host-Port 60123, User `postgres`, Passwort in den User Se
 | `azure.extensions` nur aus `Database/Extensions.cs` | Der AppHost setzt den Parameter bei jedem Deploy vollständig. Verworfen: Pflege im Portal, sie geht beim Deploy verloren. |
 | `DependsOn` an Datenbank und Firewall-Regel | Der Server lehnt parallele Änderungen an seinen Child-Ressourcen ab. |
 | Fester Host-Port 60123 (`WithHostPort`) | DataGrip und andere Tools behalten eine stabile Verbindung. |
+| Sortierung nach der Default-Collation, keine eigene Collation | Umlaute sortieren womöglich nicht nach deutschen Regeln, das ist akzeptiert. |
