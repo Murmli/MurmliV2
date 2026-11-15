@@ -1,0 +1,84 @@
+{
+  "app": {
+    "title": "Murmli",
+    "wordmark": "murmli",
+    "logoInitial": "m"
+  },
+  "onboarding": {
+    "headline": "Everything around your food, in one place.",
+    "subline": "Recipes, meal plan, groceries and calories. Or just tell Murmli what you need.",
+    "features": {
+      "assistant": {
+        "title": "Tell Murmli",
+        "subtitle": "By text, voice or photo"
+      },
+      "calories": {
+        "title": "Calories at a glance",
+        "subtitle": "Barcode scanning without tokens"
+      },
+      "shopping": {
+        "title": "Shopping that thinks ahead",
+        "subtitle": "Sorted by store layout and shared"
+      },
+      "planning": {
+        "title": "Recipes and meal plan",
+        "subtitle": "Ingredients go straight to your list"
+      }
+    },
+    "startTokens": "50 starter tokens on us",
+    "continueWithApple": "Continue with Apple",
+    "continueWithGoogle": "Continue with Google",
+    "legalNote": "By signing in, you agree to the Terms and the Privacy Policy."
+  },
+  "home": {
+    "settingsTooltip": "Settings",
+    "comingSoon": "Coming soon",
+    "tabs": {
+      "recipes": {
+        "label": "Recipes",
+        "title": "Recipes"
+      },
+      "planner": {
+        "label": "Planner",
+        "title": "Meal plan"
+      },
+      "chat": {
+        "label": "Murmli chat",
+        "title": "Murmli"
+      },
+      "shoppingList": {
+        "label": "List",
+        "title": "Shopping list"
+      },
+      "calories": {
+        "label": "Calories",
+        "title": "Calories"
+      }
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "language": {
+      "section": "Language",
+      "system": "System language",
+      "german": "Deutsch",
+      "english": "English"
+    },
+    "theme": {
+      "section": "Appearance",
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "onboarding": {
+      "section": "Onboarding",
+      "showAgain": "Show onboarding again"
+    },
+    "about": {
+      "section": "About Murmli",
+      "version": "Version",
+      "versionUnavailable": "Not available",
+      "licenses": "Licenses"
+    }
+  }
+}

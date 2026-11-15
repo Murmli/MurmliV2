@@ -1,5 +1,5 @@
 name: Set up app
-description: Installs the Flutter version pinned in src/app/.fvmrc and resolves the locked dependencies.
+description: Installs the Flutter version pinned in src/app/.fvmrc, resolves the locked dependencies and runs code generation.
 
 runs:
   using: composite
@@ -10,5 +10,9 @@ runs:
         cache: true
 
     - run: flutter pub get --enforce-lockfile
+      shell: bash
+      working-directory: src/app
+
+    - run: dart run build_runner build
       shell: bash
       working-directory: src/app
