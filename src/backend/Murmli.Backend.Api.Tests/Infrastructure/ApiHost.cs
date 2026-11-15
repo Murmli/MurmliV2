@@ -31,7 +31,7 @@ internal sealed class ApiHost : IAsyncDisposable
 
     public ZitadelHttpMessageHandler Zitadel { get; }
 
-    public static async Task<ApiHost> StartAsync(string connectionString)
+    public static async Task<ApiHost> StartAsync(string connectionString, IReadOnlyDictionary<string, string?>? additionalConfiguration = null)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var builder = WebApplication.CreateBuilder(
@@ -50,6 +50,7 @@ internal sealed class ApiHost : IAsyncDisposable
                 ["Zitadel:ServiceUserToken"] = ZitadelServiceUserToken,
             }
         );
+        builder.Configuration.AddInMemoryCollection(additionalConfiguration);
         builder.AddApi();
 
         // Npgsql only writes UTC values to timestamp with time zone
