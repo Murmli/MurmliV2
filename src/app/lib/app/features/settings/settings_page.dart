@@ -1,19 +1,12 @@
-import 'dart:async';
-
 import 'package:auto_route/auto_route.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../i18n/strings.g.dart';
-import '../../core/router/app_router.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
-import '../../core/widgets/icon_tile.dart';
-import '../onboarding/providers/onboarding_completed_provider.dart';
-import 'app_language.dart';
-import 'providers/app_language_provider.dart';
-import 'providers/app_version_provider.dart';
-import 'providers/theme_mode_provider.dart';
+import 'widgets/about_section.dart';
+import 'widgets/language_section.dart';
+import 'widgets/onboarding_section.dart';
+import 'widgets/theme_section.dart';
 
 @RoutePage()
 class SettingsPage extends StatelessWidget {
@@ -31,227 +24,15 @@ class SettingsPage extends StatelessWidget {
           AppSpacing.space32,
         ),
         children: const [
-          _LanguageSection(),
+          LanguageSection(),
           SizedBox(height: AppSpacing.space24),
-          _ThemeSection(),
+          ThemeSection(),
           SizedBox(height: AppSpacing.space24),
-          _OnboardingSection(),
+          OnboardingSection(),
           SizedBox(height: AppSpacing.space24),
-          _AboutSection(),
+          AboutSection(),
         ],
       ),
-    );
-  }
-}
-
-class _LanguageSection extends ConsumerWidget {
-  const _LanguageSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final translations = context.t.settings.language;
-    final selectedLanguage = ref.watch(selectedAppLanguageProvider);
-    return _SettingsSection(
-      title: translations.section,
-      children: [
-        for (final language in AppLanguage.values)
-          _SettingsRow(
-            icon: switch (language) {
-              AppLanguage.system => Icons.smartphone_outlined,
-              AppLanguage.german || AppLanguage.english => Icons.translate,
-            },
-            label: switch (language) {
-              AppLanguage.system => translations.system,
-              AppLanguage.german => translations.german,
-              AppLanguage.english => translations.english,
-            },
-            isSelected: language == selectedLanguage,
-            onTap: () => unawaited(
-              ref.read(selectedAppLanguageProvider.notifier).select(language),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _ThemeSection extends ConsumerWidget {
-  const _ThemeSection();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final translations = context.t.settings.theme;
-    final selectedThemeMode = ref.watch(appThemeModeProvider);
-    return _SettingsSection(
-      title: translations.section,
-      children: [
-        for (final themeMode in ThemeMode.values)
-          _SettingsRow(
-            icon: switch (themeMode) {
-              ThemeMode.system => Icons.brightness_auto_outlined,
-              ThemeMode.light => Icons.light_mode_outlined,
-              ThemeMode.dark => Icons.dark_mode_outlined,
-            },
-            label: switch (themeMode) {
-              ThemeMode.system => translations.system,
-              ThemeMode.light => translations.light,
-              ThemeMode.dark => translations.dark,
-            },
-            isSelected: themeMode == selectedThemeMode,
-            onTap: () => unawaited(
-              ref.read(appThemeModeProvider.notifier).select(themeMode),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _OnboardingSection extends ConsumerWidget {
-  const _OnboardingSection();
-
-  Future<void> _showOnboardingAgain(BuildContext context, WidgetRef ref) async {
-    await ref.read(onboardingCompletedProvider.notifier).reset();
-    if (context.mounted) {
-      await context.router.replaceAll([const OnboardingRoute()]);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final translations = context.t.settings.onboarding;
-    return _SettingsSection(
-      title: translations.section,
-      children: [
-        _SettingsRow(
-          icon: Icons.replay,
-          label: translations.showAgain,
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => unawaited(_showOnboardingAgain(context, ref)),
-        ),
-      ],
-    );
-  }
-}
-
-class _AboutSection extends StatelessWidget {
-  const _AboutSection();
-
-  @override
-  Widget build(BuildContext context) {
-    final translations = context.t.settings.about;
-    return _SettingsSection(
-      title: translations.section,
-      children: [
-        _SettingsRow(
-          icon: Icons.info_outline,
-          label: translations.version,
-          trailing: const _AppVersionText(),
-        ),
-        _SettingsRow(
-          icon: Icons.description_outlined,
-          label: translations.licenses,
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => showLicensePage(context: context),
-        ),
-      ],
-    );
-  }
-}
-
-class _AppVersionText extends ConsumerWidget {
-  const _AppVersionText();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return switch (ref.watch(appVersionProvider)) {
-      AsyncData(:final value) => Text(value),
-      AsyncError() => Text(context.t.settings.about.versionUnavailable),
-      _ => const SizedBox.square(
-        dimension: 16,
-        child: CircularProgressIndicator(),
-      ),
-    };
-  }
-}
-
-class _SettingsSection extends StatelessWidget {
-  const _SettingsSection({required this.title, required this.children});
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: AppSpacing.space8,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.space4),
-          child: Text(
-            title,
-            style: TextTheme.of(context).labelLarge
-                ?.copyWith(color: colors.inkSecondary),
-          ),
-        ),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            boxShadow: colors.cardShadow,
-          ),
-          child: Material(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            clipBehavior: Clip.antiAlias,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.space8),
-              child: Column(
-                children: [
-                  for (final (index, child) in children.indexed) ...[
-                    if (index > 0)
-                      const Divider(
-                        indent: AppSpacing.space16,
-                        endIndent: AppSpacing.space16,
-                      ),
-                    child,
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SettingsRow extends StatelessWidget {
-  const _SettingsRow({
-    required this.icon,
-    required this.label,
-    this.isSelected = false,
-    this.trailing,
-    this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool isSelected;
-  final Widget? trailing;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: IconTile(icon: icon),
-      title: Text(label),
-      selected: isSelected,
-      trailing: isSelected
-          ? Icon(Icons.check, color: context.colors.primaryText)
-          : trailing,
-      onTap: onTap,
     );
   }
 }
