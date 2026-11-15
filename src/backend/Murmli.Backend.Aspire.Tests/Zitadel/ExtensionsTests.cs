@@ -14,5 +14,14 @@ public class ExtensionsTests
 
         Assert.Equal("https://zitadel.test", environment["Authentication__Schemes__Bearer__Authority"]);
         Assert.Equal("123", environment["Authentication__Schemes__Bearer__ValidAudiences__0"]);
+        Assert.Equal("https://zitadel.test", environment["Zitadel__Authority"]);
+    }
+
+    [Fact]
+    public async Task WithZitadel_ServiceUserTokenSet_PassesParameterReferenceInsteadOfValue()
+    {
+        var environment = await AppHostEnvironment.GetAsync("api", ["--Parameters:zitadel-service-user-token=plain-text-token"]);
+
+        Assert.Equal("{zitadel-service-user-token.value}", environment["Zitadel__ServiceUserToken"]);
     }
 }

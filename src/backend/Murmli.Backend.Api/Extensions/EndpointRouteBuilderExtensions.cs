@@ -10,5 +10,6 @@ public static class EndpointRouteBuilderExtensions
     {
         endpoints.MapHealthChecks("/health").AllowAnonymous();
         endpoints.MapGet("/users/me", UserEndpoints.GetMeAsync);
+        endpoints.MapDelete("/users/me", UserEndpoints.DeleteMeAsync);
     }
 }

@@ -2,10 +2,21 @@ namespace Murmli.Backend.Aspire.Zitadel;
 
 public static class Extensions
 {
-    public static IResourceBuilder<ProjectResource> WithZitadel(this IResourceBuilder<ProjectResource> resource) =>
-        resource
-            .WithEnvironment("Authentication__Schemes__Bearer__Authority", GetRequiredValue(resource.ApplicationBuilder, "Zitadel:Authority"))
-            .WithEnvironment("Authentication__Schemes__Bearer__ValidAudiences__0", GetRequiredValue(resource.ApplicationBuilder, "Zitadel:ProjectId"));
+    public static IResourceBuilder<ParameterResource> AddZitadelServiceUserToken(this IDistributedApplicationBuilder builder) =>
+        builder.AddParameter("zitadel-service-user-token", secret: true);
+
+    public static IResourceBuilder<ProjectResource> WithZitadel(
+        this IResourceBuilder<ProjectResource> resource,
+        IResourceBuilder<ParameterResource> serviceUserToken
+    )
+    {
+        var authority = GetRequiredValue(resource.ApplicationBuilder, "Zitadel:Authority");
+        return resource
+            .WithEnvironment("Authentication__Schemes__Bearer__Authority", authority)
+            .WithEnvironment("Authentication__Schemes__Bearer__ValidAudiences__0", GetRequiredValue(resource.ApplicationBuilder, "Zitadel:ProjectId"))
+            .WithEnvironment("Zitadel__Authority", authority)
+            .WithEnvironment("Zitadel__ServiceUserToken", serviceUserToken);
+    }
 
     private static string GetRequiredValue(IDistributedApplicationBuilder builder, string key)
     {

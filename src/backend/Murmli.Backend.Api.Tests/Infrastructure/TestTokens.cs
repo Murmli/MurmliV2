@@ -14,7 +14,7 @@ internal static class TestTokens
 
     public static string SigningKeyBase64 { get; } = Convert.ToBase64String(SigningKey);
 
-    public static string Create(string zitadelUserId, string audience = Audience)
+    public static string Create(string zitadelUserId, string audience = Audience, DateTimeOffset? issuedAt = null)
     {
         var now = DateTime.UtcNow;
         return new JsonWebTokenHandler().CreateToken(
@@ -23,7 +23,7 @@ internal static class TestTokens
                 Issuer = Issuer,
                 Audience = audience,
                 Claims = new Dictionary<string, object> { ["sub"] = zitadelUserId },
-                IssuedAt = now,
+                IssuedAt = issuedAt?.UtcDateTime ?? now,
                 NotBefore = now,
                 Expires = now.AddHours(1),
                 SigningCredentials = new SigningCredentials(

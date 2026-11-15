@@ -12,6 +12,8 @@ public class MurmliDbContext(DbContextOptions<MurmliDbContext> options) : DbCont
 
     public DbSet<User> Users => Set<User>();
 
+    public DbSet<DeletedUser> DeletedUsers => Set<DeletedUser>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasPostgresExtension("pg_trgm");

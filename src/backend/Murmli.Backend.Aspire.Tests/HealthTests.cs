@@ -8,7 +8,10 @@ public class HealthTests
     public async Task GetHealth_DatabaseRunning_ReturnsHealthy()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Murmli_Backend_Aspire>(cancellationToken);
+        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Murmli_Backend_Aspire>(
+            ["--Parameters:zitadel-service-user-token=test"],
+            cancellationToken
+        );
         await using var app = await appHost.BuildAsync(cancellationToken);
         await app.StartAsync(cancellationToken);
         await app.ResourceNotifications.WaitForResourceHealthyAsync("api", cancellationToken);

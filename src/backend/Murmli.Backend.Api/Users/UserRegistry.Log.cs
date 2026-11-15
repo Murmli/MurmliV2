@@ -12,4 +12,12 @@ internal sealed partial class UserRegistry
         Message = "Created the user {" + LogProperties.UserId + "}"
     )]
     private partial void LogUserCreated(Guid userId);
+
+    [LoggerMessage(
+        EventId = LogEvents.UserDeleted,
+        EventName = nameof(LogEvents.UserDeleted),
+        Level = LogLevel.Information,
+        Message = "Deleted the user {" + LogProperties.UserId + "}"
+    )]
+    private partial void LogUserDeleted(Guid? userId);
 }
