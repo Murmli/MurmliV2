@@ -5,9 +5,9 @@ import '../../../core/theme/app_spacing.dart';
 
 class SettingsSection extends StatelessWidget {
   const SettingsSection({
-    super.key,
     required this.title,
     required this.children,
+    super.key,
   });
 
   final String title;

@@ -5,12 +5,12 @@ import '../../../core/widgets/icon_tile.dart';
 
 class SettingsRow extends StatelessWidget {
   const SettingsRow({
-    super.key,
     required this.icon,
     required this.label,
     this.isSelected = false,
     this.trailing,
     this.onTap,
+    super.key,
   });
 
   final IconData icon;
