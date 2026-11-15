@@ -1,4 +1,5 @@
 using Aspire.Hosting.Azure;
+using Microsoft.Extensions.Configuration;
 using Murmli.Backend.Aspire.Telemetry;
 using Murmli.Backend.Aspire.Zitadel;
 
@@ -20,6 +21,7 @@ public static class Extensions
             .WithAzureUserAssignedIdentity(identity)
             .WithTelemetry(applicationInsights)
             .WithZitadel(zitadelServiceUserToken)
+            .WithOpenApiDocument()
             .WithExternalHttpEndpoints()
             .WithHttpHealthCheck("/health")
             .PublishAsAzureContainerApp(
@@ -32,4 +34,14 @@ public static class Extensions
                     container.Resources.Memory = "0.5Gi";
                 }
             );
+
+    private static IResourceBuilder<ProjectResource> WithOpenApiDocument(this IResourceBuilder<ProjectResource> resource)
+    {
+        if (resource.ApplicationBuilder.Configuration.GetValue<bool>("OpenApi:Enabled"))
+        {
+            resource.WithEnvironment("OpenApi__Enabled", "true");
+        }
+
+        return resource;
+    }
 }

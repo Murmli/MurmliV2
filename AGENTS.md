@@ -383,10 +383,11 @@ Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 
 Hintergrund und Entscheidungen: [docs/authentication.md](docs/authentication.md)
 
-- Jeder Endpunkt ist nur mit Anmeldung erreichbar (Fallback-Policy). Ausnahmen per `AllowAnonymous()` nur für `/health` und für Endpunkte, deren Issue ausdrücklich verlangt, dass sie anonym erreichbar sind, nie aus eigenem Ermessen.
+- Jeder Endpunkt ist nur mit Anmeldung erreichbar (Fallback-Policy). Ausnahmen per `AllowAnonymous()` nur für `/health`, das OpenAPI-Dokument und für Endpunkte, deren Issue ausdrücklich verlangt, dass sie anonym erreichbar sind, nie aus eigenem Ermessen.
 - Nutzerdaten hängen an `identity.users.id`, nie an der Zitadel-ID. Jede neue Art von Nutzerdaten gehört in die Löschung: in Postgres per Fremdschlüssel mit `ON DELETE CASCADE` auf `identity.users`, außerhalb von Postgres ausdrücklich in `UserRegistry.DeleteAsync` vor dem Zitadel-Aufruf.
 - `sub`, E-Mail und Token nie selbst loggen und nie in Span-Attribute schreiben. Einzige Ausnahme: die Adresse des Lösch-Aufrufs an Zitadel (`ZitadelUserClient`) trägt die Zitadel-ID und steht so in HttpClient-Logs und -Spans. Antwort-Bodies von Zitadel nie loggen.
 - `Zitadel:*`-Werte nur in den `appsettings.<Umgebung>.json` des AppHost, den PAT des Service-Users nie: Er kommt nur über den Secret-Parameter `zitadel-service-user-token`.
+- `OpenApi:Enabled` nur in `appsettings.Development.json` und `appsettings.azure-dev.json` des AppHost setzen, sonst ist das OpenAPI-Dokument in weiteren Umgebungen ohne Anmeldung erreichbar.
 - Tests stellen eigene Tokens aus (`TestTokens`), kein Test spricht mit Zitadel.
 - `TokenValidationParameters` im Code nie ersetzen, die Werte kommen aus der Bindung von `Authentication:Schemes:Bearer`.
 
