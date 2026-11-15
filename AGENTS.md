@@ -382,7 +382,7 @@ Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 
 Hintergrund und Entscheidungen: [docs/authentication.md](docs/authentication.md)
 
-- Jeder Endpunkt ist über die Fallback-Policy geschützt, ohne Anmeldung erreichbar nur ausdrücklich per `AllowAnonymous()`.
+- Jeder Endpunkt ist nur mit Anmeldung erreichbar (Fallback-Policy). Ausnahmen per `AllowAnonymous()` nur für `/health` und für Endpunkte, deren Issue ausdrücklich verlangt, dass sie anonym erreichbar sind, nie aus eigenem Ermessen.
 - Nutzerdaten hängen an `identity.users.id`, nie an der Zitadel-ID.
 - `sub`, E-Mail und Token nie selbst loggen und nie in Span-Attribute schreiben. Einzige künftige Ausnahme: die Adresse des Lösch-Aufrufs an Zitadel ([#50](https://github.com/Murmli/MurmliV2/issues/50)).
 - `Zitadel:*`-Werte nur in den `appsettings.<Umgebung>.json` des AppHost.
