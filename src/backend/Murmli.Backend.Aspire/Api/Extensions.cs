@@ -1,5 +1,6 @@
 using Aspire.Hosting.Azure;
 using Murmli.Backend.Aspire.Telemetry;
+using Murmli.Backend.Aspire.Zitadel;
 
 namespace Murmli.Backend.Aspire.Api;
 
@@ -17,6 +18,7 @@ public static class Extensions
             .WaitFor(database)
             .WithAzureUserAssignedIdentity(identity)
             .WithTelemetry(applicationInsights)
+            .WithZitadel()
             .WithExternalHttpEndpoints()
             .WithHttpHealthCheck("/health")
             .PublishAsAzureContainerApp(

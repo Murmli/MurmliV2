@@ -12,6 +12,7 @@
     <Project Path="Murmli.Backend.Telemetry/Murmli.Backend.Telemetry.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="Murmli.Backend.Api.Tests/Murmli.Backend.Api.Tests.csproj" />
     <Project Path="Murmli.Backend.Aspire.Tests/Murmli.Backend.Aspire.Tests.csproj" />
     <Project Path="Murmli.Backend.Data.Tests/Murmli.Backend.Data.Tests.csproj" />
     <Project Path="Murmli.Backend.ProductImport.Tests/Murmli.Backend.ProductImport.Tests.csproj" />
