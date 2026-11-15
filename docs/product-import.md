@@ -15,8 +15,9 @@
 - Code aus `code`.
 - Name aus `product_name_de`, sonst `product_name_en`, sonst `product_name`.
 - Marke aus `brands` als ein Text, wie geliefert (z.B. `ja!, Rewe, ja! Rewe`). Ohne Marke bleibt sie leer (NULL), das Produkt wird trotzdem importiert.
+- Allgemeine Bezeichnung aus `generic_name_de`, sonst `generic_name` (Hauptsprache des Produkts). Ohne sie bleibt sie leer (NULL).
 - Beliebtheit aus `popularity_key` (Zahl, auch als Text geliefert; alles andere gilt als fehlend), weltweite Scans.
-- Code, Name und Marke werden bereinigt: `\0` entfernt, Leerraum am Rand abgeschnitten. Leer gilt als fehlend.
+- Code, Name, Marke und allgemeine Bezeichnung werden bereinigt: `\0` entfernt, Leerraum am Rand abgeschnitten. Leer gilt als fehlend.
 - Produkte ohne Code oder Name werden übersprungen.
 
 ## Nährwerte im Export
