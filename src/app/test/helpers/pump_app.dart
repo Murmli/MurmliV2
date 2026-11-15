@@ -3,7 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:app/app/app.dart';
-import 'package:app/app/features/settings/app_language_provider.dart';
+import 'package:app/app/features/settings/providers/app_language_provider.dart';
 import 'package:app/i18n/strings.g.dart';
 
 import 'preferences.dart';

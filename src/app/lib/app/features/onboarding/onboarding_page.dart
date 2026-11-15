@@ -10,7 +10,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_typography.dart';
 import '../../core/widgets/icon_tile.dart';
-import 'onboarding_completed_provider.dart';
+import 'providers/onboarding_completed_provider.dart';
 
 @RoutePage()
 class OnboardingPage extends StatelessWidget {

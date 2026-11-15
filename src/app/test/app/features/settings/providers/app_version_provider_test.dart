@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import 'package:app/app/features/settings/app_version_provider.dart';
+import 'package:app/app/features/settings/providers/app_version_provider.dart';
 
 void main() {
   group('appVersion', () {

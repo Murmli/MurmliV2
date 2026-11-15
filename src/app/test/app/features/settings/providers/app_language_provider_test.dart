@@ -2,11 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:app/app/core/storage/preference_keys.dart';
 import 'package:app/app/features/settings/app_language.dart';
-import 'package:app/app/features/settings/app_language_provider.dart';
+import 'package:app/app/features/settings/providers/app_language_provider.dart';
 import 'package:app/i18n/strings.g.dart';
 
-import '../../../helpers/preferences.dart';
-import '../../../helpers/provider_container.dart';
+import '../../../../helpers/preferences.dart';
+import '../../../../helpers/provider_container.dart';
 
 void main() {
   tearDown(() => LocaleSettings.setLocale(AppLocale.de));

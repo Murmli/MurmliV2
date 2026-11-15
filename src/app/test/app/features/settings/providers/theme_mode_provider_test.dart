@@ -2,10 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:app/app/core/storage/preference_keys.dart';
-import 'package:app/app/features/settings/theme_mode_provider.dart';
+import 'package:app/app/features/settings/providers/theme_mode_provider.dart';
 
-import '../../../helpers/preferences.dart';
-import '../../../helpers/provider_container.dart';
+import '../../../../helpers/preferences.dart';
+import '../../../../helpers/provider_container.dart';
 
 void main() {
   group('AppThemeMode', () {

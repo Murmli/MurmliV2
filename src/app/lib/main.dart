@@ -8,7 +8,7 @@ import 'package:talker_flutter/talker_flutter.dart';
 import 'app/app.dart';
 import 'app/core/storage/preference_keys.dart';
 import 'app/core/storage/shared_preferences_provider.dart';
-import 'app/features/settings/app_language_provider.dart';
+import 'app/features/settings/providers/app_language_provider.dart';
 import 'i18n/strings.g.dart';
 
 Future<void> main() async {

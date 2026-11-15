@@ -1,8 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../core/storage/preference_keys.dart';
-import '../../core/storage/shared_preferences_provider.dart';
+import '../../../core/storage/preference_keys.dart';
+import '../../../core/storage/shared_preferences_provider.dart';
 
 part 'theme_mode_provider.g.dart';
 

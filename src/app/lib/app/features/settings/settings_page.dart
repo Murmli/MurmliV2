@@ -9,11 +9,11 @@ import '../../core/router/app_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/icon_tile.dart';
-import '../onboarding/onboarding_completed_provider.dart';
+import '../onboarding/providers/onboarding_completed_provider.dart';
 import 'app_language.dart';
-import 'app_language_provider.dart';
-import 'app_version_provider.dart';
-import 'theme_mode_provider.dart';
+import 'providers/app_language_provider.dart';
+import 'providers/app_version_provider.dart';
+import 'providers/theme_mode_provider.dart';
 
 @RoutePage()
 class SettingsPage extends StatelessWidget {

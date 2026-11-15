@@ -1,7 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../core/storage/preference_keys.dart';
-import '../../core/storage/shared_preferences_provider.dart';
+import '../../../core/storage/preference_keys.dart';
+import '../../../core/storage/shared_preferences_provider.dart';
 
 part 'onboarding_completed_provider.g.dart';
 

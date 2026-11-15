@@ -5,7 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../i18n/strings.g.dart';
 import 'core/router/app_router_provider.dart';
 import 'core/theme/app_theme.dart';
-import 'features/settings/theme_mode_provider.dart';
+import 'features/settings/providers/theme_mode_provider.dart';
 
 class MurmliApp extends HookConsumerWidget {
   const MurmliApp({super.key});

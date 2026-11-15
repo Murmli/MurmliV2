@@ -1,6 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../features/onboarding/onboarding_completed_provider.dart';
+import '../../features/onboarding/providers/onboarding_completed_provider.dart';
 import 'app_router.dart';
 import 'onboarding_guard.dart';
 
