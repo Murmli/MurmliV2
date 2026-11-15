@@ -89,6 +89,10 @@ namespace Murmli.Backend.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("added_sugars_is_estimated");
 
+                    b.Property<string>("Brand")
+                        .HasColumnType("text")
+                        .HasColumnName("brand");
+
                     b.Property<double?>("Carbohydrates")
                         .HasColumnType("double precision")
                         .HasColumnName("carbohydrates");

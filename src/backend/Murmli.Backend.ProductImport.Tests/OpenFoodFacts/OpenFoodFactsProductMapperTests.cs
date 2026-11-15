@@ -169,6 +169,20 @@ public class OpenFoodFactsProductMapperTests
     [Fact]
     public void Map_EmptyCode_ReturnsNull() => Assert.Null(Map(CreateExportLine(code: "", germanName: "Brot")));
 
+    [Theory]
+    [InlineData("ja!, Rewe, ja! Rewe", "ja!, Rewe, ja! Rewe")]
+    [InlineData(" Re\u0000we ", "Rewe")]
+    [InlineData("", null)]
+    [InlineData("   ", null)]
+    [InlineData(null, null)]
+    public void Map_Brands_ReturnsCleanedBrandText(string? brands, string? expectedBrand)
+    {
+        var product = Map(CreateExportLine(germanName: "Brot", brands: brands));
+
+        Assert.NotNull(product);
+        Assert.Equal(expectedBrand, product.Brand);
+    }
+
     private static Product? Map(string exportLine)
     {
         using var document = JsonDocument.Parse(exportLine);
@@ -179,7 +193,8 @@ public class OpenFoodFactsProductMapperTests
         string code = "4000000000010",
         string? germanName = null,
         string? englishName = null,
-        string? name = null
+        string? name = null,
+        string? brands = null
     )
     {
         Dictionary<string, object?> product = new()
@@ -189,6 +204,7 @@ public class OpenFoodFactsProductMapperTests
             ["product_name_de"] = germanName,
             ["product_name_en"] = englishName,
             ["product_name"] = name,
+            ["brands"] = brands,
         };
         return JsonSerializer.Serialize(product.Where(property => property.Value is not null).ToDictionary());
     }

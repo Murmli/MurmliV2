@@ -74,6 +74,41 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
                     Fat = 0.2,
                 }
             },
+            {
+                CreateExportLine("4000000000011", "Apfel", 0.2),
+                CreateExportLine("4000000000011", "Apfel", 0.2, brands: "ja!"),
+                new Product
+                {
+                    Code = "4000000000011",
+                    Name = "Apfel",
+                    Brand = "ja!",
+                    IsPerHundredMilliliters = false,
+                    Fat = 0.2,
+                }
+            },
+            {
+                CreateExportLine("4000000000011", "Apfel", 0.2, brands: "ja!"),
+                CreateExportLine("4000000000011", "Apfel", 0.2, brands: "ja!, Rewe"),
+                new Product
+                {
+                    Code = "4000000000011",
+                    Name = "Apfel",
+                    Brand = "ja!, Rewe",
+                    IsPerHundredMilliliters = false,
+                    Fat = 0.2,
+                }
+            },
+            {
+                CreateExportLine("4000000000011", "Apfel", 0.2, brands: "ja!"),
+                CreateExportLine("4000000000011", "Apfel", 0.2),
+                new Product
+                {
+                    Code = "4000000000011",
+                    Name = "Apfel",
+                    IsPerHundredMilliliters = false,
+                    Fat = 0.2,
+                }
+            },
             { CreateExportLine("4000000000001", "Haferflocken", 7), OatFlakes.ExportLine, OatFlakes.ExpectedProduct },
         };
 
@@ -500,7 +535,8 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
         double fat,
         string per = "100g",
         string fatSource = "packaging",
-        double? proteins = null
+        double? proteins = null,
+        string? brands = null
     )
     {
         var nutrients = new JsonObject { ["fat"] = CreateNutrient(fat, fatSource, per) };
@@ -509,7 +545,7 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
             nutrients["proteins"] = CreateNutrient(proteinsValue, "packaging", per);
         }
 
-        return new JsonObject
+        var product = new JsonObject
         {
             ["code"] = code,
             ["schema_version"] = 1004,
@@ -524,7 +560,13 @@ public class ProductImporterTests(PostgresFixture postgres) : IClassFixture<Post
                     ["nutrients"] = nutrients,
                 },
             },
-        }.ToJsonString();
+        };
+        if (brands is not null)
+        {
+            product["brands"] = brands;
+        }
+
+        return product.ToJsonString();
     }
 
     private static JsonObject CreateNutrient(double value, string source, string per) =>

@@ -10,6 +10,8 @@ public class Product
 
     public required string Name { get; set; }
 
+    public string? Brand { get; set; }
+
     public bool IsPerHundredMilliliters { get; set; }
 
     public double? EnergyKilojoules { get; set; }
