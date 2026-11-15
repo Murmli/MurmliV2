@@ -4,12 +4,14 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="Murmli.Backend.Api/Murmli.Backend.Api.csproj" />
-    <Project Path="Murmli.Backend.Api.Host/Murmli.Backend.Api.Host.csproj" />
-    <Project Path="Murmli.Backend.Aspire/Murmli.Backend.Aspire.csproj" />
     <Project Path="Murmli.Backend.Data/Murmli.Backend.Data.csproj" />
     <Project Path="Murmli.Backend.ProductImport/Murmli.Backend.ProductImport.csproj" />
-    <Project Path="Murmli.Backend.ProductImport.Host/Murmli.Backend.ProductImport.Host.csproj" />
     <Project Path="Murmli.Backend.Telemetry/Murmli.Backend.Telemetry.csproj" />
+  </Folder>
+  <Folder Name="/src/hosts/">
+    <Project Path="Murmli.Backend.Api.Host/Murmli.Backend.Api.Host.csproj" />
+    <Project Path="Murmli.Backend.Aspire/Murmli.Backend.Aspire.csproj" />
+    <Project Path="Murmli.Backend.ProductImport.Host/Murmli.Backend.ProductImport.Host.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="Murmli.Backend.Api.Tests/Murmli.Backend.Api.Tests.csproj" />
