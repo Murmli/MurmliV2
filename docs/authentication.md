@@ -1,6 +1,6 @@
 # Authentifizierung
 
-Die App meldet Nutzer über Zitadel an. Die API prüft die Access Tokens (JWT) selbst anhand der veröffentlichten Schlüssel der Instanz, ohne Introspection. `AddApi()` registriert den JWT-Bearer-Handler und eine Fallback-Policy, die jeden Endpunkt ohne eigene Auth-Metadaten schützt, auch unbekannte Routen. Ohne Anmeldung erreichbar ist nur, was ausdrücklich `AllowAnonymous()` bekommt, derzeit `/health` und, wo eingeschaltet, das OpenAPI-Dokument (siehe „OpenAPI-Dokument“).
+Die App meldet Nutzer über Zitadel an. Die API prüft die Access Tokens (JWT) selbst anhand der veröffentlichten Schlüssel der Instanz, ohne Introspection. `AddApi()` registriert den JWT-Bearer-Handler und eine Fallback-Policy, die jeden Endpunkt ohne eigene Auth-Metadaten schützt, auch unbekannte Routen. Ohne Anmeldung erreichbar ist nur, was ausdrücklich `AllowAnonymous()` bekommt, derzeit `/health` und, wo eingeschaltet, das OpenAPI-Dokument (siehe [api.md](api.md#openapi-dokument)).
 
 ## Konfiguration
 
@@ -15,14 +15,14 @@ Die App meldet Nutzer über Zitadel an. Die API prüft die Access Tokens (JWT) s
 
 - `identity.users`: eigene, zufällige Id, Zitadel-ID (`sub`, unique) und Anlagezeitpunkt. Keine E-Mail, kein Name.
 - `identity.deleted_users`: Löschvermerke mit Zitadel-ID (nicht eindeutig) und Löschzeitpunkt, siehe „Konto löschen“.
-- `UserRegistry.GetOrCreateAsync` legt das Konto beim ersten Aufruf an, `GET /users/me` liefert `{"id": "..."}`. Verhindert ein Löschvermerk die Anlage, antwortet es mit 401.
+- `UserRegistry.GetOrCreateAsync` legt das Konto beim ersten Aufruf an, `GET /v1/users/me` liefert `{"id": "..."}`. Verhindert ein Löschvermerk die Anlage, antwortet es mit 401.
 - Alle Nutzerdaten hängen an `identity.users.id`, nie an der Zitadel-ID. Ein Wechsel der Zitadel-Instanz berührt so nur die Zuordnung, nicht die Daten.
 
 ## Konto löschen
 
-`DELETE /users/me` ruft `UserRegistry.DeleteAsync` auf und antwortet mit 204, wenn alles gelöscht ist. Die Schritte laufen ohne Transaktion, jeder lässt sich wiederholen:
+`DELETE /v1/users/me` ruft `UserRegistry.DeleteAsync` auf und antwortet mit 204, wenn alles gelöscht ist. Die Schritte laufen ohne Transaktion, jeder lässt sich wiederholen:
 
-1. Die eigene Id des Kontos lesen, nur für den Log. Sie fehlt, wenn der Nutzer nie `GET /users/me` aufgerufen hat.
+1. Die eigene Id des Kontos lesen, nur für den Log. Sie fehlt, wenn der Nutzer nie `GET /v1/users/me` aufgerufen hat.
 2. Einen Löschvermerk (Zitadel-ID, Zeitpunkt) in `identity.deleted_users` schreiben.
 3. Das Konto in `identity.users` löschen. Nutzerdaten in Postgres hängen per Fremdschlüssel mit `ON DELETE CASCADE` an `identity.users` und verschwinden mit. Daten außerhalb von Postgres (derzeit keine) muss `DeleteAsync` ausdrücklich vor dem Zitadel-Aufruf löschen.
 4. Vermerke löschen, die älter als 24 Stunden sind.
@@ -32,7 +32,7 @@ Scheitert ein Schritt, kann sich der Nutzer weiter anmelden und die Löschung wi
 
 ### Löschvermerk und `iat`
 
-- Lokal geprüfte Tokens bleiben bis `exp` plus 5 Minuten Clock Skew von JwtBearer gültig, bei 1 Stunde Lebensdauer rund 65 Minuten. Ohne Vermerk legte `GET /users/me` mit einem solchen Token nach der Löschung sofort ein neues Konto an.
+- Lokal geprüfte Tokens bleiben bis `exp` plus 5 Minuten Clock Skew von JwtBearer gültig, bei 1 Stunde Lebensdauer rund 65 Minuten. Ohne Vermerk legte `GET /v1/users/me` mit einem solchen Token nach der Löschung sofort ein neues Konto an.
 - `GetOrCreateAsync` legt kein Konto an, wenn ein Vermerk für die Zitadel-ID existiert, der nicht vor dem `iat` des Tokens liegt. Fehlt `iat`, genügt irgendein Vermerk. Ein vorhandenes Konto liefert es immer.
 - Ein neues Token nach einem gescheiterten Zitadel-Aufruf hat ein späteres `iat` und darf ein Konto anlegen, damit der Nutzer die Löschung wiederholen kann.
 - Vermerke bleiben 24 Stunden, das liegt über den 12 Stunden, die Zitadel standardmäßig als Token-Lebensdauer vergibt. Aufgeräumt wird erst bei der nächsten Löschung.
@@ -49,20 +49,12 @@ Scheitert ein Schritt, kann sich der Nutzer weiter anmelden und die Löschung wi
 - Mit `Telemetry:RecordSensitiveData` (lokal und in Azure Dev) steht die Zitadel-ID als SQL-Parameterwert in den Command-Logs von EF Core.
 - Die Zitadel-ID steht in der Adresse des Lösch-Aufrufs und damit in den Logs der HttpClientFactory und im HttpClient-Span. Das ist bewusst erlaubt.
 
-## OpenAPI-Dokument
-
-Die API liefert unter `/openapi/v1.json` ein OpenAPI-3.2-Dokument, das alle Endpunkte mit HTTP-Methode (`MapGet`, `MapPost` usw.) automatisch beschreibt, auch neue. `/health` steht nicht darin, Health-Check-Endpunkte tragen keine API-Beschreibung. Es dient derzeit dazu, einen Client-Generator für Flutter auszuprobieren.
-
-- Eingeschaltet ist es nur lokal und in Azure Dev: `OpenApi:Enabled` steht in `appsettings.Development.json` und `appsettings.azure-dev.json` des AppHost, `AddApi()` des AppHost reicht den Wert als `OpenApi__Enabled` an die API. Dort ist das Dokument ohne Anmeldung erreichbar.
-- In jeder anderen Umgebung mappt die API die Route nicht: ohne Anmeldung antwortet sie mit 401 (die Fallback-Policy gilt auch für unbekannte Routen), mit Anmeldung mit 404.
-
 ## Tests
 
 - `Murmli.Backend.Api.Tests` startet die API ohne Authority, mit eigenem Issuer, eigener Audience und einem zufälligen symmetrischen Schlüssel über `SigningKeys` (`TestTokens`). So läuft der echte Prüfpfad des Handlers, ohne Metadatenabruf.
 - Kein Test spricht mit Zitadel. Ob echte Tokens der Instanz zur Konfiguration passen (JWT, Projekt in `aud`) und die Löschung in Zitadel wirkt, prüft ein Mensch nach dem Deploy.
 - `ApiHost` ersetzt den Primary Handler aller HttpClients durch `ZitadelHttpMessageHandler` (zeichnet Anfragen auf, Statuscode einstellbar) und die Uhr durch einen `FakeTimeProvider`. `TestTokens.Create` setzt `iat` auf Wunsch, `exp` und `nbf` kommen weiter aus der echten Zeit, weil JwtBearer dafür die Systemuhr nutzt.
 - Dass `/health` ohne Anmeldung erreichbar bleibt, deckt `HealthTests` in `Murmli.Backend.Aspire.Tests` ab.
-- Das OpenAPI-Dokument deckt `EndpointRouteBuilderExtensionsTests` in `Murmli.Backend.Api.Tests` ab, das Weiterreichen des Schalters `Api/ExtensionsTests` in `Murmli.Backend.Aspire.Tests`.
 
 ## Entscheidungen
 
@@ -79,4 +71,3 @@ Die API liefert unter `/openapi/v1.json` ein OpenAPI-3.2-Dokument, das alle Endp
 | Zitadel als letzter Schritt der Löschung | Verworfen: Zitadel zuerst löschen. Scheitert danach ein Schritt, kann sich der Nutzer nicht mehr anmelden und die Löschung nicht wiederholen. |
 | Mehrere Vermerke pro Nutzer | Verworfen: Upsert, EF Core 10 kann es nicht. Ein Insert reicht auch bei doppeltem Tippen und bei Wiederholungen. |
 | Löschung ohne `RequestAborted` | Die App darf sich direkt nach dem Tippen schließen, eine begonnene Löschung soll trotzdem durchlaufen. |
-| Schalter `OpenApi:Enabled` statt `IsDevelopment()` | Die API läuft in Azure Dev als Production, `Development` setzt nur `aspire run` über die launchSettings. `IsDevelopment()` schlösse Dev aus. |

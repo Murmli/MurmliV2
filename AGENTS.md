@@ -379,6 +379,14 @@ Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 - Namenssuche nur per `EF.Functions.ILike(product.Name, "%" + term + "%", "\\")` mit selbst escaptem `%`, `_` und `\` und mindestens 3 Zeichen, nie per `Contains` oder `ToLower().Contains`.
 - Neue Postgres-Extensions in `azure.extensions` in `Database/Extensions.cs` des AppHost eintragen (`DependsOn` behalten), nie im Portal.
 
+## API
+
+Hintergrund und Entscheidungen: [docs/api.md](docs/api.md)
+
+- Neue Endpunkte in die Gruppe `/v1` in `MapApi` mappen, nie direkt auf `endpoints`. Ohne Version bleiben nur `/health` und das OpenAPI-Dokument.
+- Bis zum ersten Live-Gang alles in `v1` ändern, auch inkompatibel. Danach innerhalb einer Version nur rückwärtskompatibel ändern (neue Endpunkte, neue Felder in Antworten), alles andere bekommt eine neue Version.
+- Kein Asp.Versioning einführen, bevor es .NET 11 unterstützt ([#68](https://github.com/Murmli/MurmliV2/issues/68)), und keine Version per Header oder Query.
+
 ## Authentifizierung
 
 Hintergrund und Entscheidungen: [docs/authentication.md](docs/authentication.md)
