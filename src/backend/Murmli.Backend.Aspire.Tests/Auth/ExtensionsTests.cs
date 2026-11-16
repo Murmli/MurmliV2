@@ -27,10 +27,10 @@ public class ExtensionsTests
     [Fact]
     public async Task AddAuth_SecretsSet_PassesParameterReferencesInsteadOfValues()
     {
-        string[] args = ["--Parameters:better-auth-secret=plain-text-secret", "--Parameters:auth-service-key=plain-text-key"];
+        string[] arguments = ["--Parameters:better-auth-secret=plain-text-secret", "--Parameters:auth-service-key=plain-text-key"];
 
-        var authEnvironment = await AppHostEnvironment.GetAsync("auth", args);
-        var apiEnvironment = await AppHostEnvironment.GetAsync("api", args);
+        var authEnvironment = await AppHostEnvironment.GetAsync("auth", arguments);
+        var apiEnvironment = await AppHostEnvironment.GetAsync("api", arguments);
 
         Assert.Equal("{better-auth-secret.value}", authEnvironment["BETTER_AUTH_SECRET"]);
         Assert.Equal("{auth-service-key.value}", authEnvironment["AUTH_SERVICE_KEY"]);
