@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Murmli.Backend.Data.Migrations
 {
     [DbContext(typeof(MurmliDbContext))]
-    [Migration("20261115143839_AddProductBrandTrigramIndex")]
-    partial class AddProductBrandTrigramIndex
+    [Migration("20261116061236_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -128,6 +128,10 @@ namespace Murmli.Backend.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("fat_is_estimated");
 
+                    b.Property<string>("GenericName")
+                        .HasColumnType("text")
+                        .HasColumnName("generic_name");
+
                     b.Property<bool>("IsPerHundredMilliliters")
                         .HasColumnType("boolean")
                         .HasColumnName("is_per_hundred_milliliters");
@@ -136,6 +140,10 @@ namespace Murmli.Backend.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("name");
+
+                    b.Property<double?>("PopularityKey")
+                        .HasColumnType("double precision")
+                        .HasColumnName("popularity_key");
 
                     b.Property<double?>("Proteins")
                         .HasColumnType("double precision")
