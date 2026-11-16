@@ -35,6 +35,7 @@ Die App meldet noch niemanden an, den Ablauf nutzen derzeit `AuthenticationTests
   - `GET /.well-known/openid-configuration`: minimales Discovery-Dokument (`issuer`, `jwks_uri`), `jwks_uri` zeigt auf `/api/auth/jwks`.
   - `POST /service/delete-user`: siehe „Konto löschen“.
   - Alles andere geht an Better Auth (`/api/auth/*`).
+- Request-Bodies sind auf 64 KiB begrenzt, einen größeren per `Content-Length` angekündigten Body lehnt `auth` mit 413 ab. `/service/delete-user` liest höchstens 4096 Zeichen.
 - Die Registrierung ist aus (`disableSignUp`). Better Auths Selbstlöschung `user.deleteUser` bleibt aus (Standard, Grund siehe „Entscheidungen“).
 
 ### Rate Limiting

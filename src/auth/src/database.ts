@@ -13,3 +13,7 @@ export const pool = process.env.MURMLI_PASSWORD
 			password: entraTokenProvider(new DefaultAzureCredential()),
 			ssl: true,
 		});
+
+pool.on("error", (error) => {
+	console.error("An idle database client failed.", error);
+});

@@ -4,14 +4,16 @@ import {
 	type IncomingMessage,
 	type ServerResponse,
 } from "node:http";
+import type { TLSSocket } from "node:tls";
 import { getMigrations } from "better-auth/db/migration";
-import { toNodeHandler } from "better-auth/node";
+import { getRequest, setResponse } from "better-call/node";
 import { auth, baseURL } from "./auth.ts";
 import { pool } from "./database.ts";
 import { requireEnvironment } from "./environment.ts";
 import { createCredentialUser, deleteUser, userExists } from "./users.ts";
 
 const maximumRequestBodyLength = 4096;
+const maximumAuthRequestBodyLength = 64 * 1024;
 
 const serviceAuthorizationDigest = digest(
 	`Bearer ${requireEnvironment("AUTH_SERVICE_KEY")}`,
@@ -36,9 +38,15 @@ export async function run(
 		process.exit(1);
 	}
 
-	const authHandler = toNodeHandler(auth);
 	const server = createServer(async (request, response) => {
 		try {
+			if (
+				Number(request.headers["content-length"]) > maximumAuthRequestBodyLength
+			) {
+				response.writeHead(413);
+				response.end();
+				return;
+			}
 			const { pathname } = new URL(request.url ?? "/", "http://localhost");
 			if (request.method === "GET" && pathname === "/health") {
 				response.writeHead(200, { "content-type": "text/plain" });
@@ -55,7 +63,7 @@ export async function run(
 			) {
 				await handleDeleteUser(request, response);
 			} else {
-				await authHandler(request, response);
+				await handleAuthRequest(request, response);
 			}
 		} catch (error) {
 			console.error(error);
@@ -67,14 +75,21 @@ export async function run(
 	});
 	server.listen(Number(requireEnvironment("PORT")));
 
+	let shuttingDown = false;
 	const shutdown = async () => {
-		server.close();
+		if (shuttingDown) {
+			return;
+		}
+		shuttingDown = true;
+		// Container Apps kills the replica 30 seconds after SIGTERM
+		setTimeout(() => server.closeAllConnections(), 10_000).unref();
+		await new Promise<void>((resolve) => server.close(() => resolve()));
 		await shutdownTelemetry();
 		await pool.end();
 		process.exit(0);
 	};
-	process.once("SIGTERM", shutdown);
-	process.once("SIGINT", shutdown);
+	process.on("SIGTERM", shutdown);
+	process.on("SIGINT", shutdown);
 }
 
 async function seedUser(): Promise<void> {
@@ -83,6 +98,27 @@ async function seedUser(): Promise<void> {
 	if (email && password && !(await userExists(email))) {
 		await createCredentialUser(email, "Test", password);
 	}
+}
+
+// Mirrors toNodeHandler of better-call, which does not limit the body size
+async function handleAuthRequest(
+	request: IncomingMessage,
+	response: ServerResponse,
+): Promise<void> {
+	const protocol =
+		request.headers["x-forwarded-proto"] ||
+		((request.socket as TLSSocket).encrypted ? "https" : "http");
+	const base = `${protocol}://${request.headers[":authority"] || request.headers.host}`;
+	await setResponse(
+		response,
+		await auth.handler(
+			getRequest({
+				base,
+				request,
+				bodySizeLimit: maximumAuthRequestBodyLength,
+			}),
+		),
+	);
 }
 
 async function handleDeleteUser(

@@ -20,16 +20,22 @@ export async function createCredentialUser(
 			`The password must be between ${minPasswordLength} and ${maxPasswordLength} characters long.`,
 		);
 	}
+	const passwordHash = await context.password.hash(password);
 	const user = await context.internalAdapter.createUser(
 		{ email, name, emailVerified: true },
 		{ method: "admin" },
 	);
-	await context.internalAdapter.linkAccount({
-		userId: user.id,
-		providerId: "credential",
-		accountId: user.id,
-		password: await context.password.hash(password),
-	});
+	try {
+		await context.internalAdapter.linkAccount({
+			userId: user.id,
+			providerId: "credential",
+			accountId: user.id,
+			password: passwordHash,
+		});
+	} catch (error) {
+		await context.internalAdapter.deleteUser(user.id);
+		throw error;
+	}
 }
 
 export async function deleteUser(userId: string): Promise<void> {
