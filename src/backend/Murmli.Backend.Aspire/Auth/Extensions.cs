@@ -25,7 +25,8 @@ public static class Extensions
     {
         var auth = builder
             .AddNodeApp("auth", "../../auth", "src/main.ts")
-            .WithHttpEndpoint(env: "PORT")
+            // Fixed locally so local clients (Bruno, the app's local flavor) have a stable address
+            .WithHttpEndpoint(port: builder.ExecutionContext.IsRunMode ? 5021 : null, env: "PORT")
             .WithExternalHttpEndpoints()
             .WithHttpHealthCheck("/health")
             .WithReference(database)
