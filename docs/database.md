@@ -6,7 +6,7 @@
 
 - `identity`: Nutzerkonten mit Zuordnung zur Better-Auth-ID (`auth_user_id`) und Löschvermerke.
 - `products`: Produkte und Importläufe.
-- `better-auth`: die Tabellen von Better Auth (`user`, `session`, `account`, `verification`, `jwks`) mit Name und E-Mail der Nutzer, Passwort-Hashes, Sessions und den verschlüsselten privaten JWT-Schlüsseln. Das Schema gehört Better Auth (`database.schemaName` in `src/auth/src/auth.ts`), EF Core und die API greifen nie darauf zu (siehe [authentication.md](authentication.md#entscheidungen)). Wegen des Bindestrichs in eigenem SQL immer quotiert: `"better-auth"`.
+- `better-auth`: die Tabellen von Better Auth (`user`, `session`, `account`, `verification`, `jwks`) mit Name und E-Mail der Nutzer, Passwort-Hashes, Sessions und den verschlüsselten privaten JWT-Schlüsseln. Das Schema gehört Better Auth (`database.schemaName` in `src/auth/src/authentication/auth.ts`), EF Core und die API greifen nie darauf zu (siehe [authentication.md](authentication.md#entscheidungen)). Wegen des Bindestrichs in eigenem SQL immer quotiert: `"better-auth"`.
 - `auth` migriert `better-auth` beim Start selbst, bevor es lauscht: `getMigrations` aus `better-auth/db/migration` vergleicht mit dem Live-Schema, ergänzt nur, ist idempotent und wirft bei unsicheren Änderungen. Ein Update von Better Auth kann so beim Start Spalten ergänzen, eine neue Pflichtspalte ohne Default verhindert den Start der neuen Revision. Es gibt keine Sperre, weil `auth` höchstens 1 Replica hat, mit mehr Replicas braucht es ein Advisory Lock.
 - `backend-identity` darf als Entra-Admin Schemas anlegen: `murmli` gehört in Azure `azure_pg_admin`, auf Dev am 2026-11-14 geprüft (`has_database_privilege(..., 'CREATE')` true, `CREATE SCHEMA` läuft).
 

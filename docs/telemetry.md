@@ -29,7 +29,7 @@ Npgsql-Spans enthalten nie Parameterwerte. Eingeschaltet ist der Schalter nur lo
 
 ## `auth`
 
-`src/auth/src/telemetry.ts` startet das OpenTelemetry-NodeSDK.
+`src/auth/src/infrastructure/telemetry.ts` startet das OpenTelemetry-NodeSDK.
 
 - Nur Traces: eingehende HTTP-Requests, Abfragen über `pg` und die eigenen Spans von Better Auth (Scope `better-auth`). Keine OpenTelemetry-Metriken und -Logs. Better Auth loggt ab `warn` auf die Konsole, Container Apps schreibt die Konsole in den Workspace.
 - `src/main.ts` registriert nur die Hooks von import-in-the-middle und importiert danach Telemetrie und Server dynamisch. `node:http` wird nur instrumentiert, wenn die Hooks vor seinem ersten Import registriert sind, `pg` patcht die Instrumentierung beim Laden.

@@ -24,4 +24,4 @@ Lokale Checks (Befehle in [AGENTS.md](../AGENTS.md#ci)):
 | Keine Gruppe am aufrufenden `deploy`-Job | Sonst wartet der Deploy auf eine Sperre, die sein eigener Caller hält. |
 | Backend-Formatierung nur mit `dotnet format` (ohne `.editorconfig`) | Geprüft und vorerst verworfen (2026-11-14): CSharpier bricht Argumente nur nach Zeilenbreite um und widerspricht dem vollen `dotnet format`; ReSharper `jb cleanupcode` erzwingt ein Argument pro Zeile, verlängert den Code aber stark, ist 190 MB groß, proprietär und hat keinen Prüfmodus. `dotnet format` selbst kann Argumentlisten weder umbrechen noch prüfen. |
 | osv-scanner-action auf exakter Version | Die Action hat keinen gleitenden Major-Tag. |
-| `tsc --noEmit` mit dem Stub `src/auth/src/bun-sqlite.d.ts` statt `skipLibCheck` | Better Auths Typen importieren `bun:sqlite`, ohne Stub scheitert `tsc`. `skipLibCheck` machte die Option `database` still zu `any`. |
+| `tsc --noEmit` mit dem Stub `src/auth/src/types/bun-sqlite.d.ts` statt `skipLibCheck` | Better Auths Typen importieren `bun:sqlite`, ohne Stub scheitert `tsc`. `skipLibCheck` machte die Option `database` still zu `any`. |

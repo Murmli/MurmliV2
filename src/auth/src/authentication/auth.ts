@@ -1,8 +1,8 @@
 import { betterAuth } from "better-auth";
 import { bearer, jwt } from "better-auth/plugins";
 import { PostgresDialect } from "kysely";
-import { pool } from "./database.ts";
-import { requireEnvironment } from "./environment.ts";
+import { pool } from "../infrastructure/database.ts";
+import { requireEnvironment } from "../infrastructure/environment.ts";
 
 export const baseURL = requireEnvironment("BETTER_AUTH_URL");
 

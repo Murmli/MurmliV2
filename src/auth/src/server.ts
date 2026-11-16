@@ -7,10 +7,14 @@ import {
 import type { TLSSocket } from "node:tls";
 import { getMigrations } from "better-auth/db/migration";
 import { getRequest, setResponse } from "better-call/node";
-import { auth, baseURL } from "./auth.ts";
-import { pool } from "./database.ts";
-import { requireEnvironment } from "./environment.ts";
-import { createCredentialUser, deleteUser, userExists } from "./users.ts";
+import { auth, baseURL } from "./authentication/auth.ts";
+import {
+	createCredentialUser,
+	deleteUser,
+	userExists,
+} from "./authentication/users.ts";
+import { pool } from "./infrastructure/database.ts";
+import { requireEnvironment } from "./infrastructure/environment.ts";
 
 const maximumRequestBodyLength = 4096;
 const maximumAuthRequestBodyLength = 64 * 1024;

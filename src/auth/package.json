@@ -8,7 +8,7 @@
 	"scripts": {
 		"check": "biome ci && tsc --noEmit",
 		"format": "biome check --write",
-		"create-user": "node src/create-user.ts"
+		"create-user": "node src/commands/create-user.ts"
 	},
 	"dependencies": {
 		"@azure/identity": "4.14.1",

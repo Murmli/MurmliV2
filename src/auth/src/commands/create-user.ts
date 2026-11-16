@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
-import { pool } from "./database.ts";
-import { createCredentialUser, userExists } from "./users.ts";
+import { createCredentialUser, userExists } from "../authentication/users.ts";
+import { pool } from "../infrastructure/database.ts";
 
 const [email, name] = process.argv.slice(2);
 if (!email || !name) {
