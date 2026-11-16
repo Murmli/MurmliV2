@@ -27,7 +27,7 @@ Die App meldet noch niemanden an, den Ablauf nutzen derzeit `AuthenticationTests
 
 - TypeScript in `src/auth/src`, Node führt es per Type Stripping direkt aus (`node src/main.ts`), ohne Build-Schritt. Erlaubt ist deshalb nur Syntax, die Node durch bloßes Entfernen der Typen ausführen kann (`erasableSyntaxOnly`), Importe tragen die Endung `.ts`.
 - Die Node-Version steht nur in `src/auth/.nvmrc`. Aspire erzeugt daraus beim Publish das Dockerfile (`node:26-alpine`), die CI liest sie in `setup-auth` (siehe [ci.md](ci.md)).
-- Paketversionen sind exakt gepinnt.
+- Paketversionen sind exakt gepinnt. `@better-auth/core` ist nur für `runWithTransaction` eine direkte Dependency und bleibt auf derselben Version wie `better-auth`.
 - Datenbank: lokal über `MURMLI_URI` mit Passwort (Container), in Azure mit Entra-Token (`@azure/postgresql-auth` mit `DefaultAzureCredential`, Identity `backend-identity`) als Nutzer `PGUSER`. `PGUSER` ist der Principal-Name von `backend-identity`, der AppHost setzt ihn nur im Publish-Mode.
 - Beim Start migriert `auth` sein Schema (siehe [database.md](database.md#schemas)), legt im Run-Mode den Test-Nutzer an und lauscht erst danach. Scheitert das, beendet es sich mit Fehler.
 - Endpunkte:
@@ -58,7 +58,7 @@ Die App meldet noch niemanden an, den Ablauf nutzen derzeit `AuthenticationTests
 
 ## Konto löschen
 
-`DELETE /v1/users/me` ruft `UserRegistry.DeleteAsync` auf und antwortet mit 204, wenn alles gelöscht ist. Die Schritte laufen ohne Transaktion, jeder lässt sich wiederholen:
+`DELETE /v1/users/me` ruft `UserRegistry.DeleteAsync` auf und antwortet mit 204, wenn alles gelöscht ist. Die Schritte laufen ohne gemeinsame Transaktion, jeder lässt sich wiederholen:
 
 1. Die eigene Id des Kontos lesen, nur für den Log. Sie fehlt, wenn der Nutzer nie `GET /v1/users/me` aufgerufen hat.
 2. Einen Löschvermerk (Better-Auth-ID, Zeitpunkt) in `identity.deleted_users` schreiben.
@@ -66,7 +66,7 @@ Die App meldet noch niemanden an, den Ablauf nutzen derzeit `AuthenticationTests
 4. Vermerke löschen, die älter als 24 Stunden sind.
 5. Den Nutzer in Better Auth löschen: `POST <AuthService:BaseAddress>/service/delete-user` mit dem Service-Key und `{"userId": "<Better-Auth-ID>"}`, Timeout 10 s. Die ID steht im Body, nicht in der Adresse, und damit weder in den Logs der HttpClientFactory noch im HttpClient-Span. Jede 2xx-Antwort gilt als Erfolg, jeder andere Status, ein Timeout oder ein Verbindungsfehler führt zu 502.
 
-`auth` löscht Sessions, Accounts und den Nutzer mit Better Auths eigenem Code (`internalAdapter.deleteUser`). Es antwortet mit 204, auch für unbekannte IDs, mit 401 ohne gültigen Service-Key und mit 400 bei ungültigem Body.
+`auth` löscht Sessions, Accounts und den Nutzer mit Better Auths eigenem Code (`internalAdapter.deleteUser`) in einer Transaktion: Scheitert ein Teil, bleibt der Nutzer vollständig erhalten. Es antwortet mit 204, auch für unbekannte IDs, mit 401 ohne gültigen Service-Key und mit 400 bei ungültigem Body.
 
 Scheitert ein Schritt, kann sich der Nutzer weiter anmelden und die Löschung wiederholen, auch mit demselben Token. Der Endpunkt reicht `RequestAborted` nicht weiter (siehe „Entscheidungen“).
 
@@ -114,6 +114,7 @@ Scheitert ein Schritt, kann sich der Nutzer weiter anmelden und die Löschung wi
 | Löschvermerk mit `iat` | Verworfen: bei der Kontoanlage prüfen, ob der Nutzer in Better Auth noch existiert. Die API hat keinen Lesezugriff auf Better Auth. |
 | Löschen über `/service/delete-user` mit Service-Key | Verworfen: Better Auths eingebautes `/delete-user` (`user.deleteUser`, bleibt deshalb aus), es braucht die Session des Nutzers und erlaubte Nutzern die Löschung an der API vorbei. Verworfen: `remove-user` des Admin-Plugins, es braucht einen Admin-Nutzer mit Passwort-Secret und öffnet Endpunkte für Ban, Impersonation und Nutzerlisten am öffentlichen Ingress. |
 | Better Auth als letzter Schritt der Löschung | Verworfen: zuerst in Better Auth löschen. Scheitert danach ein Schritt, kann sich der Nutzer nicht mehr anmelden und die Löschung nicht wiederholen. |
+| Löschung und Anlage in `auth` über `runWithTransaction` | `internalAdapter.deleteUser` löscht Sessions, Accounts und Nutzer in getrennten Statements, ohne Transaktion bliebe bei einem Fehler ein Nutzer ohne Anmeldemöglichkeit zurück. Verworfen: `context.adapter.transaction`, der `internalAdapter` nimmt die Transaktion nur aus dem AsyncLocalStorage, den `runWithTransaction` (`@better-auth/core/context`) setzt. Eine offene Transaktion hält ihren pg-Client ausgecheckt, deshalb hängt an jedem Client ein `error`-Listener: Ohne ihn beendet ein Verbindungsabbruch den Prozess. |
 | Mehrere Vermerke pro Nutzer | Verworfen: Upsert, EF Core 10 kann es nicht. Ein Insert reicht auch bei doppeltem Tippen und bei Wiederholungen. |
 | Löschung ohne `RequestAborted` | Die App darf sich direkt nach dem Tippen schließen, eine begonnene Löschung soll trotzdem durchlaufen. |
 | Nutzer in Azure per `az containerapp exec` und `npm run create-user` | Die Registrierung bleibt aus. Verworfen: Admin-Plugin oder zeitweise offene Registrierung. Verworfen: ein lokales Skript gegen Postgres in Azure, die Firewall lässt nur Azure zu. |

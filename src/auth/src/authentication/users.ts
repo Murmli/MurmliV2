@@ -1,3 +1,4 @@
+import { runWithTransaction } from "@better-auth/core/context";
 import { auth } from "./auth.ts";
 
 export async function userExists(email: string): Promise<boolean> {
@@ -21,26 +22,25 @@ export async function createCredentialUser(
 		);
 	}
 	const passwordHash = await context.password.hash(password);
-	const user = await context.internalAdapter.createUser(
-		{ email, name, emailVerified: true },
-		{ method: "admin" },
-	);
-	try {
+	await runWithTransaction(context.adapter, async () => {
+		const user = await context.internalAdapter.createUser(
+			{ email, name, emailVerified: true },
+			{ method: "admin" },
+		);
 		await context.internalAdapter.linkAccount({
 			userId: user.id,
 			providerId: "credential",
 			accountId: user.id,
 			password: passwordHash,
 		});
-	} catch (error) {
-		await context.internalAdapter.deleteUser(user.id);
-		throw error;
-	}
+	});
 }
 
 export async function deleteUser(userId: string): Promise<void> {
 	const context = await auth.$context;
-	if (await context.internalAdapter.findUserById(userId)) {
-		await context.internalAdapter.deleteUser(userId);
-	}
+	await runWithTransaction(context.adapter, async () => {
+		if (await context.internalAdapter.findUserById(userId)) {
+			await context.internalAdapter.deleteUser(userId);
+		}
+	});
 }

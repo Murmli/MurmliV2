@@ -402,6 +402,7 @@ Hintergrund und Entscheidungen: [docs/authentication.md](docs/authentication.md)
 - `sub`, E-Mail und Token nie selbst loggen und nie in Span-Attribute schreiben.
 - `BETTER_AUTH_SECRET` kommt nur über den Secret-Parameter `better-auth-secret` und wird nie geändert, Rotation nur über `BETTER_AUTH_SECRETS`.
 - `jwks.keyPairConfig.alg` bleibt ES256, `user.deleteUser` von Better Auth bleibt aus.
+- `@better-auth/core` bleibt auf derselben Version wie `better-auth`.
 - `OpenApi:Enabled` nur in `appsettings.Development.json` und `appsettings.azure-dev.json` des AppHost setzen, sonst ist das OpenAPI-Dokument in weiteren Umgebungen ohne Anmeldung erreichbar.
 - Tests stellen eigene Tokens aus (`TestTokens`) und ersetzen `auth` durch `AuthServiceHttpMessageHandler`. Echte Tokens nur im End-to-End-Test `AuthenticationTests` gegen das lokal gestartete `auth`, kein Test spricht mit Azure.
 - `TokenValidationParameters` im Code nie ersetzen, die Werte kommen aus der Bindung von `Authentication:Schemes:Bearer`.
