@@ -4,8 +4,10 @@
 
 ## Schemas
 
-- `identity`: Nutzerkonten und Löschvermerke.
+- `identity`: Nutzerkonten mit Zuordnung zur Better-Auth-ID (`auth_user_id`) und Löschvermerke.
 - `products`: Produkte und Importläufe.
+- `better-auth`: die Tabellen von Better Auth (`user`, `session`, `account`, `verification`, `jwks`) mit Name und E-Mail der Nutzer, Passwort-Hashes, Sessions und den verschlüsselten privaten JWT-Schlüsseln. Das Schema gehört Better Auth (`database.schemaName` in `src/auth/src/auth.ts`), EF Core und die API greifen nie darauf zu (siehe [authentication.md](authentication.md#entscheidungen)). Wegen des Bindestrichs in eigenem SQL immer quotiert: `"better-auth"`.
+- `auth` migriert `better-auth` beim Start selbst, bevor es lauscht: `getMigrations` aus `better-auth/db/migration` vergleicht mit dem Live-Schema, ergänzt nur, ist idempotent und wirft bei unsicheren Änderungen. Ein Update von Better Auth kann so beim Start Spalten ergänzen, eine neue Pflichtspalte ohne Default verhindert den Start der neuen Revision. Es gibt keine Sperre, weil `auth` höchstens 1 Replica hat, mit mehr Replicas braucht es ein Advisory Lock.
 - `backend-identity` darf als Entra-Admin Schemas anlegen: `murmli` gehört in Azure `azure_pg_admin`, auf Dev am 2026-11-14 geprüft (`has_database_privilege(..., 'CREATE')` true, `CREATE SCHEMA` läuft).
 
 ## Produktsuche und Extensions
@@ -18,7 +20,7 @@
 
 ## Lokal
 
-Postgres-Container auf Host-Port 60123, User `postgres`, Passwort in den User Secrets des AppHost (`Parameters:postgres-password`). Aspire-Tests vergeben den Port zufällig und laufen deshalb auch neben einem gestarteten AppHost.
+Postgres-Container ohne Volume auf Host-Port 60123, User `postgres`, Passwort in den User Secrets des AppHost (`Parameters:postgres-password`). Die Daten überleben keinen Neustart des AppHost. Aspire-Tests vergeben den Port zufällig und laufen deshalb auch neben einem gestarteten AppHost.
 
 ## Entscheidungen
 
@@ -30,6 +32,7 @@ Postgres-Container auf Host-Port 60123, User `postgres`, Passwort in den User Se
 | Direkte Referenz auf `Microsoft.EntityFrameworkCore.Relational` | Alle Projekte nutzen dieselbe EF-Version wie die Migrationen, die Aspire-Integration allein zöge eine ältere Patch-Version. |
 | `MurmliDbContextDesignTimeFactory` | Die Aspire-Registrierung würde zur Design-Zeit ein Azure-Token holen. |
 | Migration beim Start von API und Job | Neue Tabellen gibt es direkt nach dem Deploy. Kestrel lauscht erst nach der Migration, die alte Revision bedient so lange weiter. EF Core sperrt Migrationen selbst (`LOCK TABLE` auf `__EFMigrationsHistory`), ein zweiter Prozess wartet. Weil die alte Revision gegen das migrierte Schema weiterläuft, bleiben Migrationen additiv und nullable. Die Migration der API läuft vor dem Host-Start und erzeugt deshalb nur Logs, keine Spans. Verworfen: eigener Migrationsjob bzw. Migration-Bundle, er bräuchte eine zusätzliche Ressource, Aspires EF-Migrations-Integration gibt es nur als Preview. |
+| Migration `ReplaceZitadelWithBetterAuth` bricht „additiv und nullable“ | Bewusst vor dem Live-Gang: Sie löscht alle Zeilen von `identity.users` und `identity.deleted_users` (Zitadel-IDs passen nie zu Better-Auth-IDs) und benennt `zitadel_user_id` samt Indizes in `auth_user_id` um. Beim Revisionswechsel auf Dev scheitert die alte API-Revision kurz. Verworfen: `InitialCreate` erneut squashen, es ist auf Dev schon angewandt. |
 | Restrisiko beim gleichzeitigen Start von API und Job | Stehen mehrere Migrationen aus, kann der zuerst gestartete Prozess eine vom anderen schon angewandte Migration erneut anwenden, weil EF Core die Historie nach jeder Migration nicht neu liest. Er scheitert dann mit einem Fehler beim Start, ein Neustart (Container App bzw. Retry des Jobs) heilt das. |
 | In der API keine eigenen Transaktionen und kein eigenes SQL | Die Retry-Strategie der Aspire-Integration (standardmäßig an) verträgt keine selbst gestarteten Transaktionen, nur der Produktimport schaltet sie dafür ab. Datenzugriff läuft über EF Core, eigenes SQL nur, wo EF Core es nicht kann (etwa `COPY` im Produktimport). |
 | Smart Enums per `HasConversion` | Verworfen: Thinktecture-EF-Paket, es ist an eine EF-Major gebunden. |

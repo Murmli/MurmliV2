@@ -333,8 +333,9 @@ Hintergrund und Entscheidungen: [docs/ci.md](docs/ci.md)
 - Lokal dieselben Checks wie die CI ausführen:
   - App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart run build_runner build`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze`, `fvm flutter test`.
   - Backend (`src/backend`): `dotnet format --verify-no-changes`, `dotnet test`, `dotnet restore --force -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904`.
+  - Auth (`src/auth`): `npm ci`, `npm run check`.
 - Generierte Dateien (`*.g.dart`, `*.gr.dart`, `*.freezed.dart`) werden nicht committet; CI erzeugt sie in der Composite-Action `.github/actions/setup-app` per build_runner.
-- Funde ohne Fix unterdrücken: Backend per `<NuGetAuditSuppress>` im csproj, App per `[[IgnoredVulns]]` in `src/app/osv-scanner.toml`.
+- Funde ohne Fix unterdrücken: Backend per `<NuGetAuditSuppress>` im csproj, App per `[[IgnoredVulns]]` in `src/app/osv-scanner.toml`, Auth per `[[IgnoredVulns]]` in `src/auth/osv-scanner.toml`.
 - Concurrency nur in `ci.yml` setzen. Ausnahme: `deploy.yml` und jeder weitere Workflow, der Dev ändert, bekommt die feste Gruppe `deploy-dev` mit `cancel-in-progress: false`, der aufrufende `deploy`-Job in `ci.yml` keine.
 
 ## Aspire und Azure
@@ -343,15 +344,17 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 
 | Befehl | Agent |
 | --- | --- |
-| `aspire publish --environment azure-dev` (ohne CLI: `dnx --yes aspire.cli@<SDK-Version des AppHost> -- publish --apphost <csproj> --environment azure-dev --output-path <Ordner> --non-interactive`; ohne `--environment` läuft der AppHost als Production und `WithZitadel()` bricht ab) | erlaubt |
+| `aspire publish --environment azure-dev` (ohne CLI: `dnx --yes aspire.cli@<SDK-Version des AppHost> -- publish --apphost <csproj> --environment azure-dev --output-path <Ordner> --non-interactive`; ohne `--environment` läuft der AppHost als Production und schreibt Artefakte, die von Dev abweichen) | erlaubt |
 | `aspire run`, `dotnet test` | nur, solange jede im Run-Mode referenzierte Azure-Ressource lokal als Container oder Emulator läuft (derzeit erfüllt) |
 | `aspire deploy`, `aspire destroy`, `aspire do` mit Provisionierungs- oder Deploy-Steps, `gh workflow run deploy.yml`, Re-run von Läufen auf `main` | nie, nur ein Mensch |
+| `az containerapp exec`, `npm run create-user` gegen Azure | nie, nur ein Mensch |
 
 - Jede neue Azure-Ressource, die eine App im Run-Mode referenziert, bekommt einen Container oder Emulator. Ausgenommen sind Ressourcen, die Aspire nur beim Publish anlegt (User-assigned Identities, Postgres-Entra-Admins, Container-Apps-Jobs).
-- Ohne Wert für `zitadel-service-user-token` startet die API bei `aspire run` und in Run-Mode-Tests nicht. Lokal als User-Secret `Parameters:zitadel-service-user-token` des AppHost oder als Umgebungsvariable `Parameters__zitadel_service_user_token`, in Tests als Argument `--Parameters:zitadel-service-user-token=...`. Ein Dummy-Wert reicht, solange niemand die Löschung lokal testet.
+- Ohne Werte für `better-auth-secret` und `auth-service-key` starten `auth` und die API bei `aspire run` und in Run-Mode-Tests nicht. Lokal als User-Secrets `Parameters:better-auth-secret` und `Parameters:auth-service-key` des AppHost (etwa `openssl rand -base64 32`), in Tests als Argumente `--Parameters:better-auth-secret=...` und `--Parameters:auth-service-key=...`.
+- `aspire run` und `dotnet test` brauchen Node in der Version aus `src/auth/.nvmrc` auf dem PATH.
 - `Azure:*`-Werte nur in `src/backend/Murmli.Backend.Aspire/appsettings.azure-<name>.json`, nie in andere appsettings oder User Secrets.
 - Subscription-ID und andere Azure-IDs nie ins Repo, im GitHub-Environment `development` nur als Secrets, nie als Variablen. `deploy.yml` reicht die Subscription-ID als `Azure__SubscriptionId` an den AppHost.
-- In `deploy.yml` behalten: einmaliger Retry von `aspire deploy`, Anmeldung über die `az`-Session mit Token-Abruf direkt nach dem Login, Resource-Strings ohne Schrägstrich am Ende. Braucht Aspire eine weitere Audience, sie dort ergänzen (sonst AADSTS700024). `~/.aspire/deployments` nie cachen oder hochladen.
+- In `deploy.yml` behalten: bis zu zwei Wiederholungen von `aspire deploy`, Anmeldung über die `az`-Session mit Token-Abruf direkt nach dem Login, Resource-Strings ohne Schrägstrich am Ende. Braucht Aspire eine weitere Audience, sie dort ergänzen (sonst AADSTS700024). `~/.aspire/deployments` nie cachen oder hochladen.
 - Die Version von `Aspire.AppHost.Sdk` nur im `Sdk`-Attribut des AppHost-csproj pflegen.
 - Neue Rollenzuweisungen im AppHost und neue Resource Provider erst einbauen, wenn ein Mensch sie in Azure vorbereitet hat (Bedingung erweitern bzw. Provider registrieren).
 - Die Registry im RBAC-Modus lassen.
@@ -359,7 +362,7 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 ### Ressourcen
 
 - Pro Service ein Ordner im AppHost (`src/backend/Murmli.Backend.Aspire`) mit `Extensions.cs` und `Add<Service>`-Extension, `AppHost.cs` verdrahtet nur.
-- Die Ressourcennamen `env`, `postgres`, `murmli`, `api`, `backend-identity`, `product-import`, `app-insights` und `zitadel-service-user-token` und das Naming-Schema der Umgebung nie ändern.
+- Die Ressourcennamen `env`, `postgres`, `murmli`, `api`, `auth`, `backend-identity`, `product-import`, `app-insights`, `better-auth-secret` und `auth-service-key` und das Naming-Schema der Umgebung nie ändern.
 - Jede App mit Datenbankzugriff bekommt `backend-identity` (`WithAzureUserAssignedIdentity`).
 - Nie verwenden: Aspire-Dashboard in Azure, ACA Express, Dedicated Workload Profiles, Private Endpoints, geplante Wartungsfenster.
 - Container-Apps-Probes erst beim ersten konkreten Bedarf ergänzen. Kein ServiceDefaults-Template, Telemetrie siehe „Telemetrie“.
@@ -372,6 +375,7 @@ Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 - Datenzugriff mit EF Core, eigenes SQL nur, wo EF Core es nicht kann.
 - In `OnConfiguring` keine Optionen ändern (auch kein `EFCore.NamingConventions`), snake_case explizit in den `IEntityTypeConfiguration`-Klassen setzen.
 - Pro Fachbereich ein Schema mit kleingeschriebenem Namen per `ToTable(name, schema)`, `__EFMigrationsHistory` und Extensions in `public` lassen. In Raw SQL Tabellen immer mit Schema nennen (`products.products`).
+- Das Schema `better-auth` gehört Better Auth: nur `auth` migriert es, EF Core und die API greifen nie darauf zu.
 - EF-Core-Pakete (auch `Microsoft.EntityFrameworkCore.Design`) bis [#14](https://github.com/Murmli/MurmliV2/issues/14) auf 10.x halten, die direkte Referenz auf `Microsoft.EntityFrameworkCore.Relational` nicht entfernen.
 - Migration anlegen (in `src/backend`): `dnx --yes dotnet-ef@<EF-Version> -- migrations add <Name> --project Murmli.Backend.Data`.
 - `MigrateAsync` nur im Job und beim Start der API aufrufen (`app.MigrateDatabaseAsync()` nach `Build()`, vor `RunAsync()`). Migrationen additiv und nullable halten, solange eine ältere Version von API oder Job noch laufen kann.
@@ -392,18 +396,21 @@ Hintergrund und Entscheidungen: [docs/api.md](docs/api.md)
 Hintergrund und Entscheidungen: [docs/authentication.md](docs/authentication.md)
 
 - Jeder Endpunkt ist nur mit Anmeldung erreichbar (Fallback-Policy). Ausnahmen per `AllowAnonymous()` nur für `/health`, das OpenAPI-Dokument und für Endpunkte, deren Issue ausdrücklich verlangt, dass sie anonym erreichbar sind, nie aus eigenem Ermessen.
-- Nutzerdaten hängen an `identity.users.id`, nie an der Zitadel-ID. Jede neue Art von Nutzerdaten gehört in die Löschung: in Postgres per Fremdschlüssel mit `ON DELETE CASCADE` auf `identity.users`, außerhalb von Postgres ausdrücklich in `UserRegistry.DeleteAsync` vor dem Zitadel-Aufruf.
-- `sub`, E-Mail und Token nie selbst loggen und nie in Span-Attribute schreiben. Einzige Ausnahme: die Adresse des Lösch-Aufrufs an Zitadel (`ZitadelUserClient`) trägt die Zitadel-ID und steht so in HttpClient-Logs und -Spans. Antwort-Bodies von Zitadel nie loggen.
-- `Zitadel:*`-Werte nur in den `appsettings.<Umgebung>.json` des AppHost, den PAT des Service-Users nie: Er kommt nur über den Secret-Parameter `zitadel-service-user-token`.
+- Die App spricht mit Better Auth nur zum Anmelden, Abmelden und Holen bzw. Erneuern des JWT, alles andere läuft über die API.
+- Die API greift nie auf die Tabellen von Better Auth zu (kein EF-Mapping, kein SQL), sie nutzt immer die HTTP-API von `auth`.
+- Nutzerdaten hängen an `identity.users.id`, nie an der Better-Auth-ID. Jede neue Art von Nutzerdaten gehört in die Löschung: in Postgres per Fremdschlüssel mit `ON DELETE CASCADE` auf `identity.users`, außerhalb von Postgres ausdrücklich in `UserRegistry.DeleteAsync` vor dem Aufruf von `auth`.
+- `sub`, E-Mail und Token nie selbst loggen und nie in Span-Attribute schreiben.
+- `BETTER_AUTH_SECRET` kommt nur über den Secret-Parameter `better-auth-secret` und wird nie geändert, Rotation nur über `BETTER_AUTH_SECRETS`.
+- `jwks.keyPairConfig.alg` bleibt ES256, `user.deleteUser` von Better Auth bleibt aus.
 - `OpenApi:Enabled` nur in `appsettings.Development.json` und `appsettings.azure-dev.json` des AppHost setzen, sonst ist das OpenAPI-Dokument in weiteren Umgebungen ohne Anmeldung erreichbar.
-- Tests stellen eigene Tokens aus (`TestTokens`), kein Test spricht mit Zitadel.
+- Tests stellen eigene Tokens aus (`TestTokens`) und ersetzen `auth` durch `AuthServiceHttpMessageHandler`. Echte Tokens nur im End-to-End-Test `AuthenticationTests` gegen das lokal gestartete `auth`, kein Test spricht mit Azure.
 - `TokenValidationParameters` im Code nie ersetzen, die Werte kommen aus der Bindung von `Authentication:Schemes:Bearer`.
 
 ## Telemetrie
 
 Hintergrund und Entscheidungen: [docs/telemetry.md](docs/telemetry.md)
 
-- Jeder Host ruft `builder.AddTelemetry()` nach dem Hinzufügen aller Konfigurationsquellen und vor `Build()` auf (es liest `Telemetry:RecordSensitiveData` beim Aufruf), jede App-Ressource im AppHost bekommt `.WithTelemetry(applicationInsights)`.
+- Jeder .NET-Host ruft `builder.AddTelemetry()` nach dem Hinzufügen aller Konfigurationsquellen und vor `Build()` auf (es liest `Telemetry:RecordSensitiveData` beim Aufruf), jede App-Ressource im AppHost bekommt `.WithTelemetry(applicationInsights)`.
 - Application Insights und die tägliche Obergrenze des Workspaces nur über `AddApplicationInsights` in `ApplicationInsights/Extensions.cs` des AppHost, den Wert der Obergrenze pro Umgebung nur in `appsettings.azure-<name>.json` (`LogAnalytics:DailyQuotaGb`). Der AppHost fügt Application Insights nur im Publish-Mode hinzu, nie im Run-Mode, sonst provisioniert Aspire es bei `aspire run` und `dotnet test` in Azure.
 - Eigene `ActivitySource`s und `Meter` heißen `Murmli.*`.
 - Keine Gesundheitsdaten in Logs, Span-Attributen, Span-Namen oder URLs.
@@ -412,6 +419,7 @@ Hintergrund und Entscheidungen: [docs/telemetry.md](docs/telemetry.md)
 - Kein `ConfigureHttpClientDefaults` mit Resilience-Handlern.
 - Hosts, die außerhalb von `RunAsync()` arbeiten (Job-Hosts, die API mit der Migration beim Start), entsorgen den Host selbst (`using var host` bzw. `await using var app`), sonst geht die zuletzt gepufferte Telemetrie verloren.
 - Den Sampler nur in `AddTelemetry()` setzen und nach allen Exportern registrieren, er verwirft `/health` samt Kind-Spans.
+- `auth` startet die Telemetrie in `src/auth/src/telemetry.ts`, `src/main.ts` lädt sie vor allen anderen Modulen. Die OpenTelemetry-Pakete in `src/auth` bleiben auf der SDK-2.x-Linie, bis `@azure/monitor-opentelemetry-exporter` SDK 3.x unterstützt.
 
 ## Produktimport
 
