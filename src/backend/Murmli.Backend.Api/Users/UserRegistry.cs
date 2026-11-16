@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Murmli.Backend.Api.Zitadel;
+using Murmli.Backend.Api.AuthService;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Identity;
 using Npgsql;
@@ -9,7 +9,7 @@ namespace Murmli.Backend.Api.Users;
 
 internal sealed partial class UserRegistry(
     MurmliDbContext context,
-    ZitadelUserClient zitadelUserClient,
+    AuthServiceClient authServiceClient,
     TimeProvider timeProvider,
     ILogger<UserRegistry> logger
 )
@@ -17,17 +17,17 @@ internal sealed partial class UserRegistry(
     private static readonly TimeSpan DeletionRecordRetention = TimeSpan.FromHours(24);
 
     public async Task<User?> GetOrCreateAsync(
-        string zitadelUserId,
+        string authUserId,
         DateTimeOffset? issuedAt,
         CancellationToken cancellationToken = default
     )
     {
-        if (await FindAsync(zitadelUserId, cancellationToken) is { } existingUser)
+        if (await FindAsync(authUserId, cancellationToken) is { } existingUser)
         {
             return existingUser;
         }
 
-        if (await IsDeletedAfterIssuanceAsync(zitadelUserId, issuedAt, cancellationToken))
+        if (await IsDeletedAfterIssuanceAsync(authUserId, issuedAt, cancellationToken))
         {
             return null;
         }
@@ -35,7 +35,7 @@ internal sealed partial class UserRegistry(
         var user = new User
         {
             Id = Guid.NewGuid(),
-            ZitadelUserId = zitadelUserId,
+            AuthUserId = authUserId,
             CreatedAt = timeProvider.GetUtcNow(),
         };
         context.Users.Add(user);
@@ -48,31 +48,31 @@ internal sealed partial class UserRegistry(
         {
             // A concurrent first request of the same user inserted the row in the meantime, a concurrent deletion may have removed it again
             context.ChangeTracker.Clear();
-            return await FindAsync(zitadelUserId, cancellationToken);
+            return await FindAsync(authUserId, cancellationToken);
         }
 
         LogUserCreated(user.Id);
         return user;
     }
 
-    public async Task<bool> DeleteAsync(string zitadelUserId, CancellationToken cancellationToken = default)
+    public async Task<bool> DeleteAsync(string authUserId, CancellationToken cancellationToken = default)
     {
         var userId = await context
-            .Users.Where(user => user.ZitadelUserId == zitadelUserId)
+            .Users.Where(user => user.AuthUserId == authUserId)
             .Select(user => (Guid?)user.Id)
             .SingleOrDefaultAsync(cancellationToken);
 
         var now = timeProvider.GetUtcNow();
-        context.DeletedUsers.Add(new DeletedUser { ZitadelUserId = zitadelUserId, DeletedAt = now });
+        context.DeletedUsers.Add(new DeletedUser { AuthUserId = authUserId, DeletedAt = now });
         await context.SaveChangesAsync(cancellationToken);
 
-        await context.Users.Where(user => user.ZitadelUserId == zitadelUserId).ExecuteDeleteAsync(cancellationToken);
+        await context.Users.Where(user => user.AuthUserId == authUserId).ExecuteDeleteAsync(cancellationToken);
 
         await context
             .DeletedUsers.Where(deletedUser => deletedUser.DeletedAt < now - DeletionRecordRetention)
             .ExecuteDeleteAsync(cancellationToken);
 
-        if (!await zitadelUserClient.TryDeleteUserAsync(zitadelUserId, cancellationToken))
+        if (!await authServiceClient.TryDeleteUserAsync(authUserId, cancellationToken))
         {
             return false;
         }
@@ -81,16 +81,16 @@ internal sealed partial class UserRegistry(
         return true;
     }
 
-    private Task<User?> FindAsync(string zitadelUserId, CancellationToken cancellationToken) =>
-        context.Users.SingleOrDefaultAsync(user => user.ZitadelUserId == zitadelUserId, cancellationToken);
+    private Task<User?> FindAsync(string authUserId, CancellationToken cancellationToken) =>
+        context.Users.SingleOrDefaultAsync(user => user.AuthUserId == authUserId, cancellationToken);
 
     private Task<bool> IsDeletedAfterIssuanceAsync(
-        string zitadelUserId,
+        string authUserId,
         DateTimeOffset? issuedAt,
         CancellationToken cancellationToken
     ) =>
         context.DeletedUsers.AnyAsync(
-            deletedUser => deletedUser.ZitadelUserId == zitadelUserId && (issuedAt == null || deletedUser.DeletedAt >= issuedAt),
+            deletedUser => deletedUser.AuthUserId == authUserId && (issuedAt == null || deletedUser.DeletedAt >= issuedAt),
             cancellationToken
         );
 }

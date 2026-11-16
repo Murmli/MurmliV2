@@ -1,16 +1,16 @@
-using System.Net;
+using System.Net.Http.Json;
 using Microsoft.Extensions.Logging;
 
-namespace Murmli.Backend.Api.Zitadel;
+namespace Murmli.Backend.Api.AuthService;
 
-internal sealed partial class ZitadelUserClient(HttpClient httpClient, ILogger<ZitadelUserClient> logger)
+internal sealed partial class AuthServiceClient(HttpClient httpClient, ILogger<AuthServiceClient> logger)
 {
-    public async Task<bool> TryDeleteUserAsync(string zitadelUserId, CancellationToken cancellationToken = default)
+    public async Task<bool> TryDeleteUserAsync(string authUserId, CancellationToken cancellationToken = default)
     {
         try
         {
-            using var response = await httpClient.DeleteAsync($"v2/users/{Uri.EscapeDataString(zitadelUserId)}", cancellationToken);
-            if (response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.NotFound)
+            using var response = await httpClient.PostAsJsonAsync("service/delete-user", new DeleteUserRequest(authUserId), cancellationToken);
+            if (response.IsSuccessStatusCode)
             {
                 return true;
             }

@@ -4,9 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
+using Murmli.Backend.Api.AuthService;
 using Murmli.Backend.Api.Products;
 using Murmli.Backend.Api.Users;
-using Murmli.Backend.Api.Zitadel;
 using Murmli.Backend.Data.Extensions;
 
 namespace Murmli.Backend.Api.Extensions;
@@ -23,16 +23,16 @@ public static class HostApplicationBuilderExtensions
             .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().RequireClaim(JwtRegisteredClaimNames.Sub).Build());
 
         builder
-            .Services.AddOptions<ZitadelOptions>()
-            .BindConfiguration(ZitadelOptions.SectionName)
+            .Services.AddOptions<AuthServiceOptions>()
+            .BindConfiguration(AuthServiceOptions.SectionName)
             .ValidateDataAnnotations()
             .ValidateOnStart();
-        builder.Services.AddHttpClient<ZitadelUserClient>(
+        builder.Services.AddHttpClient<AuthServiceClient>(
             (services, client) =>
             {
-                var options = services.GetRequiredService<IOptions<ZitadelOptions>>().Value;
-                client.BaseAddress = options.Authority;
-                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ServiceUserToken);
+                var options = services.GetRequiredService<IOptions<AuthServiceOptions>>().Value;
+                client.BaseAddress = options.BaseAddress;
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.Key);
                 client.Timeout = TimeSpan.FromSeconds(10);
             }
         );

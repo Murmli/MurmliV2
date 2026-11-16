@@ -9,10 +9,10 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
     {
         builder.ToTable("users", IdentitySchema.Name);
         builder.HasKey(user => user.Id).HasName("pk_users");
-        builder.HasIndex(user => user.ZitadelUserId).IsUnique().HasDatabaseName("ix_users_zitadel_user_id");
+        builder.HasIndex(user => user.AuthUserId).IsUnique().HasDatabaseName("ix_users_auth_user_id");
 
         builder.Property(user => user.Id).HasColumnName("id").ValueGeneratedNever();
-        builder.Property(user => user.ZitadelUserId).HasColumnName("zitadel_user_id");
+        builder.Property(user => user.AuthUserId).HasColumnName("auth_user_id");
         builder.Property(user => user.CreatedAt).HasColumnName("created_at");
     }
 }

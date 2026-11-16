@@ -13,11 +13,11 @@ internal static class AppHostEnvironment
         var cancellationToken = TestContext.Current.CancellationToken;
         var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Murmli_Backend_Aspire>(args, cancellationToken);
         await using var app = await appHost.BuildAsync(cancellationToken);
-        var project = appHost.Resources.OfType<ProjectResource>().Single(resource => resource.Name == resourceName);
+        var resource = appHost.Resources.Single(resource => resource.Name == resourceName);
 
         // Run mode would resolve endpoints that only exist in a started app, publish mode yields expressions instead
         var configuration = await ExecutionConfigurationBuilder
-            .Create(project)
+            .Create(resource)
             .WithEnvironmentVariablesConfig()
             .BuildAsync(
                 new DistributedApplicationExecutionContext(

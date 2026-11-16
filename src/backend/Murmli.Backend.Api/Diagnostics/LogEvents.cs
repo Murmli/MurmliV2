@@ -6,5 +6,5 @@ internal static class LogEvents
 
     public const int UserDeleted = 2001;
 
-    public const int ZitadelUserDeletionFailed = 2002;
+    public const int AuthUserDeletionFailed = 2002;
 }
