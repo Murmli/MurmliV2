@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Net.Sockets;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Murmli.Backend.Api.Tests.Infrastructure;
@@ -12,6 +13,21 @@ namespace Murmli.Backend.Api.Tests.Users;
 public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<PostgresFixture>
 {
     private readonly string connectionString = postgres.CreateDatabaseConnectionString();
+
+    public static TheoryData<Exception> AuthServiceTransportFailures =>
+        new()
+        {
+            // HttpClient reports its own timeout as a TaskCanceledException wrapping a TimeoutException
+            new TaskCanceledException(
+                "The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.",
+                new TimeoutException()
+            ),
+            new HttpRequestException(
+                HttpRequestError.ConnectionError,
+                "Connection refused (auth.test:80)",
+                new SocketException((int)SocketError.ConnectionRefused)
+            ),
+        };
 
     [Fact]
     public async Task GetMe_WithoutToken_ReturnsUnauthorized()
@@ -103,6 +119,25 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
         api.AuthService.ResponseStatusCode = HttpStatusCode.InternalServerError;
         Assert.Equal(HttpStatusCode.BadGateway, await DeleteMeAsync(api, token));
         api.AuthService.ResponseStatusCode = HttpStatusCode.NoContent;
+
+        var statusCode = await DeleteMeAsync(api, token);
+
+        Assert.Equal(HttpStatusCode.NoContent, statusCode);
+        Assert.Equal(2, api.AuthService.Requests.Count);
+        Assert.Empty(await ReadUsersAsync(api));
+    }
+
+    [Theory]
+    [MemberData(nameof(AuthServiceTransportFailures))]
+    public async Task DeleteMe_AuthServiceDoesNotAnswer_AllowsRetryWithSameToken(Exception transportFailure)
+    {
+        const string authUserId = "AuthUser0000000000000000000001";
+        await using var api = await ApiHost.StartAsync(connectionString);
+        await GetMeAsync(api, authUserId);
+        var token = TestTokens.Create(authUserId);
+        api.AuthService.TransportFailure = transportFailure;
+        Assert.Equal(HttpStatusCode.BadGateway, await DeleteMeAsync(api, token));
+        api.AuthService.TransportFailure = null;
 
         var statusCode = await DeleteMeAsync(api, token);
 

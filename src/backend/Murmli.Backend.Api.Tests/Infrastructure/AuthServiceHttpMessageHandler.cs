@@ -9,6 +9,8 @@ internal sealed class AuthServiceHttpMessageHandler : HttpMessageHandler
 
     public HttpStatusCode ResponseStatusCode { get; set; } = HttpStatusCode.NoContent;
 
+    public Exception? TransportFailure { get; set; }
+
     public IReadOnlyCollection<AuthServiceRequest> Requests => requests;
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -17,6 +19,11 @@ internal sealed class AuthServiceHttpMessageHandler : HttpMessageHandler
         requests.Enqueue(
             new AuthServiceRequest(request.Method, request.RequestUri!.AbsolutePath, request.Headers.Authorization?.ToString(), body)
         );
+        if (TransportFailure is not null)
+        {
+            throw TransportFailure;
+        }
+
         return new HttpResponseMessage(ResponseStatusCode);
     }
 }
