@@ -17,3 +17,8 @@ export const pool = process.env.MURMLI_PASSWORD
 pool.on("error", (error) => {
 	console.error("An idle database client failed.", error);
 });
+
+// pg-pool only listens on idle clients, an error on a checked-out client without a listener would end the process. The failed query reports it.
+pool.on("connect", (client) => {
+	client.on("error", () => {});
+});
