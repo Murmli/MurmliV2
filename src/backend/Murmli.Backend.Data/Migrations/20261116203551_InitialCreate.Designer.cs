@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Murmli.Backend.Data.Migrations
 {
     [DbContext(typeof(MurmliDbContext))]
-    [Migration("20261116191909_ReplaceZitadelWithBetterAuth")]
-    partial class ReplaceZitadelWithBetterAuth
+    [Migration("20261116203551_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
