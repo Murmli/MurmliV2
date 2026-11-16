@@ -50,7 +50,8 @@ public static class Extensions
 
         if (builder.ExecutionContext.IsPublishMode)
         {
-            auth.WithEnvironment("PGUSER", identity.Resource.PrincipalName);
+            // Publish only, in run mode the installer would remove biome and tsc from node_modules
+            auth.WithEnvironment("PGUSER", identity.Resource.PrincipalName).WithNpm(installArgs: ["--omit=dev"]);
         }
         else
         {

@@ -1,3 +1,4 @@
+using Aspire.Hosting.JavaScript;
 using Murmli.Backend.Aspire.Tests.Infrastructure;
 
 namespace Murmli.Backend.Aspire.Tests.Auth;
@@ -22,6 +23,22 @@ public class ExtensionsTests
         Assert.Equal("test@murmli.de", environment["SEED_USER_EMAIL"]);
         Assert.Equal("password", environment["SEED_USER_PASSWORD"]);
         Assert.DoesNotContain("PGUSER", environment.Keys);
+    }
+
+    [Fact]
+    public async Task AddAuth_PublishMode_InstallsWithoutDevDependencies()
+    {
+        var arguments = await GetInstallArgumentsAsync(AppHostEnvironment.PublishModeArguments);
+
+        Assert.Contains("--omit=dev", arguments);
+    }
+
+    [Fact]
+    public async Task AddAuth_RunMode_InstallsDevDependencies()
+    {
+        var arguments = await GetInstallArgumentsAsync([]);
+
+        Assert.DoesNotContain("--omit=dev", arguments);
     }
 
     [Fact]
@@ -60,5 +77,16 @@ public class ExtensionsTests
         var environment = await AppHostEnvironment.GetAsync("api", AppHostEnvironment.PublishModeArguments);
 
         Assert.DoesNotContain("Authentication__Schemes__Bearer__RequireHttpsMetadata", environment.Keys);
+    }
+
+    private static async Task<string[]> GetInstallArgumentsAsync(string[] arguments)
+    {
+        await using var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Murmli_Backend_Aspire>(
+            arguments,
+            TestContext.Current.CancellationToken
+        );
+
+        var auth = appHost.Resources.Single(resource => resource.Name == "auth");
+        return auth.Annotations.OfType<JavaScriptInstallCommandAnnotation>().Last().Args;
     }
 }

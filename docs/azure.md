@@ -8,7 +8,7 @@ Betriebsdoku (Einrichtung, Deploy-Ablauf): [BackOffice, docs/03_Betrieb/Deployme
 - `aspire publish` und `aspire deploy` immer mit `--environment azure-<name>`. Ohne läuft der AppHost als Production: `aspire publish` gelingt, schreibt aber Artefakte, die von Dev abweichen (kein OpenAPI-Dokument, kein `Telemetry:RecordSensitiveData`, keine tägliche Obergrenze des Workspaces, Registry-SKU Basic).
 - Dev deployt nur `deploy.yml`: GitHub-Environment `development` (nur `main`), OIDC als Managed Identity mit Contributor und einem auf AcrPull beschränkten RBAC Administrator auf `rg-murmli-dev`.
 - `deploy.yml` liest die Aspire-CLI-Version aus dem `Sdk`-Attribut (`Aspire.AppHost.Sdk`) des AppHost-csproj.
-- Das Image von `auth` baut Aspire aus einem generierten Dockerfile (Node-Version aus `src/auth/.nvmrc`, `node:26-alpine`) mit Docker auf dem Runner.
+- Das Image von `auth` baut Aspire aus einem generierten Dockerfile (Node-Version aus `src/auth/.nvmrc`, `node:26-alpine`, nur `dependencies`) mit Docker auf dem Runner.
 
 ## Secret-Parameter
 
