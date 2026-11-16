@@ -354,7 +354,7 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 - `aspire run` und `dotnet test` brauchen Node in der Version aus `src/auth/.nvmrc` auf dem PATH.
 - `Azure:*`-Werte nur in `src/backend/Murmli.Backend.Aspire/appsettings.azure-<name>.json`, nie in andere appsettings oder User Secrets.
 - Subscription-ID und andere Azure-IDs nie ins Repo, im GitHub-Environment `development` nur als Secrets, nie als Variablen. `deploy.yml` reicht die Subscription-ID als `Azure__SubscriptionId` an den AppHost.
-- In `deploy.yml` behalten: bis zu zwei Wiederholungen von `aspire deploy`, Anmeldung über die `az`-Session mit Token-Abruf direkt nach dem Login, Resource-Strings ohne Schrägstrich am Ende. Braucht Aspire eine weitere Audience, sie dort ergänzen (sonst AADSTS700024). `~/.aspire/deployments` nie cachen oder hochladen.
+- In `deploy.yml` behalten: `shell: bash` am Step „Deploy“ (nur damit läuft das Skript mit `pipefail`), bis zu zwei Wiederholungen von `aspire deploy`, Anmeldung über die `az`-Session mit Token-Abruf direkt nach dem Login, Resource-Strings ohne Schrägstrich am Ende. Braucht Aspire eine weitere Audience, sie dort ergänzen (sonst AADSTS700024). `~/.aspire/deployments` nie cachen oder hochladen.
 - Die Version von `Aspire.AppHost.Sdk` nur im `Sdk`-Attribut des AppHost-csproj pflegen.
 - Neue Rollenzuweisungen im AppHost und neue Resource Provider erst einbauen, wenn ein Mensch sie in Azure vorbereitet hat (Bedingung erweitern bzw. Provider registrieren).
 - Die Registry im RBAC-Modus lassen.

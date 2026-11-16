@@ -30,6 +30,7 @@ Betriebsdoku (Einrichtung, Deploy-Ablauf): [BackOffice, docs/03_Betrieb/Deployme
 | Subscription-ID per Secret | Das Repo ist öffentlich. |
 | `Azure:*`-Werte nur in `appsettings.azure-<name>.json` | Sonst bindet sie auch `aspire run`. |
 | Bis zu zwei Wiederholungen von `aspire deploy` | Aspire provisioniert pro App mit Datenbankzugriff (derzeit drei: `api`, `auth`, `product-import`) ein eigenes Postgres-Admin-Modul, die Module laufen parallel, Flexible Server kann das mit `ServerIsBusy` ablehnen. Jede Wiederholung nutzt den Deploy-Stand auf dem Runner und wiederholt nur gescheiterte Module. |
+| `shell: bash` am Step „Deploy“ | Ohne `shell` startet der Runner `bash -e`, erst `shell: bash` ergänzt `-o pipefail`. Ohne `pipefail` meldete der Step ein gescheitertes `git ls-remote` als „Skipped“ und endete grün. |
 | `~/.aspire/deployments` nie cachen oder hochladen | Enthält Subscription und Ressourcen-IDs. |
 | Rollenzuweisung, Resource Provider erst nach Vorbereitung in Azure | Sonst scheitert der Deploy. Application Insights braucht den Resource Provider `Microsoft.Insights`, ein Mensch registriert ihn vor dem ersten Deploy. |
 | Registry im RBAC-Modus | Verworfen: ABAC-Modus, dort scheitern Push und Pull. |

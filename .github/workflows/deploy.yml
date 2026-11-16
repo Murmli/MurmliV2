@@ -48,6 +48,8 @@ jobs:
           done
       - name: Deploy
         id: deploy
+        # Only an explicit shell adds pipefail, without it a failing git ls-remote is reported as skipped
+        shell: bash
         env:
           Azure__SubscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           # The default 13 seconds for each az call time out on GitHub runners: https://github.com/microsoft/aspire/issues/13904
