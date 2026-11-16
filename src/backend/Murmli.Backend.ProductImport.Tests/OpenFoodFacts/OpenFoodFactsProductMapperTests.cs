@@ -169,6 +169,52 @@ public class OpenFoodFactsProductMapperTests
     [Fact]
     public void Map_EmptyCode_ReturnsNull() => Assert.Null(Map(CreateExportLine(code: "", germanName: "Brot")));
 
+    [Theory]
+    [InlineData("ja!, Rewe, ja! Rewe", "ja!, Rewe, ja! Rewe")]
+    [InlineData(" Re\u0000we ", "Rewe")]
+    [InlineData("", null)]
+    [InlineData("   ", null)]
+    [InlineData(null, null)]
+    public void Map_Brands_ReturnsCleanedBrandText(string? brands, string? expectedBrand)
+    {
+        var product = Map(CreateExportLine(germanName: "Brot", brands: brands));
+
+        Assert.NotNull(product);
+        Assert.Equal(expectedBrand, product.Brand);
+    }
+
+    [Theory]
+    [InlineData("Gefüllte Halbbitterschokolade", "Dark chocolate", "Gefüllte Halbbitterschokolade")]
+    [InlineData(null, "Dark chocolate", "Dark chocolate")]
+    [InlineData("  ", "Dark chocolate", "Dark chocolate")]
+    [InlineData(" Scho\u0000kolade ", null, "Schokolade")]
+    [InlineData("", "", null)]
+    [InlineData(null, null, null)]
+    public void Map_GenericName_ReturnsGermanOrMainLanguageGenericName(
+        string? germanGenericName,
+        string? genericName,
+        string? expectedGenericName
+    )
+    {
+        var product = Map(CreateExportLine(germanName: "Brot", germanGenericName: germanGenericName, genericName: genericName));
+
+        Assert.NotNull(product);
+        Assert.Equal(expectedGenericName, product.GenericName);
+    }
+
+    [Theory]
+    [InlineData(25950000039, 25950000039d)]
+    [InlineData("12", 12d)]
+    [InlineData(null, null)]
+    [InlineData("abc", null)]
+    public void Map_PopularityKey_ReturnsNumber(object? popularityKey, double? expectedPopularityKey)
+    {
+        var product = Map(CreateExportLine(germanName: "Brot", popularityKey: popularityKey));
+
+        Assert.NotNull(product);
+        Assert.Equal(expectedPopularityKey, product.PopularityKey);
+    }
+
     private static Product? Map(string exportLine)
     {
         using var document = JsonDocument.Parse(exportLine);
@@ -179,7 +225,11 @@ public class OpenFoodFactsProductMapperTests
         string code = "4000000000010",
         string? germanName = null,
         string? englishName = null,
-        string? name = null
+        string? name = null,
+        string? brands = null,
+        string? germanGenericName = null,
+        string? genericName = null,
+        object? popularityKey = null
     )
     {
         Dictionary<string, object?> product = new()
@@ -189,6 +239,10 @@ public class OpenFoodFactsProductMapperTests
             ["product_name_de"] = germanName,
             ["product_name_en"] = englishName,
             ["product_name"] = name,
+            ["brands"] = brands,
+            ["generic_name_de"] = germanGenericName,
+            ["generic_name"] = genericName,
+            ["popularity_key"] = popularityKey,
         };
         return JsonSerializer.Serialize(product.Where(property => property.Value is not null).ToDictionary());
     }

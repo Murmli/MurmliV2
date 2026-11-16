@@ -10,9 +10,12 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.ToTable("products", ProductsSchema.Name);
         builder.HasKey(product => product.Code).HasName("pk_products");
         builder.HasIndex(product => product.Name).HasDatabaseName("ix_products_name_trigram").HasMethod("gin").HasOperators("gin_trgm_ops");
+        builder.HasIndex(product => product.Brand).HasDatabaseName("ix_products_brand_trigram").HasMethod("gin").HasOperators("gin_trgm_ops");
 
         builder.Property(product => product.Code).HasColumnName("code");
         builder.Property(product => product.Name).HasColumnName("name");
+        builder.Property(product => product.Brand).HasColumnName("brand");
+        builder.Property(product => product.GenericName).HasColumnName("generic_name");
         builder.Property(product => product.IsPerHundredMilliliters).HasColumnName("is_per_hundred_milliliters");
         builder.Property(product => product.EnergyKilojoules).HasColumnName("energy_kilojoules");
         builder.Property(product => product.EnergyKilojoulesIsEstimated).HasColumnName("energy_kilojoules_is_estimated");
@@ -30,5 +33,6 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(product => product.AddedSugarsIsEstimated).HasColumnName("added_sugars_is_estimated");
         builder.Property(product => product.Proteins).HasColumnName("proteins");
         builder.Property(product => product.ProteinsIsEstimated).HasColumnName("proteins_is_estimated");
+        builder.Property(product => product.PopularityKey).HasColumnName("popularity_key");
     }
 }

@@ -376,7 +376,7 @@ Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 - Migration anlegen (in `src/backend`): `dnx --yes dotnet-ef@<EF-Version> -- migrations add <Name> --project Murmli.Backend.Data`.
 - `MigrateAsync` nur im Job und beim Start der API aufrufen (`app.MigrateDatabaseAsync()` nach `Build()`, vor `RunAsync()`). Migrationen additiv und nullable halten, solange eine ältere Version von API oder Job noch laufen kann.
 - Smart Enums (`[SmartEnum<string>]`) per `HasConversion(status => status.Key, key => <Typ>.Get(key))` als `text` speichern, nicht über das Thinktecture-EF-Paket.
-- Namenssuche nur per `EF.Functions.ILike(product.Name, "%" + term + "%", "\\")` mit selbst escaptem `%`, `_` und `\` und mindestens 3 Zeichen, nie per `Contains` oder `ToLower().Contains`.
+- Produktsuche pro Wort per `EF.Functions.ILike(spalte, "%" + wort + "%", "\\")` auf Name oder Marke, jedes Wort als eigener Parameter, mit selbst escaptem `%`, `_` und `\`. Mindestens ein Wort braucht 3 Zeichen, kürzere filtern nur mit. Nie `Contains`, `ToLower().Contains` oder ein `All` über ein Array von Wörtern (wird zu `unnest`, ohne Index).
 - Neue Postgres-Extensions in `azure.extensions` in `Database/Extensions.cs` des AppHost eintragen (`DependsOn` behalten), nie im Portal.
 
 ## API

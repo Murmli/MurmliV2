@@ -17,8 +17,24 @@ Die API liefert unter `/openapi/v1.json` ein OpenAPI-3.2-Dokument, das alle Endp
 - Eingeschaltet ist es nur lokal und in Azure Dev: `OpenApi:Enabled` steht in `appsettings.Development.json` und `appsettings.azure-dev.json` des AppHost, `AddApi()` des AppHost reicht den Wert als `OpenApi__Enabled` an die API. Dort ist das Dokument ohne Anmeldung erreichbar.
 - In jeder anderen Umgebung mappt die API die Route nicht: ohne Anmeldung antwortet sie mit 401 (die Fallback-Policy gilt auch für unbekannte Routen), mit Anmeldung mit 404.
 
+## Produktsuche
+
+`GET /v1/products?search=<Begriff>` sucht Produkte, die Regeln der Abfrage stehen in [database.md](database.md#produktsuche-und-extensions). Hat kein Wort des Begriffs mindestens 3 Zeichen, antwortet die API mit 400 als Validation Problem mit `errors.search`.
+
+Die Treffer (höchstens 25) sind so sortiert, jede Stufe entscheidet nur bei Gleichstand der vorigen ([#74](https://github.com/Murmli/MurmliV2/issues/74)):
+
+1. Treffer über den Code, auch ohne Nährwerte.
+2. Produkte mit Kalorienwert vor Produkten ohne.
+3. Mehr ausgefüllte Nährwerte (von 8) vor weniger.
+4. Name beginnt mit dem Suchbegriff.
+5. Höhere Beliebtheit (`popularity_key`) vor niedrigerer, ohne Beliebtheit gilt als am wenigsten beliebt.
+6. Name, dann Code.
+
+Produkte ohne Nährwerte bleiben auffindbar, rutschen aber nach hinten. Thekenartikel brauchen keine eigene Regel: Ihr Code wechselt mit jeder Packung und meist fehlen Nährwerte, sie rutschen also ohnehin nach hinten.
+
 ## Tests
 
+- `ProductEndpointsTests` in `Murmli.Backend.Api.Tests` deckt die Produktsuche ab.
 - `EndpointRouteBuilderExtensionsTests` in `Murmli.Backend.Api.Tests` deckt das OpenAPI-Dokument ab (erreichbar, wenn eingeschaltet, Version 3.2, nur Pfade unter `/v1`, 401 und 404, wenn ausgeschaltet) und dass Pfade ohne Version mit 404 antworten.
 - `Api/ExtensionsTests` in `Murmli.Backend.Aspire.Tests` deckt das Weiterreichen des Schalters `OpenApi:Enabled` ab.
 
@@ -29,3 +45,5 @@ Die API liefert unter `/openapi/v1.json` ein OpenAPI-3.2-Dokument, das alle Endp
 | Präfix per `MapGroup` statt Asp.Versioning | Asp.Versioning hat noch kein Release für .NET 11, sein OpenAPI-Paket hängt an Microsoft.OpenApi 2.x, ASP.NET Core 11 braucht 3.x. Der Wechsel ist [#68](https://github.com/Murmli/MurmliV2/issues/68) und behält Pfade und Dokumentnamen. |
 | Kein `WithGroupName("v1")` | Mit nur dem Dokument `v1` landen Endpunkte ohne Gruppennamen ohnehin darin. Mit einer zweiten Version setzt Asp.Versioning die Gruppennamen. |
 | Schalter `OpenApi:Enabled` statt `IsDevelopment()` | Die API läuft in Azure Dev als Production, `Development` setzt nur `aspire run` über die launchSettings. `IsDevelopment()` schlösse Dev aus. |
+| Validierungsfehler als `TypedResults.ValidationProblem` (400) | `HttpValidationProblemDetails` schreibt sich selbst, `AddProblemDetails` ist dafür nicht nötig. |
+| Suchbegriff im Query-String | Suchbegriffe gelten nicht als Gesundheitsdaten, die Regel „Keine Gesundheitsdaten in URLs“ greift deshalb nicht. |

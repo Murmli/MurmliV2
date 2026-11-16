@@ -10,6 +10,10 @@ public class Product
 
     public required string Name { get; set; }
 
+    public string? Brand { get; set; }
+
+    public string? GenericName { get; set; }
+
     public bool IsPerHundredMilliliters { get; set; }
 
     public double? EnergyKilojoules { get; set; }
@@ -43,4 +47,6 @@ public class Product
     public double? Proteins { get; set; }
 
     public bool ProteinsIsEstimated { get; set; }
+
+    public double? PopularityKey { get; set; }
 }

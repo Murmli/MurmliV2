@@ -89,6 +89,10 @@ namespace Murmli.Backend.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("added_sugars_is_estimated");
 
+                    b.Property<string>("Brand")
+                        .HasColumnType("text")
+                        .HasColumnName("brand");
+
                     b.Property<double?>("Carbohydrates")
                         .HasColumnType("double precision")
                         .HasColumnName("carbohydrates");
@@ -121,6 +125,10 @@ namespace Murmli.Backend.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("fat_is_estimated");
 
+                    b.Property<string>("GenericName")
+                        .HasColumnType("text")
+                        .HasColumnName("generic_name");
+
                     b.Property<bool>("IsPerHundredMilliliters")
                         .HasColumnType("boolean")
                         .HasColumnName("is_per_hundred_milliliters");
@@ -129,6 +137,10 @@ namespace Murmli.Backend.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("name");
+
+                    b.Property<double?>("PopularityKey")
+                        .HasColumnType("double precision")
+                        .HasColumnName("popularity_key");
 
                     b.Property<double?>("Proteins")
                         .HasColumnType("double precision")
@@ -156,6 +168,12 @@ namespace Murmli.Backend.Data.Migrations
 
                     b.HasKey("Code")
                         .HasName("pk_products");
+
+                    b.HasIndex("Brand")
+                        .HasDatabaseName("ix_products_brand_trigram");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Brand"), "gin");
+                    NpgsqlIndexBuilderExtensions.HasOperators(b.HasIndex("Brand"), new[] { "gin_trgm_ops" });
 
                     b.HasIndex("Name")
                         .HasDatabaseName("ix_products_name_trigram");
