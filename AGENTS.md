@@ -378,7 +378,7 @@ Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 - Das Schema `better-auth` gehört Better Auth: nur `auth` migriert es, EF Core und die API greifen nie darauf zu.
 - EF-Core-Pakete (auch `Microsoft.EntityFrameworkCore.Design`) bis [#14](https://github.com/Murmli/MurmliV2/issues/14) auf 10.x halten, die direkte Referenz auf `Microsoft.EntityFrameworkCore.Relational` nicht entfernen.
 - Migration anlegen (in `src/backend`): `dnx --yes dotnet-ef@<EF-Version> -- migrations add <Name> --project Murmli.Backend.Data`.
-- `MigrateAsync` nur im Job und beim Start der API aufrufen (`app.MigrateDatabaseAsync()` nach `Build()`, vor `RunAsync()`). Migrationen additiv und nullable halten, solange eine ältere Version von API oder Job noch laufen kann.
+- `MigrateAsync` nur im Job und beim Start der API aufrufen (`app.MigrateDatabaseAsync()` nach `Build()`, vor `RunAsync()`). Migrationen additiv und nullable halten, solange eine ältere Version von API oder Job noch laufen kann. Migrationen nie selbst squashen: Ob und wann sie in ein neues `InitialCreate` zusammengefasst werden, entscheidet ein Mensch.
 - Smart Enums (`[SmartEnum<string>]`) per `HasConversion(status => status.Key, key => <Typ>.Get(key))` als `text` speichern, nicht über das Thinktecture-EF-Paket.
 - Produktsuche pro Wort per `EF.Functions.ILike(spalte, "%" + wort + "%", "\\")` auf Name oder Marke, jedes Wort als eigener Parameter, mit selbst escaptem `%`, `_` und `\`. Mindestens ein Wort braucht 3 Zeichen, kürzere filtern nur mit. Nie `Contains`, `ToLower().Contains` oder ein `All` über ein Array von Wörtern (wird zu `unnest`, ohne Index).
 - Neue Postgres-Extensions in `azure.extensions` in `Database/Extensions.cs` des AppHost eintragen (`DependsOn` behalten), nie im Portal.
