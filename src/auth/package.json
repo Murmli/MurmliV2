@@ -1,0 +1,32 @@
+{
+	"name": "murmli-auth",
+	"private": true,
+	"type": "module",
+	"engines": {
+		"node": ">=26"
+	},
+	"scripts": {
+		"check": "biome ci && tsc --noEmit",
+		"format": "biome check --write",
+		"create-user": "node src/create-user.ts"
+	},
+	"dependencies": {
+		"@azure/identity": "4.14.1",
+		"@azure/monitor-opentelemetry-exporter": "1.0.0-beta.47",
+		"@azure/postgresql-auth": "1.0.0",
+		"@opentelemetry/api": "1.9.1",
+		"@opentelemetry/instrumentation-http": "0.223.2",
+		"@opentelemetry/instrumentation-pg": "0.76.0",
+		"@opentelemetry/sdk-node": "0.223.2",
+		"better-auth": "1.7.25",
+		"import-in-the-middle": "3.6.0",
+		"kysely": "0.29.9",
+		"pg": "8.23.1"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.6.8",
+		"@types/node": "26.6.6",
+		"@types/pg": "8.23.1",
+		"typescript": "7.0.2"
+	}
+}
