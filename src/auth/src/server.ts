@@ -37,9 +37,7 @@ export async function run(
 		await seedUser();
 	} catch (error) {
 		console.error(error);
-		await shutdownTelemetry();
-		await pool.end();
-		process.exit(1);
+		await terminate(shutdownTelemetry, 1);
 	}
 
 	const server = createServer(async (request, response) => {
@@ -88,12 +86,23 @@ export async function run(
 		// Container Apps kills the replica 30 seconds after SIGTERM
 		setTimeout(() => server.closeAllConnections(), 10_000).unref();
 		await new Promise<void>((resolve) => server.close(() => resolve()));
-		await shutdownTelemetry();
-		await pool.end();
-		process.exit(0);
+		await terminate(shutdownTelemetry, 0);
 	};
 	process.on("SIGTERM", shutdown);
 	process.on("SIGINT", shutdown);
+}
+
+async function terminate(
+	shutdownTelemetry: () => Promise<void>,
+	exitCode: number,
+): Promise<never> {
+	try {
+		await shutdownTelemetry();
+	} catch (error) {
+		console.error("Shutting down the telemetry failed.", error);
+	}
+	await pool.end();
+	process.exit(exitCode);
 }
 
 async function seedUser(): Promise<void> {
