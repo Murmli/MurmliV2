@@ -11,6 +11,6 @@ await using var app = builder.Build();
 
 await app.MigrateDatabaseAsync();
 
-app.MapApi();
+app.UseApi();
 
 await app.RunAsync();

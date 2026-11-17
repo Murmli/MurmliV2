@@ -389,7 +389,7 @@ Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 
 Hintergrund und Entscheidungen: [docs/api.md](docs/api.md)
 
-- Neue Endpunkte in die Gruppe `/v1` in `MapApi` mappen, nie direkt auf `endpoints`. Ohne Version bleiben nur `/health` und das OpenAPI-Dokument.
+- Endpunkte und Middleware nur in `UseApi` registrieren (`Program.cs` und `ApiHost` der Tests richten die Pipeline nur über `UseApi()` ein, `ApiHost` mappt danach höchstens Test-Endpunkte), neue Endpunkte in die Gruppe `/v1`, nie direkt auf `application`. Ohne Version bleiben nur `/health` und das OpenAPI-Dokument. `UseExceptionHandler()` bleibt nach `UserTelemetryMiddleware`, sonst fehlt `UserId` an unbehandelten Exceptions. Kein `IExceptionHandler` registrieren, ohne `ExceptionHandlerOptions.SuppressDiagnosticsCallback` anzupassen, sonst fehlt für die Exceptions, die er behandelt, der Log `UnhandledException` samt `UserId`.
 - Bis zum ersten Live-Gang alles in `v1` ändern, auch inkompatibel. Danach innerhalb einer Version nur rückwärtskompatibel ändern (neue Endpunkte, neue Felder in Antworten), alles andere bekommt eine neue Version.
 - Kein Asp.Versioning einführen, bevor es .NET 11 unterstützt ([#68](https://github.com/Murmli/MurmliV2/issues/68)), und keine Version per Header oder Query.
 
@@ -401,7 +401,7 @@ Hintergrund und Entscheidungen: [docs/authentication.md](docs/authentication.md)
 - Die App spricht mit Better Auth nur zum Anmelden, Abmelden und Holen bzw. Erneuern des JWT, alles andere läuft über die API.
 - Die API greift nie auf die Tabellen von Better Auth zu (kein EF-Mapping, kein SQL), sie nutzt immer die HTTP-API von `auth`.
 - Nutzerdaten hängen an `identity.users.id`, nie an der Better-Auth-ID. Jede neue Art von Nutzerdaten gehört in die Löschung: in Postgres per Fremdschlüssel mit `ON DELETE CASCADE` auf `identity.users`, außerhalb von Postgres ausdrücklich in `UserRegistry.DeleteAsync` vor dem Aufruf von `auth`. Ausgenommen ist Telemetrie mit der eigenen Id, sie läuft mit ihrer Aufbewahrungsfrist aus.
-- `sub`, E-Mail und Token nie selbst loggen und nie in Span-Attribute schreiben.
+- `sub`, E-Mail und Token nie selbst loggen und nie in Span-Attribute schreiben. Den Nutzer kennzeichnet in der Telemetrie nur die eigene Id, immer unter `UserId` (`LogProperties.UserId`), nie unter `enduser.id`.
 - `BETTER_AUTH_SECRET` kommt nur über den Secret-Parameter `better-auth-secret` und wird nie geändert, Rotation nur über `BETTER_AUTH_SECRETS`.
 - `jwks.keyPairConfig.alg` bleibt ES256, `user.deleteUser` von Better Auth bleibt aus.
 - `@better-auth/core` bleibt auf derselben Version wie `better-auth`.

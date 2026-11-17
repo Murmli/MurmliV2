@@ -12,6 +12,31 @@ Für die .NET-Hosts:
 
 Quelle und Meter `Npgsql` registrieren die Aspire-Integrationen selbst, `AddTelemetry()` ergänzt sie nicht.
 
+### Konto-Id
+
+`UserTelemetryMiddleware` in `Murmli.Backend.Api` macht die Telemetrie der API pro Konto auffindbar. Sie läuft nach Authentifizierung und Autorisierung (Reihenfolge siehe [api.md](api.md#pipeline)), sucht für angemeldete Nutzer mit `sub` die eigene Id in `identity.users` (über den Unique-Index, legt nie ein Konto an) und setzt sie, wenn es ein Konto gibt:
+
+- als Attribut `UserId` am Request-Span von `api`,
+- als Log-Scope `UserId` für den Rest der Anfrage. Damit tragen alle Logs und Exceptions, die danach in der Anfrage entstehen, die Id, etwa die Command-Logs von EF Core, `AuthUserDeletionFailed` und der Log `UnhandledException`.
+
+In Application Insights stehen beide als `UserId` in `customDimensions` von Requests, Traces und Exceptions:
+
+```kusto
+union requests, traces, exceptions
+| where tostring(customDimensions.UserId) == "<Konto-Id>"
+```
+
+Ohne `UserId` bleiben:
+
+- Anfragen ohne Anmeldung.
+- Angemeldete Anfragen ohne Konto (nie `GET /v1/users/me` aufgerufen oder Konto gelöscht).
+- Der Produktimport und `auth`.
+- Der erste `GET /v1/users/me`, der das Konto anlegt: Zu Beginn der Anfrage gibt es noch kein Konto, nur der Log `UserCreated` trägt die Id.
+- Kind-Spans (Npgsql, HttpClient), sie hängen über die Trace-ID am Request.
+- Logs vor der Middleware (Authentifizierung, der Command-Log der Abfrage selbst).
+
+`UserTelemetryMiddlewareTests` in `Murmli.Backend.Api.Tests` deckt Span, Logs und Exceptions mit Konto ab, Anfragen ohne Anmeldung und ohne Konto und dass die Better-Auth-ID bei ausgeschaltetem `Telemetry:RecordSensitiveData` nirgends steht.
+
 ## Export
 
 - OTLP nur, wenn `OTEL_EXPORTER_OTLP_ENDPOINT` gesetzt ist. Aspire setzt den Endpunkt im Run-Mode, lokal landet die Telemetrie damit im Dashboard.
@@ -62,6 +87,9 @@ Npgsql-Spans enthalten nie Parameterwerte. Eingeschaltet ist der Schalter nur lo
 | `OTEL_SERVICE_NAME` setzt der AppHost im Publish-Mode | Aspire setzt den Dienstnamen nur im Run-Mode, in Azure fehlte er sonst. Der Wert ist wie lokal der Ressourcenname (`api`, `auth`, `product-import`). |
 | Konsole in Azure nur ab Warnung (`Logging__Console__LogLevel__Default=Warning`) | Container Apps schreibt die Konsole in denselben Workspace, Logs kämen sonst doppelt an. Warnungen und Fehler bleiben, damit Abstürze beim Start sichtbar sind. Der Schalter gilt nur für die Konsole, die OpenTelemetry-Logs bleiben bei `Information`. `auth` liest den Schalter nicht, Better Auth loggt ohnehin erst ab `warn`. |
 | Tägliche Obergrenze `LogAnalytics:DailyQuotaGb` pro Umgebung, in Dev 0,2 GB | Schutz vor Kostenspitzen. Ist sie erreicht, nimmt der Workspace bis zum Folgetag nichts mehr auf, auch keine Konsolenlogs. Sobald es LLM-Aufrufe gibt, erreicht Dev die Grenze schneller, weil der Schalter `Telemetry:RecordSensitiveData` dort die LLM-Inhalte mitschreibt. Ohne Wert bleibt der Workspace ohne Obergrenze. |
+| Konto-Id nur unter `UserId` | Derselbe Name wie im Template von `UserCreated` und `UserDeleted` (`LogProperties.UserId`), ein Filter findet Requests, Logs und Exceptions. Verworfen: zusätzlich `enduser.id`, das der Azure-Monitor-Exporter in `user_AuthenticatedId` übernimmt, ein zweiter Name für dasselbe Konzept. |
+| Konto-Id per Middleware mit Abfrage pro angemeldeter Anfrage | Das JWT trägt nur die Better-Auth-ID. Die Abfrage läuft über den Unique-Index `ix_users_auth_user_id` und legt nie ein Konto an, das bleibt `GET /v1/users/me` vorbehalten. Sie nutzt nur `MurmliDbContext`, nicht `UserRegistry`, dessen Konstruktor den typisierten `AuthServiceClient` baut. |
+| `UseExceptionHandler()` nach `UserTelemetryMiddleware` | Ohne Handler loggte Kestrel unbehandelte Exceptions außerhalb jedes Scopes, also ohne `UserId`. Innerhalb des Scopes loggt `ExceptionHandlerMiddleware` sie (`UnhandledException`) mit `UserId`, Application Insights macht daraus die Exception. Folgen: Die 500-Antwort ist Problem Details (siehe [api.md](api.md#pipeline)). Der Request-Span behält Status `Error`, `error.type` ist aber `500` statt des Exception-Typs. Ein Exception-Event am Span setzt ASP.NET Core 11 in keinem der beiden Fälle. Seit .NET 10 unterdrückt der Handler die Diagnose für Exceptions, die ein `IExceptionHandler` behandelt: Ein solcher Handler nähme den Exceptions den Log samt `UserId` (derzeit gibt es keinen). |
 | `auth`: Exporter `@azure/monitor-opentelemetry-exporter` statt der Distro | Wie bei .NET nur der Exporter: Instrumentierung, Sampler und Propagator legt `telemetry.ts` selbst fest, die Distro brächte eigene mit. |
 | `auth`: `disableOfflineStorage` | Wie `DisablePersistOnShutdown` bei .NET: Die Platte der auf null skalierenden Container App ist flüchtig. |
 | `auth`: OpenTelemetry-Pakete auf der SDK-2.x-Linie (`@opentelemetry/sdk-node` 0.223.2, `@opentelemetry/api` 1.9.1, `@opentelemetry/instrumentation-undici` 0.33.0 als letzte Version vor SDK 3.x) | `@azure/monitor-opentelemetry-exporter` (1.0.0-beta.47, das Tag `latest` zeigt auf eine ältere Beta) unterstützt SDK 3.x noch nicht. Bewusste Ausnahme von der Regel „neueste Version“, sie endet, sobald der Exporter SDK 3.x unterstützt. |

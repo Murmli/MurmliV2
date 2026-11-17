@@ -1,11 +1,9 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Murmli.Backend.Api.Tests.Infrastructure;
-using Murmli.Backend.Api.Users;
 using Murmli.Backend.Data.Identity;
 
 namespace Murmli.Backend.Api.Tests.Users;
@@ -55,7 +53,7 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
         const string authUserId = "AuthUser0000000000000000000001";
         await using var api = await ApiHost.StartAsync(connectionString);
 
-        var userId = await GetMeAsync(api, authUserId);
+        var userId = await api.GetMeAsync(authUserId);
 
         var user = Assert.Single(await ReadUsersAsync(api));
         Assert.Equal(authUserId, user.AuthUserId);
@@ -67,7 +65,7 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
     {
         await using var api = await ApiHost.StartAsync(connectionString);
 
-        var userIds = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => GetMeAsync(api, "AuthUser0000000000000000000001")));
+        var userIds = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => api.GetMeAsync("AuthUser0000000000000000000001")));
 
         var user = Assert.Single(await ReadUsersAsync(api));
         Assert.All(userIds, userId => Assert.Equal(user.Id, userId));
@@ -77,9 +75,9 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
     public async Task GetMe_RepeatedRequest_ReturnsSameUser()
     {
         await using var api = await ApiHost.StartAsync(connectionString);
-        var firstUserId = await GetMeAsync(api, "AuthUser0000000000000000000001");
+        var firstUserId = await api.GetMeAsync("AuthUser0000000000000000000001");
 
-        var secondUserId = await GetMeAsync(api, "AuthUser0000000000000000000001");
+        var secondUserId = await api.GetMeAsync("AuthUser0000000000000000000001");
 
         Assert.Equal(firstUserId, secondUserId);
         Assert.Single(await ReadUsersAsync(api));
@@ -90,7 +88,7 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
     {
         const string authUserId = "AuthUser0000000000000000000001";
         await using var api = await ApiHost.StartAsync(connectionString);
-        await GetMeAsync(api, authUserId);
+        await api.GetMeAsync(authUserId);
 
         var statusCode = await DeleteMeAsync(api, TestTokens.Create(authUserId));
 
@@ -114,7 +112,7 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
     {
         const string authUserId = "AuthUser0000000000000000000001";
         await using var api = await ApiHost.StartAsync(connectionString);
-        await GetMeAsync(api, authUserId);
+        await api.GetMeAsync(authUserId);
         var token = TestTokens.Create(authUserId);
         api.AuthService.ResponseStatusCode = HttpStatusCode.InternalServerError;
         Assert.Equal(HttpStatusCode.BadGateway, await DeleteMeAsync(api, token));
@@ -133,7 +131,7 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
     {
         const string authUserId = "AuthUser0000000000000000000001";
         await using var api = await ApiHost.StartAsync(connectionString);
-        await GetMeAsync(api, authUserId);
+        await api.GetMeAsync(authUserId);
         var token = TestTokens.Create(authUserId);
         api.AuthService.TransportFailure = transportFailure;
         Assert.Equal(HttpStatusCode.BadGateway, await DeleteMeAsync(api, token));
@@ -157,7 +155,7 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
     {
         const string authUserId = "AuthUser0000000000000000000001";
         await using var api = await ApiHost.StartAsync(connectionString);
-        await GetMeAsync(api, authUserId);
+        await api.GetMeAsync(authUserId);
         var deletedAt = api.TimeProvider.GetUtcNow();
         await DeleteMeAsync(api, TestTokens.Create(authUserId));
         api.TimeProvider.Advance(TimeSpan.FromMinutes(1));
@@ -180,14 +178,6 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
 
         var deletedUser = Assert.Single(await ReadDeletedUsersAsync(api));
         Assert.Equal("AuthUser0000000000000000000002", deletedUser.AuthUserId);
-    }
-
-    private static async Task<Guid> GetMeAsync(ApiHost api, string authUserId)
-    {
-        using var response = await SendGetMeAsync(api, TestTokens.Create(authUserId));
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var user = await response.Content.ReadFromJsonAsync<UserResponse>(TestContext.Current.CancellationToken);
-        return Assert.IsType<UserResponse>(user).Id;
     }
 
     private static Task<HttpResponseMessage> SendGetMeAsync(ApiHost api, string token) => SendAsync(api, HttpMethod.Get, token);

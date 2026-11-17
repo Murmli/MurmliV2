@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Murmli.Backend.Api.AuthService;
+using Murmli.Backend.Api.Extensions;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Identity;
 using Npgsql;
@@ -57,10 +58,7 @@ internal sealed partial class UserRegistry(
 
     public async Task<bool> DeleteAsync(string authUserId, CancellationToken cancellationToken = default)
     {
-        var userId = await context
-            .Users.Where(user => user.AuthUserId == authUserId)
-            .Select(user => (Guid?)user.Id)
-            .SingleOrDefaultAsync(cancellationToken);
+        var userId = await context.Users.FindIdAsync(authUserId, cancellationToken);
 
         var now = timeProvider.GetUtcNow();
         context.DeletedUsers.Add(new DeletedUser { AuthUserId = authUserId, DeletedAt = now });
