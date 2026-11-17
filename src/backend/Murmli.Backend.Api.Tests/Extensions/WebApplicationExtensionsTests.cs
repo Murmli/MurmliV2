@@ -1,11 +1,14 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Murmli.Backend.Api.Tests.Infrastructure;
 
 namespace Murmli.Backend.Api.Tests.Extensions;
 
-public class EndpointRouteBuilderExtensionsTests(PostgresFixture postgres) : IClassFixture<PostgresFixture>
+public class WebApplicationExtensionsTests(PostgresFixture postgres) : IClassFixture<PostgresFixture>
 {
     private const string DocumentPath = "/openapi/v1.json";
 
@@ -17,7 +20,7 @@ public class EndpointRouteBuilderExtensionsTests(PostgresFixture postgres) : ICl
     private readonly string connectionString = postgres.CreateDatabaseConnectionString();
 
     [Fact]
-    public async Task MapApi_OpenApiEnabledWithoutToken_ReturnsOk()
+    public async Task UseApi_OpenApiEnabledWithoutToken_ReturnsOk()
     {
         await using var api = await ApiHost.StartAsync(connectionString, OpenApiEnabled);
 
@@ -27,7 +30,7 @@ public class EndpointRouteBuilderExtensionsTests(PostgresFixture postgres) : ICl
     }
 
     [Fact]
-    public async Task MapApi_OpenApiEnabled_DeclaresOpenApi32()
+    public async Task UseApi_OpenApiEnabled_DeclaresOpenApi32()
     {
         await using var api = await ApiHost.StartAsync(connectionString, OpenApiEnabled);
 
@@ -37,7 +40,7 @@ public class EndpointRouteBuilderExtensionsTests(PostgresFixture postgres) : ICl
     }
 
     [Fact]
-    public async Task MapApi_OpenApiEnabled_DescribesUserEndpoints()
+    public async Task UseApi_OpenApiEnabled_DescribesUserEndpoints()
     {
         await using var api = await ApiHost.StartAsync(connectionString, OpenApiEnabled);
 
@@ -49,7 +52,7 @@ public class EndpointRouteBuilderExtensionsTests(PostgresFixture postgres) : ICl
     }
 
     [Fact]
-    public async Task MapApi_OpenApiEnabled_DescribesOnlyVersionedPaths()
+    public async Task UseApi_OpenApiEnabled_DescribesOnlyVersionedPaths()
     {
         await using var api = await ApiHost.StartAsync(connectionString, OpenApiEnabled);
 
@@ -63,7 +66,7 @@ public class EndpointRouteBuilderExtensionsTests(PostgresFixture postgres) : ICl
     [Theory]
     [InlineData("GET")]
     [InlineData("DELETE")]
-    public async Task MapApi_UnversionedUserPath_ReturnsNotFound(string method)
+    public async Task UseApi_UnversionedUserPath_ReturnsNotFound(string method)
     {
         await using var api = await ApiHost.StartAsync(connectionString);
 
@@ -73,7 +76,7 @@ public class EndpointRouteBuilderExtensionsTests(PostgresFixture postgres) : ICl
     }
 
     [Fact]
-    public async Task MapApi_OpenApiDisabledWithToken_ReturnsNotFound()
+    public async Task UseApi_OpenApiDisabledWithToken_ReturnsNotFound()
     {
         await using var api = await ApiHost.StartAsync(connectionString);
 
@@ -83,13 +86,26 @@ public class EndpointRouteBuilderExtensionsTests(PostgresFixture postgres) : ICl
     }
 
     [Fact]
-    public async Task MapApi_OpenApiDisabledWithoutToken_ReturnsUnauthorized()
+    public async Task UseApi_OpenApiDisabledWithoutToken_ReturnsUnauthorized()
     {
         await using var api = await ApiHost.StartAsync(connectionString);
 
         using var response = await api.HttpClient.GetAsync(DocumentPath, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UseApi_UnhandledException_ReturnsProblemDetails()
+    {
+        await using var api = await ApiHost.StartAsync(connectionString, mapFailingEndpoint: true);
+
+        using var response = await SendWithTokenAsync(api, HttpMethod.Get, ApiHost.FailingEndpointPath);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>(TestContext.Current.CancellationToken);
+        Assert.Equal(StatusCodes.Status500InternalServerError, Assert.IsType<ProblemDetails>(problem).Status);
     }
 
     private static async Task<JsonDocument> ReadDocumentAsync(ApiHost api)
