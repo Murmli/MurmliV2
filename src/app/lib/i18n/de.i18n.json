@@ -80,5 +80,10 @@
       "versionUnavailable": "Nicht verfügbar",
       "licenses": "Lizenzen"
     }
+  },
+  "apiError": {
+    "title": "Da ist etwas schiefgelaufen",
+    "message": "Murmli konnte die Anfrage nicht ausführen. Wenn du dich an den Support wendest, nenne bitte diesen Support-Code:",
+    "close": "Schließen"
   }
 }

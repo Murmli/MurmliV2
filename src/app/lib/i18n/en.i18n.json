@@ -80,5 +80,10 @@
       "versionUnavailable": "Not available",
       "licenses": "Licenses"
     }
+  },
+  "apiError": {
+    "title": "Something went wrong",
+    "message": "Murmli couldn't complete the request. If you contact support, please include this support code:",
+    "close": "Close"
   }
 }
