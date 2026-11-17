@@ -23,6 +23,9 @@ jobs:
     uses: ./.github/workflows/build-app.yml
     with:
       flavor: development
+      upload-debug-symbols: ${{ github.event_name == 'push' }}
+    secrets:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
   vulnerability-scan:
     uses: ./.github/workflows/vulnerability-scan.yml

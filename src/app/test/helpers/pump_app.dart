@@ -10,7 +10,7 @@ import 'package:app/i18n/strings.g.dart';
 import 'preferences.dart';
 import 'provider_container.dart';
 
-Future<void> pumpApp(
+Future<ProviderContainer> pumpApp(
   WidgetTester tester, {
   Map<String, Object> storedPreferences = const {},
   Flavor? flavor,
@@ -31,4 +31,5 @@ Future<void> pumpApp(
     ),
   );
   await tester.pumpAndSettle();
+  return container;
 }

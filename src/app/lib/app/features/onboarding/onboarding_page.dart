@@ -61,11 +61,18 @@ class OnboardingPage extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.space8,
                       ),
-                      child: Text(
-                        translations.legalNote,
+                      child: DefaultTextStyle.merge(
                         textAlign: TextAlign.center,
                         style: TextTheme.of(context).bodySmall
                             ?.copyWith(color: colors.inkSecondary),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          spacing: AppSpacing.space8,
+                          children: [
+                            Text(translations.legalNote),
+                            Text(translations.crashReportsNote),
+                          ],
+                        ),
                       ),
                     ),
                   ],

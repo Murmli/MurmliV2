@@ -28,7 +28,8 @@
     "startTokens": "50 Start-Tokens geschenkt",
     "continueWithApple": "Weiter mit Apple",
     "continueWithGoogle": "Weiter mit Google",
-    "legalNote": "Mit der Anmeldung stimmst du den AGB und der Datenschutzerklärung zu."
+    "legalNote": "Mit der Anmeldung stimmst du den AGB und der Datenschutzerklärung zu.",
+    "crashReportsNote": "Murmli meldet Abstürze und Fehler, damit wir sie beheben können. Abschalten kannst du das in den Einstellungen unter Datenschutz."
   },
   "home": {
     "settingsTooltip": "Einstellungen",
@@ -74,11 +75,21 @@
       "section": "Onboarding",
       "showAgain": "Onboarding erneut anzeigen"
     },
+    "crashReporting": {
+      "section": "Datenschutz",
+      "send": "Fehlerberichte senden",
+      "description": "Meldet Abstürze und Fehler, damit wir sie beheben können."
+    },
     "about": {
       "section": "Über Murmli",
       "version": "Version",
       "versionUnavailable": "Nicht verfügbar",
       "licenses": "Lizenzen"
     }
+  },
+  "apiError": {
+    "title": "Da ist etwas schiefgelaufen",
+    "message": "Murmli konnte die Anfrage nicht ausführen. Wenn du dich an den Support wendest, nenne bitte diesen Support-Code:",
+    "close": "Schließen"
   }
 }

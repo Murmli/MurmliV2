@@ -7,6 +7,13 @@ on:
         description: App flavor to build (local, development or production).
         type: string
         required: true
+      upload-debug-symbols:
+        description: Upload debug symbols and R8 mappings to Sentry with the secret SENTRY_AUTH_TOKEN of the environment development.
+        type: boolean
+        required: true
+    secrets:
+      SENTRY_AUTH_TOKEN:
+        required: false
 
 permissions:
   contents: read
@@ -15,30 +22,62 @@ jobs:
   android:
     name: Android
     runs-on: ubuntu-latest
+    # Environment secrets only reach jobs that name the environment.
+    environment:
+      name: ${{ inputs.upload-debug-symbols && 'development' || '' }}
+      deployment: false
     defaults:
       run:
         working-directory: src/app
     steps:
       - uses: actions/checkout@v7
+      - name: Check Sentry auth token
+        if: inputs.upload-debug-symbols
+        # An unset secret arrives as an empty string, which sentry_dart_plugin accepts until the upload fails.
+        run: ': "${SENTRY_AUTH_TOKEN:?SENTRY_AUTH_TOKEN is missing in the development environment}"'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
       - uses: ./.github/actions/setup-app
-      - run: flutter build appbundle --release --flavor "$FLAVOR"
+      - run: flutter build appbundle --release --flavor "$FLAVOR" --split-debug-info=build/debug-info
         env:
           FLAVOR: ${{ inputs.flavor }}
+          ORG_GRADLE_PROJECT_sentryUploadProguardMapping: ${{ inputs.upload-debug-symbols }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      - name: Upload debug symbols
+        if: inputs.upload-debug-symbols
+        run: dart run sentry_dart_plugin
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
 
   ios:
     name: iOS
     runs-on: macos-latest
+    # Environment secrets only reach jobs that name the environment.
+    environment:
+      name: ${{ inputs.upload-debug-symbols && 'development' || '' }}
+      deployment: false
     defaults:
       run:
         working-directory: src/app
     steps:
       - uses: actions/checkout@v7
+      - name: Check Sentry auth token
+        if: inputs.upload-debug-symbols
+        # An unset secret arrives as an empty string, which sentry_dart_plugin accepts until the upload fails.
+        run: ': "${SENTRY_AUTH_TOKEN:?SENTRY_AUTH_TOKEN is missing in the development environment}"'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       - uses: ./.github/actions/setup-app
-      - run: flutter build ios --release --no-codesign --flavor "$FLAVOR"
+      - run: flutter build ios --release --no-codesign --flavor "$FLAVOR" --split-debug-info=build/debug-info
         env:
           FLAVOR: ${{ inputs.flavor }}
+      - name: Upload debug symbols
+        if: inputs.upload-debug-symbols
+        run: dart run sentry_dart_plugin
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
