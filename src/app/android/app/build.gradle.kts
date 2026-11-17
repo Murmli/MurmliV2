@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    id("io.sentry.android.gradle")
 }
 
 android {
@@ -60,4 +61,23 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+sentry {
+    org.set("murmli")
+    projectName.set("app")
+    authToken.set(providers.environmentVariable("SENTRY_AUTH_TOKEN"))
+    // Only CI uploads, on pushes to main; other builds only embed the mapping UUID.
+    autoUploadProguardMapping.set(
+        providers.gradleProperty("sentryUploadProguardMapping").map { it.toBoolean() }.orElse(false),
+    )
+    telemetry.set(false)
+    // sentry_flutter brings its own Android SDK.
+    autoInstallation {
+        enabled.set(false)
+    }
+    // No performance tracing; the instrumentation would also turn logcat calls into breadcrumbs.
+    tracingInstrumentation {
+        enabled.set(false)
+    }
 }
