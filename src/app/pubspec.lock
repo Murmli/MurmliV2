@@ -381,6 +381,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  globbing:
+    dependency: transitive
+    description:
+      name: globbing
+      sha256: "4f89cfaf6fa74c9c1740a96259da06bd45411ede56744e28017cc534a12b6e2d"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0"
   graphs:
     dependency: transitive
     description:
@@ -445,6 +453,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.2"
+  injector:
+    dependency: transitive
+    description:
+      name: injector
+      sha256: ed389bed5b48a699d5b9561c985023d0d5cc88dd5ff2237aadcce5a5ab433e4e
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.0"
   intl:
     dependency: transitive
     description:
@@ -678,7 +694,7 @@ packages:
     source: hosted
     version: "2.2.2"
   path_provider_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: path_provider_platform_interface
       sha256: "484838772624c3a4b94f1e44a3e19897fee738f2d5c4ce448443b0417f7c9dda"
@@ -725,6 +741,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.0.6"
+  properties:
+    dependency: transitive
+    description:
+      name: properties
+      sha256: "333f427dd4ed07bdbe8c75b9ff864a1e70b5d7a8426a2e8bdd457b65ae5ac598"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.1"
   protobuf:
     dependency: transitive
     description:
@@ -813,6 +837,30 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.0.10"
+  sentry:
+    dependency: transitive
+    description:
+      name: sentry
+      sha256: "490ff077d819c07511e4b1b07bcdf7117a87c3cb10b55b56081ac0a56d85d467"
+      url: "https://pub.dev"
+    source: hosted
+    version: "10.5.0"
+  sentry_dart_plugin:
+    dependency: "direct dev"
+    description:
+      name: sentry_dart_plugin
+      sha256: "0a1fdd7941f9811bd4a57862f4650b2deb1ac8d060f4c31cbd081fca26348672"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.5.0"
+  sentry_flutter:
+    dependency: "direct main"
+    description:
+      name: sentry_flutter
+      sha256: "67e5cb6b78a5b32036472d75d9b553b8ca7e71d46243b79dc9e3e423945a7d9b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "10.5.0"
   serial_csv:
     dependency: transitive
     description:
@@ -1034,6 +1082,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.1"
+  system_info2:
+    dependency: transitive
+    description:
+      name: system_info2
+      sha256: "2d5e586c5e6b569d2e3afab1e61542d8fc0603be2d6ee671e573c041541a1541"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.2.0"
   talker:
     dependency: "direct main"
     description:

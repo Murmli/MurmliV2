@@ -15,6 +15,7 @@ import 'package:app/app/core/logging/talker_provider.dart';
 import '../../../helpers/http_client_adapter.dart';
 import '../../../helpers/preferences.dart';
 import '../../../helpers/provider_container.dart';
+import '../../../helpers/sentry.dart';
 
 void main() {
   late ProviderContainer container;
@@ -101,6 +102,35 @@ void main() {
         );
       },
     );
+
+    test('request to the API carries its traceparent but no tracing header of Sentry while Sentry reports', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      final receivedHeaderNames = <String>[];
+      server.listen((request) async {
+        request.headers.forEach((name, _) => receivedHeaderNames.add(name));
+        request.response.statusCode = HttpStatus.noContent;
+        await request.response.close();
+      });
+      final previousHttpOverrides = HttpOverrides.current;
+      HttpOverrides.global = _ProxyHttpOverrides(server.port);
+      addTearDown(() => HttpOverrides.global = previousHttpOverrides);
+      await startRecordingSentry();
+      // Keeps dio's real adapter, Sentry integrations like sentry_dio set
+      // their headers there.
+      final apiClient = createContainer(
+        await createPreferences(),
+        flavor: Flavor.local,
+      ).read(apiClientProvider);
+
+      await apiClient.get<void>('/v1/example');
+
+      expect(receivedHeaderNames, contains('traceparent'));
+      expect(
+        receivedHeaderNames,
+        isNot(anyOf(contains('sentry-trace'), contains('baggage'))),
+      );
+    });
 
     for (final (targetName, target) in [
       (
@@ -218,6 +248,21 @@ void main() {
       );
     });
 
+    test('failed request to the API sends nothing to Sentry', () async {
+      final envelopes = await startRecordingSentry();
+      final adapter = RecordingHttpClientAdapter(
+        respond: respondWithServerError,
+      );
+      final apiClient = await createApiClient(adapter);
+
+      await expectLater(
+        apiClient.get<void>('/v1/example'),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(envelopes, isEmpty);
+    });
+
     test('cancelled request to the API reports no failure', () async {
       final adapter = RecordingHttpClientAdapter(
         respond: (request) async {
@@ -255,4 +300,14 @@ void main() {
       expect(container.read(failedApiRequestTraceIdProvider), isNull);
     });
   });
+}
+
+class _ProxyHttpOverrides extends HttpOverrides {
+  _ProxyHttpOverrides(this.port);
+
+  final int port;
+
+  @override
+  String findProxyFromEnvironment(Uri url, Map<String, String>? environment) =>
+      'PROXY 127.0.0.1:$port';
 }

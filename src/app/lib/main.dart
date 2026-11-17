@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 
 import 'app/app.dart';
+import 'app/core/crash_reporting/crash_reporting_provider.dart';
 import 'app/core/logging/talker_provider.dart';
 import 'app/core/storage/preference_keys.dart';
 import 'app/core/storage/shared_preferences_provider.dart';
@@ -37,6 +38,7 @@ Future<void> main() async {
       talkerProvider.overrideWithValue(talker),
     ],
   );
+  await container.read(crashReportingProvider.notifier).start();
   await container.read(selectedAppLanguageProvider).apply();
 
   runApp(
