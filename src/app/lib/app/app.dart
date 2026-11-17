@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../i18n/strings.g.dart';
 import 'core/router/app_router_provider.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/flavor_banner.dart';
 import 'features/settings/providers/theme_mode_provider.dart';
 
 class MurmliApp extends HookConsumerWidget {
@@ -23,6 +24,7 @@ class MurmliApp extends HookConsumerWidget {
       locale: TranslationProvider.of(context).flutterLocale,
       supportedLocales: AppLocaleUtils.supportedLocales,
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      builder: (context, child) => FlavorBanner(child: child!),
     );
   }
 }
