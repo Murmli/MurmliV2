@@ -28,7 +28,8 @@
     "startTokens": "50 starter tokens on us",
     "continueWithApple": "Continue with Apple",
     "continueWithGoogle": "Continue with Google",
-    "legalNote": "By signing in, you agree to the Terms and the Privacy Policy."
+    "legalNote": "By signing in, you agree to the Terms and the Privacy Policy.",
+    "crashReportsNote": "Murmli reports crashes and errors so we can fix them. You can turn this off in the settings under Privacy."
   },
   "home": {
     "settingsTooltip": "Settings",
@@ -73,6 +74,11 @@
     "onboarding": {
       "section": "Onboarding",
       "showAgain": "Show onboarding again"
+    },
+    "crashReporting": {
+      "section": "Privacy",
+      "send": "Send error reports",
+      "description": "Reports crashes and errors so we can fix them."
     },
     "about": {
       "section": "About Murmli",
