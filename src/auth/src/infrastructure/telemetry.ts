@@ -1,6 +1,7 @@
 import { AzureMonitorTraceExporter } from "@azure/monitor-opentelemetry-exporter";
 import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
 import { PgInstrumentation } from "@opentelemetry/instrumentation-pg";
+import { UndiciInstrumentation } from "@opentelemetry/instrumentation-undici";
 import {
 	core,
 	NodeSDK,
@@ -26,6 +27,14 @@ export function startTelemetry(): NodeSDK {
 					healthRequestPattern.test(request.url ?? ""),
 			}),
 			new PgInstrumentation(),
+			// instrumentation-undici records the query unredacted, a token in it would end up in the span
+			new UndiciInstrumentation({
+				startSpanHook: (request) => {
+					const url = new URL(request.path, request.origin);
+					url.search = "";
+					return { "url.full": url.href, "url.query": undefined };
+				},
+			}),
 		],
 	});
 	sdk.start();

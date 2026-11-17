@@ -422,6 +422,7 @@ Hintergrund und Entscheidungen: [docs/telemetry.md](docs/telemetry.md)
 - Hosts, die außerhalb von `RunAsync()` arbeiten (Job-Hosts, die API mit der Migration beim Start), entsorgen den Host selbst (`using var host` bzw. `await using var app`), sonst geht die zuletzt gepufferte Telemetrie verloren.
 - Den Sampler nur in `AddTelemetry()` setzen und nach allen Exportern registrieren, er verwirft `/health` samt Kind-Spans.
 - `auth` startet die Telemetrie in `src/auth/src/infrastructure/telemetry.ts`, `src/auth/src/main.ts` lädt sie vor allen anderen Modulen. Die OpenTelemetry-Pakete in `src/auth` bleiben auf der SDK-2.x-Linie, bis `@azure/monitor-opentelemetry-exporter` SDK 3.x unterstützt.
+- `fetch`-Spans von `auth` bleiben ohne Query: Der `startSpanHook` in `telemetry.ts` bleibt und darf nie werfen, sonst steht die volle URL im Span. Header nie als Span-Attribute aufnehmen (`headersToSpanAttributes`).
 
 ## Produktimport
 
