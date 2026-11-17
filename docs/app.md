@@ -8,7 +8,7 @@ Die App hat die Flavors `local`, `development` und `production`. `pubspec.yaml` 
 
 - `lib/app/core/flavor/flavor.dart`: Enum `Flavor` mit dem Text des Banners (`local`, `dev`, für `production` keiner).
 - `lib/app/core/flavor/flavor_provider.dart`: `flavorProvider` liest `appFlavor`, eine Compile-Zeit-Konstante aus `package:flutter/services.dart`, gesetzt per `--flavor` oder `default-flavor`.
-- `lib/app/core/flavor/app_endpoints.dart`: `AppEndpoints` mit den Adressen von API und `auth` pro Flavor. `app_endpoints_provider.dart` stellt sie als `appEndpointsProvider` bereit. Noch nutzt ihn niemand, der gemeinsame API-Zugriff kommt mit [#52](https://github.com/Murmli/MurmliV2/issues/52). Dieser Satz entfällt mit [#52](https://github.com/Murmli/MurmliV2/issues/52).
+- `lib/app/core/flavor/app_endpoints.dart`: `AppEndpoints` mit den Adressen von API und `auth` pro Flavor. `app_endpoints_provider.dart` stellt sie als `appEndpointsProvider` bereit.
 
 | Flavor | API | Anmeldung (`auth`) |
 | --- | --- | --- |
@@ -42,10 +42,17 @@ fvm flutter build ios --flavor development --no-codesign
 - Flavor-Namen sind klein und ohne `-`: Flutter leitet den Flavor auf iOS aus dem Teil nach dem `-` im Namen der Configuration ab, und `flavorProvider` bildet den Namen per `byName` exakt auf das Enum `Flavor` ab.
 - Das Projekt nutzt nur Swift Package Manager. Braucht ein Plugin einmal CocoaPods, muss das Podfile die Flavor-Configurations zuordnen (`'Debug-local' => :debug`, `'Profile-local' => :release`, `'Release-local' => :release`, ebenso für die anderen Flavors).
 
+## API-Zugriff
+
+- `lib/app/core/api/api_client_provider.dart`: `apiClientProvider` liefert die gemeinsame `Dio`-Instanz für die eigene API, mit der Adresse der API aus `appEndpointsProvider` als `baseUrl` und dios Standard-Adapter (`dart:io`). Noch ruft kein App-Code die API auf, der erste Aufruf kommt mit der Anmeldung ([#53](https://github.com/Murmli/MurmliV2/issues/53)). Dieser Satz entfällt mit [#53](https://github.com/Murmli/MurmliV2/issues/53).
+- Requests nennen nur den Pfad ab `/` (`/v1/...`), nie eine volle URL. dio hängt den Pfad als Text an die `baseUrl`, die ohne `/` endet: Ohne führenden `/` entstünde eine ungültige Adresse (bei `development` ein falscher Host, bei `local` ein ungültiger Port). Eine volle URL ignoriert die `baseUrl`. Code, der nur Requests an die eigene API betreffen darf, vergleicht deshalb die `origin` von `RequestOptions.uri` mit der von `appEndpointsProvider` und verlässt sich nicht auf die Instanz.
+- Android-Release-Builds dürfen per `android.permission.INTERNET` in `android/app/src/main/AndroidManifest.xml` ins Netz. Die gleichen Einträge in den Manifesten unter `debug` und `profile` stammen aus Flutters Vorlage und bleiben.
+
 ## Tests
 
 - `test/app/core/flavor/flavor_provider_test.dart` deckt den Standard-Flavor ab und verlässt sich darauf, dass `flutter test` ohne `--flavor` läuft.
 - `appFlavor` ist eine Compile-Zeit-Konstante, Tests setzen den Flavor deshalb über `pumpApp(tester, flavor: ...)` bzw. `createContainer(preferences, flavor: ...)`.
+- Kein Test spricht mit einer echten API: Tests ersetzen `httpClientAdapter` der Instanz aus `apiClientProvider` durch einen Fake, der die Requests aufzeichnet (Vorbild `test/app/core/api/api_client_provider_test.dart`).
 
 ## Entscheidungen
 
@@ -57,3 +64,4 @@ fvm flutter build ios --flavor development --no-codesign
 | iOS-Configurations wie in Flutters Doku dupliziert, `Runner` bleibt | Umbenannte Configurations und ein gelöschtes `Runner` brechen `flutter logs` und `flutter create .` und weichen von der Doku ab, der künftige Flutter-Migrationen folgen. |
 | Kein Abbruch für `production` beim Start oder Build | Die Werte für `production` kommen mit dem Release, bis dahin wirft nur das Lesen der Adressen. |
 | Android-Emulator über `10.0.2.2` statt `adb reverse` | `adb reverse` geht bei jedem Neustart des Emulators verloren. |
+| Keine Timeouts in `apiClientProvider` | dio setzt standardmäßig keine. Die API skaliert in Dev auf null, ein Timeout für die Antwort müsste deren Kaltstart abdecken, und ohne Aufrufer gibt es keinen Endpunkt, an dem sich ein Wert messen ließe. Die Werte legt der erste Aufrufer fest, dann entfällt diese Zeile. |
