@@ -21,6 +21,8 @@ jobs:
 
   build-app:
     uses: ./.github/workflows/build-app.yml
+    with:
+      flavor: development
 
   vulnerability-scan:
     uses: ./.github/workflows/vulnerability-scan.yml

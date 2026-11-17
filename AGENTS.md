@@ -441,4 +441,4 @@ Hintergrund und Entscheidungen: [docs/app.md](docs/app.md)
 - Flavor-abhängiges Verhalten nur über `flavorProvider`, nie `appFlavor` direkt lesen (Compile-Zeit-Konstante, in Tests nicht überschreibbar).
 - Flavor-Namen klein und ohne `-`. Ein neuer Flavor braucht einen gleichnamigen Wert im Enum `Flavor` (`src/app/lib/app/core/flavor/flavor.dart`) samt Fall in `AppEndpoints.of`, einen Eintrag in `productFlavors` (`android/app/build.gradle.kts`), die iOS-Configurations `Debug-`, `Release-` und `Profile-<flavor>` als Kopien von `Debug`, `Release` und `Profile` und ein geteiltes Scheme `<flavor>` als Kopie von `Runner.xcscheme` mit diesen Configurations.
 - Keine Klartext-Ausnahmen in App Transport Security oder der Network Security Config, solange lokaler Verkehr nur über `dart:io` läuft.
-- `default-flavor` in `pubspec.yaml` bleibt `development`, die CI baut nur diesen Flavor.
+- `default-flavor` in `pubspec.yaml` bleibt `development`. Die CI baut nur `development`, übergeben per Input `flavor` von `build-app.yml` in `ci.yml`, `flutter test` läuft ohne `--flavor`.

@@ -2,6 +2,11 @@ name: Build app
 
 on:
   workflow_call:
+    inputs:
+      flavor:
+        description: App flavor to build (local, development or production).
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -21,7 +26,9 @@ jobs:
           java-version: '17'
           cache: gradle
       - uses: ./.github/actions/setup-app
-      - run: flutter build appbundle --release
+      - run: flutter build appbundle --release --flavor "$FLAVOR"
+        env:
+          FLAVOR: ${{ inputs.flavor }}
 
   ios:
     name: iOS
@@ -32,4 +39,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-app
-      - run: flutter build ios --release --no-codesign
+      - run: flutter build ios --release --no-codesign --flavor "$FLAVOR"
+        env:
+          FLAVOR: ${{ inputs.flavor }}

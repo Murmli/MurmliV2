@@ -51,7 +51,7 @@ fvm flutter build ios --flavor development --no-codesign
 
 | Entscheidung | Grund |
 | --- | --- |
-| Flavor aus `appFlavor` (per `--flavor` oder `default-flavor`) statt `--dart-define` | Ein Schalter für native Konfiguration und Dart, keine zusätzlichen Argumente in Befehlen, IDE und CI. Ein vergessenes `--dart-define` fiele still auf einen Standardwert zurück. |
+| Flavor aus `appFlavor` (per `--flavor` oder `default-flavor`) statt `--dart-define` | Ein Schalter für native Konfiguration und Dart, keine Argumente neben `--flavor` in Befehlen, IDE und CI. Ein vergessenes `--dart-define` fiele still auf einen Standardwert zurück. |
 | `local` über HTTP ohne Ausnahmen in App Transport Security oder Androids Network Security Config | Die App spricht über `dart:io` (Standard-Adapter von dio), das in Flutter keinem von beiden unterliegt: Die Engine setzt `may_insecurely_connect_to_all_domains` fest (Stand Flutter 3.50). Ausnahmen werden erst nötig, wenn lokaler Verkehr über einen nativen HTTP-Stack läuft (WebView, `cupertino_http`, `cronet_http`), und dann nur für `local`. |
 | `local` über HTTP statt HTTPS | Geprüft und verworfen (2026-11-17): HTTPS bräuchte TLS in `auth` und der API über Aspires Entwicklerzertifikat (experimentelle API), Vertrauen in jedem Simulator und Emulator pro Entwickler (`dart:io` ignoriert auf Android vom Nutzer installierte CAs), und das Entwicklerzertifikat deckt `10.0.2.2` nicht ab. |
 | iOS-Configurations wie in Flutters Doku dupliziert, `Runner` bleibt | Umbenannte Configurations und ein gelöschtes `Runner` brechen `flutter logs` und `flutter create .` und weichen von der Doku ab, der künftige Flutter-Migrationen folgen. |

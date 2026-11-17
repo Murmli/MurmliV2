@@ -10,7 +10,7 @@ Lokale Checks (Befehle in [AGENTS.md](../AGENTS.md#ci)):
 
 ## App
 
-- `build-app.yml` baut ohne `--flavor`, also den Standard-Flavor `development` (`default-flavor` in `src/app/pubspec.yaml`, Details in [app.md](app.md)): Android-App-Bundle auf ubuntu, iOS ohne Codesigning auf macOS.
+- `build-app.yml` baut den Flavor aus seinem Pflicht-Input `flavor`, `ci.yml` übergibt `development` (Flavors in [app.md](app.md)): Android-App-Bundle auf ubuntu, iOS ohne Codesigning auf macOS.
 - `test.yml` ruft `flutter test` ohne `--flavor` auf, der Test des Standard-Flavors verlässt sich darauf.
 
 ## Auth
