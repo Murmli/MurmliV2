@@ -2,6 +2,8 @@
 
 Alle Endpunkte der API mappt `MapApi()` in `Murmli.Backend.Api`.
 
+Lokal lauscht die API über das Launch-Profil `http` in `Murmli.Backend.Api.Host/Properties/launchSettings.json` fest auf Port 5020, damit lokale Clients (etwa der Flavor `local` der App, siehe [app.md](app.md#flavors)) eine stabile Adresse haben.
+
 ## Versionierung
 
 Die App erreicht Nutzer über die Stores, alte Versionen bleiben noch lange in Gebrauch und sprechen weiter mit der API. Deshalb trägt der Pfad die Major-Version (etwa `/v1/users/me`), eine Version per Header oder Query gibt es nicht.

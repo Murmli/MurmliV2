@@ -83,6 +83,7 @@ dev_dependencies:
   drift_dev: ^2.35.3
 
 flutter:
+  default-flavor: development
   uses-material-design: true
 
   assets:

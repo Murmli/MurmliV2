@@ -8,6 +8,11 @@ Lokale Checks (Befehle in [AGENTS.md](../AGENTS.md#ci)):
 - `dotnet restore` meldet neue Advisories nur mit `--force`.
 - `npm run check` in `src/auth` ist `biome ci && tsc --noEmit`, Lint und Formatierung macht Biome. `npm run format` (`biome check --write`) wendet Formatierung und sichere Fixes an.
 
+## App
+
+- `build-app.yml` baut den Flavor aus seinem Pflicht-Input `flavor`, `ci.yml` übergibt `development` (Flavors in [app.md](app.md)): Android-App-Bundle auf ubuntu, iOS ohne Codesigning auf macOS.
+- `test.yml` ruft `flutter test` ohne `--flavor` auf, der Test des Standard-Flavors verlässt sich darauf.
+
 ## Auth
 
 - Die Composite-Action `.github/actions/setup-auth` installiert Node aus `src/auth/.nvmrc` mit npm-Cache und führt `npm ci` aus.
