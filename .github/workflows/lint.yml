@@ -19,6 +19,17 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed .
       - run: flutter analyze
 
+  auth:
+    name: Auth
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/auth
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-auth
+      - run: npm run check
+
   backend:
     name: Backend
     runs-on: ubuntu-latest

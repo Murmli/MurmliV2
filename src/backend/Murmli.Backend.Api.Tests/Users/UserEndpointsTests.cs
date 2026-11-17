@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Net.Sockets;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Murmli.Backend.Api.Tests.Infrastructure;
 using Murmli.Backend.Api.Users;
@@ -11,6 +13,21 @@ namespace Murmli.Backend.Api.Tests.Users;
 public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<PostgresFixture>
 {
     private readonly string connectionString = postgres.CreateDatabaseConnectionString();
+
+    public static TheoryData<Exception> AuthServiceTransportFailures =>
+        new()
+        {
+            // HttpClient reports its own timeout as a TaskCanceledException wrapping a TimeoutException
+            new TaskCanceledException(
+                "The request was canceled due to the configured HttpClient.Timeout of 10 seconds elapsing.",
+                new TimeoutException()
+            ),
+            new HttpRequestException(
+                HttpRequestError.ConnectionError,
+                "Connection refused (auth.test:80)",
+                new SocketException((int)SocketError.ConnectionRefused)
+            ),
+        };
 
     [Fact]
     public async Task GetMe_WithoutToken_ReturnsUnauthorized()
@@ -27,7 +44,7 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
     {
         await using var api = await ApiHost.StartAsync(connectionString);
 
-        using var response = await SendGetMeAsync(api, TestTokens.Create("100000000000000001", "other-project"));
+        using var response = await SendGetMeAsync(api, TestTokens.Create("AuthUser0000000000000000000001", "other-audience"));
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -35,13 +52,13 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
     [Fact]
     public async Task GetMe_FirstRequest_CreatesUser()
     {
-        const string zitadelUserId = "100000000000000001";
+        const string authUserId = "AuthUser0000000000000000000001";
         await using var api = await ApiHost.StartAsync(connectionString);
 
-        var userId = await GetMeAsync(api, zitadelUserId);
+        var userId = await GetMeAsync(api, authUserId);
 
         var user = Assert.Single(await ReadUsersAsync(api));
-        Assert.Equal(zitadelUserId, user.ZitadelUserId);
+        Assert.Equal(authUserId, user.AuthUserId);
         Assert.Equal(user.Id, userId);
     }
 
@@ -50,7 +67,7 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
     {
         await using var api = await ApiHost.StartAsync(connectionString);
 
-        var userIds = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => GetMeAsync(api, "100000000000000001")));
+        var userIds = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => GetMeAsync(api, "AuthUser0000000000000000000001")));
 
         var user = Assert.Single(await ReadUsersAsync(api));
         Assert.All(userIds, userId => Assert.Equal(user.Id, userId));
@@ -60,60 +77,73 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
     public async Task GetMe_RepeatedRequest_ReturnsSameUser()
     {
         await using var api = await ApiHost.StartAsync(connectionString);
-        var firstUserId = await GetMeAsync(api, "100000000000000001");
+        var firstUserId = await GetMeAsync(api, "AuthUser0000000000000000000001");
 
-        var secondUserId = await GetMeAsync(api, "100000000000000001");
+        var secondUserId = await GetMeAsync(api, "AuthUser0000000000000000000001");
 
         Assert.Equal(firstUserId, secondUserId);
         Assert.Single(await ReadUsersAsync(api));
     }
 
     [Fact]
-    public async Task DeleteMe_ExistingUser_DeletesUserAndZitadelUser()
+    public async Task DeleteMe_ExistingUser_DeletesUserAndAuthUser()
     {
-        const string zitadelUserId = "100000000000000001";
+        const string authUserId = "AuthUser0000000000000000000001";
         await using var api = await ApiHost.StartAsync(connectionString);
-        await GetMeAsync(api, zitadelUserId);
+        await GetMeAsync(api, authUserId);
 
-        var statusCode = await DeleteMeAsync(api, TestTokens.Create(zitadelUserId));
+        var statusCode = await DeleteMeAsync(api, TestTokens.Create(authUserId));
 
         Assert.Equal(HttpStatusCode.NoContent, statusCode);
         Assert.Empty(await ReadUsersAsync(api));
         var deletedUser = Assert.Single(await ReadDeletedUsersAsync(api));
-        Assert.Equal(zitadelUserId, deletedUser.ZitadelUserId);
-        var request = Assert.Single(api.Zitadel.Requests);
-        Assert.Equal(HttpMethod.Delete, request.Method);
-        Assert.Equal($"/v2/users/{zitadelUserId}", request.Path);
-        Assert.Equal($"Bearer {ApiHost.ZitadelServiceUserToken}", request.Authorization);
+        Assert.Equal(authUserId, deletedUser.AuthUserId);
+        var request = Assert.Single(api.AuthService.Requests);
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.Equal("/service/delete-user", request.Path);
+        Assert.Equal($"Bearer {ApiHost.AuthServiceKey}", request.Authorization);
+        Assert.NotNull(request.Body);
+        Assert.Equal(
+            new Dictionary<string, string> { ["userId"] = authUserId },
+            JsonSerializer.Deserialize<Dictionary<string, string>>(request.Body, JsonSerializerOptions.Web)
+        );
     }
 
     [Fact]
-    public async Task DeleteMe_ZitadelFails_AllowsRetryWithSameToken()
+    public async Task DeleteMe_AuthServiceFails_AllowsRetryWithSameToken()
     {
-        const string zitadelUserId = "100000000000000001";
+        const string authUserId = "AuthUser0000000000000000000001";
         await using var api = await ApiHost.StartAsync(connectionString);
-        await GetMeAsync(api, zitadelUserId);
-        var token = TestTokens.Create(zitadelUserId);
-        api.Zitadel.ResponseStatusCode = HttpStatusCode.InternalServerError;
+        await GetMeAsync(api, authUserId);
+        var token = TestTokens.Create(authUserId);
+        api.AuthService.ResponseStatusCode = HttpStatusCode.InternalServerError;
         Assert.Equal(HttpStatusCode.BadGateway, await DeleteMeAsync(api, token));
-        api.Zitadel.ResponseStatusCode = HttpStatusCode.OK;
+        api.AuthService.ResponseStatusCode = HttpStatusCode.NoContent;
 
         var statusCode = await DeleteMeAsync(api, token);
 
         Assert.Equal(HttpStatusCode.NoContent, statusCode);
-        Assert.Equal(2, api.Zitadel.Requests.Count);
+        Assert.Equal(2, api.AuthService.Requests.Count);
         Assert.Empty(await ReadUsersAsync(api));
     }
 
-    [Fact]
-    public async Task DeleteMe_UserAlreadyDeletedInZitadel_ReturnsNoContent()
+    [Theory]
+    [MemberData(nameof(AuthServiceTransportFailures))]
+    public async Task DeleteMe_AuthServiceDoesNotAnswer_AllowsRetryWithSameToken(Exception transportFailure)
     {
+        const string authUserId = "AuthUser0000000000000000000001";
         await using var api = await ApiHost.StartAsync(connectionString);
-        api.Zitadel.ResponseStatusCode = HttpStatusCode.NotFound;
+        await GetMeAsync(api, authUserId);
+        var token = TestTokens.Create(authUserId);
+        api.AuthService.TransportFailure = transportFailure;
+        Assert.Equal(HttpStatusCode.BadGateway, await DeleteMeAsync(api, token));
+        api.AuthService.TransportFailure = null;
 
-        var statusCode = await DeleteMeAsync(api, TestTokens.Create("100000000000000001"));
+        var statusCode = await DeleteMeAsync(api, token);
 
         Assert.Equal(HttpStatusCode.NoContent, statusCode);
+        Assert.Equal(2, api.AuthService.Requests.Count);
+        Assert.Empty(await ReadUsersAsync(api));
     }
 
     [Theory]
@@ -125,13 +155,13 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
         int expectedUserCount
     )
     {
-        const string zitadelUserId = "100000000000000001";
+        const string authUserId = "AuthUser0000000000000000000001";
         await using var api = await ApiHost.StartAsync(connectionString);
-        await GetMeAsync(api, zitadelUserId);
+        await GetMeAsync(api, authUserId);
         var deletedAt = api.TimeProvider.GetUtcNow();
-        await DeleteMeAsync(api, TestTokens.Create(zitadelUserId));
+        await DeleteMeAsync(api, TestTokens.Create(authUserId));
         api.TimeProvider.Advance(TimeSpan.FromMinutes(1));
-        var token = TestTokens.Create(zitadelUserId, issuedAt: deletedAt.AddMinutes(issuedMinutesAfterDeletion));
+        var token = TestTokens.Create(authUserId, issuedAt: deletedAt.AddMinutes(issuedMinutesAfterDeletion));
 
         using var response = await SendGetMeAsync(api, token);
 
@@ -143,18 +173,18 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
     public async Task DeleteMe_OldDeletionRecords_AreRemoved()
     {
         await using var api = await ApiHost.StartAsync(connectionString);
-        await DeleteMeAsync(api, TestTokens.Create("100000000000000001"));
+        await DeleteMeAsync(api, TestTokens.Create("AuthUser0000000000000000000001"));
         api.TimeProvider.Advance(TimeSpan.FromHours(25));
 
-        await DeleteMeAsync(api, TestTokens.Create("100000000000000002"));
+        await DeleteMeAsync(api, TestTokens.Create("AuthUser0000000000000000000002"));
 
         var deletedUser = Assert.Single(await ReadDeletedUsersAsync(api));
-        Assert.Equal("100000000000000002", deletedUser.ZitadelUserId);
+        Assert.Equal("AuthUser0000000000000000000002", deletedUser.AuthUserId);
     }
 
-    private static async Task<Guid> GetMeAsync(ApiHost api, string zitadelUserId)
+    private static async Task<Guid> GetMeAsync(ApiHost api, string authUserId)
     {
-        using var response = await SendGetMeAsync(api, TestTokens.Create(zitadelUserId));
+        using var response = await SendGetMeAsync(api, TestTokens.Create(authUserId));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var user = await response.Content.ReadFromJsonAsync<UserResponse>(TestContext.Current.CancellationToken);
         return Assert.IsType<UserResponse>(user).Id;

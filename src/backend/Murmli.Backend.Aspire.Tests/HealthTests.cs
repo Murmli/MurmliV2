@@ -1,22 +1,17 @@
 using System.Net;
+using Murmli.Backend.Aspire.Tests.Infrastructure;
 
 namespace Murmli.Backend.Aspire.Tests;
 
-public class HealthTests
+[Collection<AppHostCollection>]
+public class HealthTests(AppHostFixture appHost)
 {
-    [Fact(Timeout = 300_000)]
+    [Fact(Timeout = 60_000)]
     public async Task GetHealth_DatabaseRunning_ReturnsHealthy()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.Murmli_Backend_Aspire>(
-            ["--Parameters:zitadel-service-user-token=test"],
-            cancellationToken
-        );
-        await using var app = await appHost.BuildAsync(cancellationToken);
-        await app.StartAsync(cancellationToken);
-        await app.ResourceNotifications.WaitForResourceHealthyAsync("api", cancellationToken);
 
-        using var httpClient = app.CreateHttpClient("api");
+        using var httpClient = appHost.App.CreateHttpClient("api");
         using var response = await httpClient.GetAsync("/health", cancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

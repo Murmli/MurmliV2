@@ -5,15 +5,16 @@ Betriebsdoku (Einrichtung, Deploy-Ablauf): [BackOffice, docs/03_Betrieb/Deployme
 ## Umgebungen und Deploy
 
 - Umgebungen heißen `azure-<name>`, derzeit `azure-dev` in `rg-murmli-dev`.
-- `aspire publish` und `aspire deploy` immer mit `--environment azure-<name>`. Ohne läuft der AppHost als Production, dafür gibt es keine Zitadel-Werte und `WithZitadel()` bricht ab.
+- `aspire publish` und `aspire deploy` immer mit `--environment azure-<name>`. Ohne läuft der AppHost als Production: `aspire publish` gelingt, schreibt aber Artefakte, die von Dev abweichen (kein OpenAPI-Dokument, kein `Telemetry:RecordSensitiveData`, keine tägliche Obergrenze des Workspaces, Registry-SKU Basic).
 - Dev deployt nur `deploy.yml`: GitHub-Environment `development` (nur `main`), OIDC als Managed Identity mit Contributor und einem auf AcrPull beschränkten RBAC Administrator auf `rg-murmli-dev`.
 - `deploy.yml` liest die Aspire-CLI-Version aus dem `Sdk`-Attribut (`Aspire.AppHost.Sdk`) des AppHost-csproj.
+- Das Image von `auth` baut Aspire aus einem generierten Dockerfile (Node-Version aus `src/auth/.nvmrc`, `node:26-alpine`, nur `dependencies`) mit Docker auf dem Runner.
 
 ## Secret-Parameter
 
-- `zitadel-service-user-token` (PAT des Zitadel-Service-Users, siehe [authentication.md](authentication.md)) ist ein AppHost-Parameter mit `secret: true`.
-- Dev: GitHub-Secret `ZITADEL_SERVICE_USER_TOKEN` im Environment `development`. `ci.yml` reicht es an `deploy.yml`, dort kommt es als `Parameters__zitadel_service_user_token` an den AppHost. Ein fehlendes Secret käme als leerer String an, den Aspire akzeptiert, deshalb bricht `deploy.yml` vorher ab. In Azure wird daraus ein Container-App-Secret.
-- Lokal: User-Secret `Parameters:zitadel-service-user-token` des AppHost. Ohne Wert startet die API nicht, ein Dummy-Wert reicht, solange man die Löschung nicht lokal testet. Aspire-Tests, die den AppHost starten, übergeben einen Dummy als Argument.
+- `better-auth-secret` und `auth-service-key` (Bedeutung siehe [authentication.md](authentication.md#konfiguration)) sind AppHost-Parameter mit `secret: true`.
+- Dev: GitHub-Secrets `BETTER_AUTH_SECRET` und `AUTH_SERVICE_KEY` im Environment `development`. `ci.yml` reicht sie ausdrücklich an `deploy.yml`, dort kommen sie als `Parameters__better_auth_secret` und `Parameters__auth_service_key` an den AppHost. Ein fehlendes Secret käme als leerer String an, den Aspire akzeptiert, deshalb bricht `deploy.yml` vorher ab. In Azure wird aus jedem ein Container-App-Secret.
+- Lokal: User-Secrets `Parameters:better-auth-secret` und `Parameters:auth-service-key` des AppHost, etwa mit `openssl rand -base64 32` erzeugt. Aspire-Tests, die den AppHost starten, übergeben beide als Argument.
 
 ## Anmeldung beim Deploy (Aspire 13.6.5)
 
@@ -28,12 +29,13 @@ Betriebsdoku (Einrichtung, Deploy-Ablauf): [BackOffice, docs/03_Betrieb/Deployme
 | `aspire run`/`dotnet test` nur mit lokalen Ressourcen | Sonst legen sie echte Azure-Ressourcen an. |
 | Subscription-ID per Secret | Das Repo ist öffentlich. |
 | `Azure:*`-Werte nur in `appsettings.azure-<name>.json` | Sonst bindet sie auch `aspire run`. |
-| Einmaliger Retry von `aspire deploy` | Aspire provisioniert pro App mit Datenbankzugriff ein eigenes Postgres-Admin-Modul, die Module laufen parallel, Flexible Server kann das mit `ServerIsBusy` ablehnen. Der zweite Versuch nutzt den Deploy-Stand auf dem Runner und wiederholt nur gescheiterte Module. |
+| Bis zu zwei Wiederholungen von `aspire deploy` | Aspire provisioniert pro App mit Datenbankzugriff (derzeit drei: `api`, `auth`, `product-import`) ein eigenes Postgres-Admin-Modul, die Module laufen parallel, Flexible Server kann das mit `ServerIsBusy` ablehnen. Jede Wiederholung nutzt den Deploy-Stand auf dem Runner und wiederholt nur gescheiterte Module. |
+| `shell: bash` am Step „Deploy“ | Ohne `shell` startet der Runner `bash -e`, erst `shell: bash` ergänzt `-o pipefail`. Ohne `pipefail` meldete der Step ein gescheitertes `git ls-remote` als „Skipped“ und endete grün. |
 | `~/.aspire/deployments` nie cachen oder hochladen | Enthält Subscription und Ressourcen-IDs. |
 | Rollenzuweisung, Resource Provider erst nach Vorbereitung in Azure | Sonst scheitert der Deploy. Application Insights braucht den Resource Provider `Microsoft.Insights`, ein Mensch registriert ihn vor dem ersten Deploy. |
 | Registry im RBAC-Modus | Verworfen: ABAC-Modus, dort scheitern Push und Pull. |
 | Ressourcennamen und Naming-Schema bleiben | Eine Umbenennung legt in Azure neue, leere Ressourcen an, die alten bleiben und kosten weiter. Aspire löscht beim Deploy nie etwas. |
-| Gemeinsame Identity `backend-identity` | Aspire macht jede Identity zu einem eigenen Postgres-Entra-Admin und damit zu einer eigenen Rolle, Tabellen gehören der Rolle, die migriert. Verworfen: getrennte Identities, sie verteilten die Tabellen auf mehrere Rollen, deren gegenseitiger Zugriff nur über Azure-spezifisches Verhalten von `azure_pg_admin` geht und lokal nicht testbar ist. |
+| Gemeinsame Identity `backend-identity` | Aspire macht jede Identity zu einem eigenen Postgres-Entra-Admin und damit zu einer eigenen Rolle, Tabellen gehören der Rolle, die migriert. Verworfen: getrennte Identities, sie verteilten die Tabellen auf mehrere Rollen, deren gegenseitiger Zugriff nur über Azure-spezifisches Verhalten von `azure_pg_admin` geht und lokal nicht testbar ist. Auch `auth` bekommt sie, sein generiertes Modul `auth-roles-postgres` gleicht denen der anderen Apps (derselbe Principal), deshalb brauchte es keine neue Vorbereitung in Azure. |
 | Ausgeschlossene Azure-Features | Preview oder Zusatzkosten. |
 | Keine Container-Apps-Probes | Gilt bis zum ersten konkreten Bedarf. |
 | Kein verwalteter OpenTelemetry-Agent der Container-Apps-Umgebung | Aspire 13.6.5 hat dafür keine API, der veraltete Collector bildet die Daten falsch ab. Siehe [Murmli/BackOffice#7](https://github.com/Murmli/BackOffice/issues/7). |

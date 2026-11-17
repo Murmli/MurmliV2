@@ -13,7 +13,7 @@ internal static class UserEndpoints
         CancellationToken cancellationToken
     )
     {
-        var account = await userRegistry.GetOrCreateAsync(user.GetZitadelUserId(), user.GetIssuedAt(), cancellationToken);
+        var account = await userRegistry.GetOrCreateAsync(user.GetAuthUserId(), user.GetIssuedAt(), cancellationToken);
         if (account is null)
         {
             return TypedResults.Unauthorized();
@@ -25,7 +25,7 @@ internal static class UserEndpoints
     public static async Task<Results<NoContent, ProblemHttpResult>> DeleteMeAsync(ClaimsPrincipal user, UserRegistry userRegistry)
     {
         // The app may close right after the tap, a started deletion must still run to the end
-        if (await userRegistry.DeleteAsync(user.GetZitadelUserId(), CancellationToken.None))
+        if (await userRegistry.DeleteAsync(user.GetAuthUserId(), CancellationToken.None))
         {
             return TypedResults.NoContent();
         }

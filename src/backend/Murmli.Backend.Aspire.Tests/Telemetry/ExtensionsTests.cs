@@ -27,18 +27,29 @@ public class ExtensionsTests
     [Theory]
     [InlineData("api")]
     [InlineData("product-import")]
+    [InlineData("auth")]
     public async Task WithTelemetry_PublishMode_ConnectsAppsToApplicationInsights(string resourceName)
     {
         var environment = await AppHostEnvironment.GetAsync(resourceName, AppHostEnvironment.PublishModeArguments);
 
         Assert.Contains("APPLICATIONINSIGHTS_CONNECTION_STRING", environment.Keys);
         Assert.Equal(resourceName, environment["OTEL_SERVICE_NAME"]);
+    }
+
+    [Theory]
+    [InlineData("api")]
+    [InlineData("product-import")]
+    public async Task WithTelemetry_PublishMode_LimitsConsoleToWarnings(string resourceName)
+    {
+        var environment = await AppHostEnvironment.GetAsync(resourceName, AppHostEnvironment.PublishModeArguments);
+
         Assert.Equal("Warning", environment["Logging__Console__LogLevel__Default"]);
     }
 
     [Theory]
     [InlineData("api")]
     [InlineData("product-import")]
+    [InlineData("auth")]
     public async Task WithTelemetry_RunMode_PassesNoApplicationInsightsSettings(string resourceName)
     {
         var environment = await AppHostEnvironment.GetAsync(resourceName, []);

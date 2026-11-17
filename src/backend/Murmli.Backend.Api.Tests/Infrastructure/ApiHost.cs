@@ -13,23 +13,23 @@ namespace Murmli.Backend.Api.Tests.Infrastructure;
 
 internal sealed class ApiHost : IAsyncDisposable
 {
-    public const string ZitadelServiceUserToken = "test-service-user-token";
+    public const string AuthServiceKey = "test-service-key";
 
     private readonly WebApplication application;
 
-    private ApiHost(WebApplication application, HttpClient httpClient, FakeTimeProvider timeProvider, ZitadelHttpMessageHandler zitadel)
+    private ApiHost(WebApplication application, HttpClient httpClient, FakeTimeProvider timeProvider, AuthServiceHttpMessageHandler authService)
     {
         this.application = application;
         HttpClient = httpClient;
         TimeProvider = timeProvider;
-        Zitadel = zitadel;
+        AuthService = authService;
     }
 
     public HttpClient HttpClient { get; }
 
     public FakeTimeProvider TimeProvider { get; }
 
-    public ZitadelHttpMessageHandler Zitadel { get; }
+    public AuthServiceHttpMessageHandler AuthService { get; }
 
     public static async Task<ApiHost> StartAsync(string connectionString, IReadOnlyDictionary<string, string?>? additionalConfiguration = null)
     {
@@ -46,8 +46,8 @@ internal sealed class ApiHost : IAsyncDisposable
                 ["Authentication:Schemes:Bearer:ValidAudiences:0"] = TestTokens.Audience,
                 ["Authentication:Schemes:Bearer:SigningKeys:0:Issuer"] = TestTokens.Issuer,
                 ["Authentication:Schemes:Bearer:SigningKeys:0:Value"] = TestTokens.SigningKeyBase64,
-                ["Zitadel:Authority"] = "http://zitadel.test",
-                ["Zitadel:ServiceUserToken"] = ZitadelServiceUserToken,
+                ["AuthService:BaseAddress"] = "http://auth.test",
+                ["AuthService:Key"] = AuthServiceKey,
             }
         );
         builder.Configuration.AddInMemoryCollection(additionalConfiguration);
@@ -56,9 +56,9 @@ internal sealed class ApiHost : IAsyncDisposable
         // Npgsql only writes UTC values to timestamp with time zone
         var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
         builder.Services.AddSingleton<TimeProvider>(timeProvider);
-        var zitadel = new ZitadelHttpMessageHandler();
+        var authService = new AuthServiceHttpMessageHandler();
         builder.Services.ConfigureAll<HttpClientFactoryOptions>(options =>
-            options.HttpMessageHandlerBuilderActions.Add(handlerBuilder => handlerBuilder.PrimaryHandler = zitadel)
+            options.HttpMessageHandlerBuilderActions.Add(handlerBuilder => handlerBuilder.PrimaryHandler = authService)
         );
 
         var application = builder.Build();
@@ -70,7 +70,7 @@ internal sealed class ApiHost : IAsyncDisposable
             application,
             new HttpClient { BaseAddress = new Uri(application.Urls.Single()) },
             timeProvider,
-            zitadel
+            authService
         );
     }
 
@@ -84,6 +84,6 @@ internal sealed class ApiHost : IAsyncDisposable
     {
         HttpClient.Dispose();
         await application.DisposeAsync();
-        Zitadel.Dispose();
+        AuthService.Dispose();
     }
 }

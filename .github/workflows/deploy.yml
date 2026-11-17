@@ -9,7 +9,9 @@ on:
         required: true
       AZURE_SUBSCRIPTION_ID:
         required: true
-      ZITADEL_SERVICE_USER_TOKEN:
+      BETTER_AUTH_SECRET:
+        required: true
+      AUTH_SERVICE_KEY:
         required: true
   workflow_dispatch:
 
@@ -46,11 +48,14 @@ jobs:
           done
       - name: Deploy
         id: deploy
+        # Only an explicit shell adds pipefail, without it a failing git ls-remote is reported as skipped
+        shell: bash
         env:
           Azure__SubscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           # The default 13 seconds for each az call time out on GitHub runners: https://github.com/microsoft/aspire/issues/13904
           Azure__CredentialProcessTimeoutSeconds: 120
-          Parameters__zitadel_service_user_token: ${{ secrets.ZITADEL_SERVICE_USER_TOKEN }}
+          Parameters__better_auth_secret: ${{ secrets.BETTER_AUTH_SECRET }}
+          Parameters__auth_service_key: ${{ secrets.AUTH_SERVICE_KEY }}
         run: |
           # Re-runs and slower CI runs of older commits must not overwrite a newer deploy.
           main_head=$(git ls-remote origin refs/heads/main | cut -f1)
@@ -62,16 +67,22 @@ jobs:
           aspire_version=$(sed -n 's|.*Sdk="Aspire.AppHost.Sdk/\([^"]*\)".*|\1|p' "$apphost")
           # Without a version dnx would silently run the latest CLI.
           : "${aspire_version:?Aspire.AppHost.Sdk version not found in $apphost}"
-          # An unset secret arrives as an empty string, which Aspire would deploy as the token.
-          : "${Parameters__zitadel_service_user_token:?ZITADEL_SERVICE_USER_TOKEN is missing in the development environment}"
+          # Unset secrets arrive as empty strings, which Aspire would deploy as the parameter values.
+          : "${Parameters__better_auth_secret:?BETTER_AUTH_SECRET is missing in the development environment}"
+          : "${Parameters__auth_service_key:?AUTH_SERVICE_KEY is missing in the development environment}"
           deploy() {
             dnx --yes "aspire.cli@$aspire_version" -- deploy --apphost "$apphost" --environment azure-dev --non-interactive
           }
-          # Aspire provisions the Postgres admin of each app in parallel, Flexible Server can reject that with ServerIsBusy; the retry reuses the local deploy state.
-          if ! deploy; then
-            echo "::warning::Deploy failed, retrying once."
-            deploy
-          fi
+          # Aspire provisions the Postgres admin of each app with database access (three apps) in parallel, Flexible Server can reject that with ServerIsBusy; each retry reuses the local deploy state and repeats only the failed modules.
+          for attempt in 1 2 3; do
+            if deploy; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "::warning::Deploy failed, retrying."
+            fi
+          done
+          exit 1
       - name: Print Aspire CLI log
         if: failure() && steps.deploy.outcome == 'failure'
         run: cat ~/.aspire/logs/cli_*.log

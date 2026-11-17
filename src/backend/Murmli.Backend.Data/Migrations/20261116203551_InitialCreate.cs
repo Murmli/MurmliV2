@@ -28,7 +28,7 @@ namespace Murmli.Backend.Data.Migrations
                 {
                     id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    zitadel_user_id = table.Column<string>(type: "text", nullable: false),
+                    auth_user_id = table.Column<string>(type: "text", nullable: false),
                     deleted_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
@@ -92,7 +92,7 @@ namespace Murmli.Backend.Data.Migrations
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
-                    zitadel_user_id = table.Column<string>(type: "text", nullable: false),
+                    auth_user_id = table.Column<string>(type: "text", nullable: false),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
@@ -101,10 +101,10 @@ namespace Murmli.Backend.Data.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "ix_deleted_users_zitadel_user_id",
+                name: "ix_deleted_users_auth_user_id",
                 schema: "identity",
                 table: "deleted_users",
-                column: "zitadel_user_id");
+                column: "auth_user_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_products_brand_trigram",
@@ -123,10 +123,10 @@ namespace Murmli.Backend.Data.Migrations
                 .Annotation("Npgsql:IndexOperators", new[] { "gin_trgm_ops" });
 
             migrationBuilder.CreateIndex(
-                name: "ix_users_zitadel_user_id",
+                name: "ix_users_auth_user_id",
                 schema: "identity",
                 table: "users",
-                column: "zitadel_user_id",
+                column: "auth_user_id",
                 unique: true);
         }
 

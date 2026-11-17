@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Murmli.Backend.Data.Migrations
 {
     [DbContext(typeof(MurmliDbContext))]
-    [Migration("20261116061236_InitialCreate")]
+    [Migration("20261116203551_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -35,20 +35,20 @@ namespace Murmli.Backend.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("AuthUserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("auth_user_id");
+
                     b.Property<DateTimeOffset>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<string>("ZitadelUserId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("zitadel_user_id");
-
                     b.HasKey("Id")
                         .HasName("pk_deleted_users");
 
-                    b.HasIndex("ZitadelUserId")
-                        .HasDatabaseName("ix_deleted_users_zitadel_user_id");
+                    b.HasIndex("AuthUserId")
+                        .HasDatabaseName("ix_deleted_users_auth_user_id");
 
                     b.ToTable("deleted_users", "identity");
                 });
@@ -59,21 +59,21 @@ namespace Murmli.Backend.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AuthUserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("auth_user_id");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("ZitadelUserId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("zitadel_user_id");
-
                     b.HasKey("Id")
                         .HasName("pk_users");
 
-                    b.HasIndex("ZitadelUserId")
+                    b.HasIndex("AuthUserId")
                         .IsUnique()
-                        .HasDatabaseName("ix_users_zitadel_user_id");
+                        .HasDatabaseName("ix_users_auth_user_id");
 
                     b.ToTable("users", "identity");
                 });
