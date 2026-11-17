@@ -35,6 +35,7 @@ fvm flutter build appbundle --flavor development
 fvm flutter build ios --flavor development --no-codesign
 ```
 
+- In Android Studio und IntelliJ starten die geteilten Run-Configurations `App (Flavor: local)`, `App (Flavor: development)` und `App (Flavor: production)` in `.idea/runConfigurations` die App mit dem jeweiligen Flavor.
 - Die App per `flutter` starten. Aus Xcode tragen nur die Schemes `local`, `development` und `production` einen Flavor (Flutter liest ihn aus der Configuration), das Scheme `Runner` nicht: Dort käme `appFlavor` aus dem, was die CLI zuletzt in `ios/Flutter/Generated.xcconfig` geschrieben hat, meist ist er leer und `flavorProvider` bricht beim Start mit einem `StateError` ab.
 - Android: `productFlavors` `local`, `development` und `production` mit der Dimension `environment` in `android/app/build.gradle.kts`, ohne `applicationIdSuffix`.
 - iOS: pro Flavor die Build-Configurations `Debug-<flavor>`, `Release-<flavor>` und `Profile-<flavor>` (Kopien von `Debug`, `Release` und `Profile`, wie es Flutters Doku zu Flavors auf iOS vorgibt) und ein geteiltes Scheme `<flavor>` (Kopie von `Runner.xcscheme` samt der Pre-Action „Run Prepare Flutter Framework Script“ und der LLDB-Init-Datei). `Runner.xcscheme` und die einfachen Configurations `Debug`, `Release` und `Profile` bleiben.
