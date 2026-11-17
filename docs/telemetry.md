@@ -31,8 +31,9 @@ Npgsql-Spans enthalten nie Parameterwerte. Eingeschaltet ist der Schalter nur lo
 
 `src/auth/src/infrastructure/telemetry.ts` startet das OpenTelemetry-NodeSDK.
 
-- Nur Traces: eingehende HTTP-Requests, Abfragen über `pg` und die eigenen Spans von Better Auth (Scope `better-auth`). Keine OpenTelemetry-Metriken und -Logs. Better Auth loggt ab `warn` auf die Konsole, Container Apps schreibt die Konsole in den Workspace.
-- `src/main.ts` registriert nur die Hooks von import-in-the-middle und importiert danach Telemetrie und Server dynamisch. `node:http` wird nur instrumentiert, wenn die Hooks vor seinem ersten Import registriert sind, `pg` patcht die Instrumentierung beim Laden.
+- Nur Traces: eingehende HTTP-Requests, ausgehende Aufrufe über `node:http` und `node:https`, Abfragen über `pg` und die eigenen Spans von Better Auth (Scope `better-auth`). Keine OpenTelemetry-Metriken und -Logs. Better Auth loggt ab `warn` auf die Konsole, Container Apps schreibt die Konsole in den Workspace.
+- Ausgehende Spans tragen die volle URL samt Query. In Azure betrifft das den Token-Abruf von `@azure/identity` für Postgres, dessen URL die `client_id` von `backend-identity` enthält. `fetch` ist nicht instrumentiert, darüber laufen die ausgehenden Aufrufe von Better Auth.
+- `src/auth/src/main.ts` registriert nur die Hooks von import-in-the-middle und importiert danach Telemetrie und Server dynamisch. `node:http` wird nur instrumentiert, wenn die Hooks vor seinem ersten Import registriert sind, `pg` patcht die Instrumentierung beim Laden.
 - Export: im Run-Mode OTLP (gRPC) aus den Variablen, die Aspire setzt, in Azure `@azure/monitor-opentelemetry-exporter` mit `disableOfflineStorage`, ohne beides kein Export.
 - Wie bei .NET: nur W3C Trace Context ohne Baggage, Sampler `ParentBased` mit `AlwaysOn` für Root und `remoteParentNotSampled`, `/health` nicht in den Traces (ohne Beachtung der Groß- und Kleinschreibung, mit abschließendem `/`), `pg`-Spans ohne Parameterwerte.
 - Bei SIGTERM und SIGINT schreibt `auth` die gepufferten Spans raus, bevor es sich beendet. Node läuft im Container als PID 1 und beendet sich nur über diesen Handler.

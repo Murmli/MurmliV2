@@ -83,7 +83,7 @@ Scheitert ein Schritt, kann sich der Nutzer weiter anmelden und die Löschung wi
 
 - Die API schickt `auth-service-key` als `Authorization: Bearer <Service-Key>`, `auth` vergleicht ihn in konstanter Zeit mit `AUTH_SERVICE_KEY`. `/service/delete-user` hängt am öffentlichen Ingress, nur der Service-Key schützt ihn.
 - Der Service-Key lässt sich jederzeit ersetzen, der neue Wert wirkt mit dem nächsten Deploy.
-- Scheitert der Aufruf, loggt die API nur den Statuscode (`AuthUserDeletionFailed`), nie den Antwort-Body.
+- Scheitert der Aufruf, loggt die API den Statuscode (`AuthUserDeletionFailed`), nie den Antwort-Body. Antwortet `auth` nicht (Timeout, Verbindungsfehler), gibt es keinen Statuscode, der Logeintrag trägt dann die Exception.
 
 ## Logs und Telemetrie
 
