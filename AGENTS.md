@@ -398,7 +398,7 @@ Hintergrund und Entscheidungen: [docs/authentication.md](docs/authentication.md)
 - Jeder Endpunkt ist nur mit Anmeldung erreichbar (Fallback-Policy). Ausnahmen per `AllowAnonymous()` nur für `/health`, das OpenAPI-Dokument und für Endpunkte, deren Issue ausdrücklich verlangt, dass sie anonym erreichbar sind, nie aus eigenem Ermessen.
 - Die App spricht mit Better Auth nur zum Anmelden, Abmelden und Holen bzw. Erneuern des JWT, alles andere läuft über die API.
 - Die API greift nie auf die Tabellen von Better Auth zu (kein EF-Mapping, kein SQL), sie nutzt immer die HTTP-API von `auth`.
-- Nutzerdaten hängen an `identity.users.id`, nie an der Better-Auth-ID. Jede neue Art von Nutzerdaten gehört in die Löschung: in Postgres per Fremdschlüssel mit `ON DELETE CASCADE` auf `identity.users`, außerhalb von Postgres ausdrücklich in `UserRegistry.DeleteAsync` vor dem Aufruf von `auth`.
+- Nutzerdaten hängen an `identity.users.id`, nie an der Better-Auth-ID. Jede neue Art von Nutzerdaten gehört in die Löschung: in Postgres per Fremdschlüssel mit `ON DELETE CASCADE` auf `identity.users`, außerhalb von Postgres ausdrücklich in `UserRegistry.DeleteAsync` vor dem Aufruf von `auth`. Ausgenommen ist Telemetrie mit der eigenen Id, sie läuft mit ihrer Aufbewahrungsfrist aus.
 - `sub`, E-Mail und Token nie selbst loggen und nie in Span-Attribute schreiben.
 - `BETTER_AUTH_SECRET` kommt nur über den Secret-Parameter `better-auth-secret` und wird nie geändert, Rotation nur über `BETTER_AUTH_SECRETS`.
 - `jwks.keyPairConfig.alg` bleibt ES256, `user.deleteUser` von Better Auth bleibt aus.
