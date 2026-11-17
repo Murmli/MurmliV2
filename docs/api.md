@@ -1,14 +1,23 @@
 # API
 
-Alle Endpunkte der API mappt `MapApi()` in `Murmli.Backend.Api`.
+`UseApi()` in `Murmli.Backend.Api` richtet die Pipeline der API ein, eigene Middleware und alle Endpunkte. `Program.cs` und `ApiHost` der Tests richten die Pipeline nur über `UseApi()` ein, sie ist in beiden gleich (`ApiHost` mappt auf Wunsch zusätzlich einen Test-Endpunkt, der wirft).
 
 Lokal lauscht die API über das Launch-Profil `http` in `Murmli.Backend.Api.Host/Properties/launchSettings.json` fest auf Port 5020, damit lokale Clients (etwa der Flavor `local` der App, siehe [app.md](app.md#flavors)) eine stabile Adresse haben.
+
+## Pipeline
+
+1. `UseRouting`, `UseAuthentication` und `UseAuthorization` fügt `WebApplication` selbst vor der eigenen Middleware ein (im Environment `Development` davor die Developer Exception Page). Anfragen ohne Anmeldung an geschützte Endpunkte enden hier mit 401.
+2. `UserTelemetryMiddleware` ergänzt bei angemeldeten Nutzern mit Konto die Konto-Id (siehe [telemetry.md](telemetry.md#konto-id)).
+3. `UseExceptionHandler()` fängt unbehandelte Exceptions, loggt sie mit `UserId` und antwortet mit 500 als Problem Details (`application/problem+json` mit `traceId`, ohne Details der Exception). Schickt der Client einen `Accept`-Header ohne JSON, bleibt die 500-Antwort ohne Body.
+4. Die Endpunkte.
+
+Exceptions vor Schritt 3 (Authentifizierung, Abruf der Konto-Id) erreichen den Handler nicht. Sie behandelt Kestrel (500 ohne Body, Log ohne `UserId`), lokal die Developer Exception Page.
 
 ## Versionierung
 
 Die App erreicht Nutzer über die Stores, alte Versionen bleiben noch lange in Gebrauch und sprechen weiter mit der API. Deshalb trägt der Pfad die Major-Version (etwa `/v1/users/me`), eine Version per Header oder Query gibt es nicht.
 
-- `MapApi()` mappt alle Endpunkte in die Gruppe `/v1`. Ohne Version bleiben nur `/health` und das OpenAPI-Dokument.
+- `UseApi()` mappt alle Endpunkte in die Gruppe `/v1`. Ohne Version bleiben nur `/health` und das OpenAPI-Dokument.
 - Pfade ohne Version wie `/users/me` sind unbekannte Routen: ohne Anmeldung antwortet die API mit 401 (die Fallback-Policy gilt auch für unbekannte Routen), mit Anmeldung mit 404.
 - Bis zum ersten Live-Gang geht jede Änderung in `v1`, auch inkompatible. Danach ändert sich eine Version nur rückwärtskompatibel (neue Endpunkte, neue Felder in Antworten, Clients ignorieren unbekannte Felder), alles andere bekommt eine neue Version.
 
@@ -37,7 +46,7 @@ Produkte ohne Nährwerte bleiben auffindbar, rutschen aber nach hinten. Thekenar
 ## Tests
 
 - `ProductEndpointsTests` in `Murmli.Backend.Api.Tests` deckt die Produktsuche ab.
-- `EndpointRouteBuilderExtensionsTests` in `Murmli.Backend.Api.Tests` deckt das OpenAPI-Dokument ab (erreichbar, wenn eingeschaltet, Version 3.2, nur Pfade unter `/v1`, 401 und 404, wenn ausgeschaltet) und dass Pfade ohne Version mit 404 antworten.
+- `WebApplicationExtensionsTests` in `Murmli.Backend.Api.Tests` deckt das OpenAPI-Dokument ab (erreichbar, wenn eingeschaltet, Version 3.2, nur Pfade unter `/v1`, 401 und 404, wenn ausgeschaltet) und dass Pfade ohne Version mit 404 antworten und unbehandelte Exceptions mit 500 als Problem Details.
 - `Api/ExtensionsTests` in `Murmli.Backend.Aspire.Tests` deckt das Weiterreichen des Schalters `OpenApi:Enabled` ab.
 
 ## Entscheidungen
@@ -47,5 +56,5 @@ Produkte ohne Nährwerte bleiben auffindbar, rutschen aber nach hinten. Thekenar
 | Präfix per `MapGroup` statt Asp.Versioning | Asp.Versioning hat noch kein Release für .NET 11, sein OpenAPI-Paket hängt an Microsoft.OpenApi 2.x, ASP.NET Core 11 braucht 3.x. Der Wechsel ist [#68](https://github.com/Murmli/MurmliV2/issues/68) und behält Pfade und Dokumentnamen. |
 | Kein `WithGroupName("v1")` | Mit nur dem Dokument `v1` landen Endpunkte ohne Gruppennamen ohnehin darin. Mit einer zweiten Version setzt Asp.Versioning die Gruppennamen. |
 | Schalter `OpenApi:Enabled` statt `IsDevelopment()` | Die API läuft in Azure Dev als Production, `Development` setzt nur `aspire run` über die launchSettings. `IsDevelopment()` schlösse Dev aus. |
-| Validierungsfehler als `TypedResults.ValidationProblem` (400) | `HttpValidationProblemDetails` schreibt sich selbst, `AddProblemDetails` ist dafür nicht nötig. |
+| Fehlerantworten als Problem Details über `AddProblemDetails()` | `UseExceptionHandler()` ohne Pfad braucht den `IProblemDetailsService` für die 500-Antwort. Über ihn schreiben auch `TypedResults.ValidationProblem` (400, Produktsuche) und `TypedResults.Problem` (502, Konto löschen), samt `traceId`. Ohne JSON im `Accept`-Header schreiben sie ihre Problem Details ohne den Dienst selbst. |
 | Suchbegriff im Query-String | Suchbegriffe gelten nicht als Gesundheitsdaten, die Regel „Keine Gesundheitsdaten in URLs“ greift deshalb nicht. |
