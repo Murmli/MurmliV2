@@ -7,12 +7,24 @@ on:
         description: App flavor to build (local, development or production).
         type: string
         required: true
-      upload-debug-symbols:
-        description: Upload debug symbols and R8 mappings to Sentry with the secret SENTRY_AUTH_TOKEN of the environment development.
+      deliver:
+        description: Upload debug symbols and R8 mappings to Sentry with the secret SENTRY_AUTH_TOKEN of the environment development, and keep the iOS app as artifact ios-ipa for deliver-app.yml.
         type: boolean
         required: true
     secrets:
       SENTRY_AUTH_TOKEN:
+        required: false
+      APPLE_CERTIFICATE_DATA:
+        required: false
+      APPLE_CERTIFICATE_PASSPHRASE:
+        required: false
+      APPLE_APP_STORE_CONNECT_KEY:
+        required: false
+      APPLE_APP_STORE_CONNECT_KEY_ID:
+        required: false
+      APPLE_APP_STORE_CONNECT_ISSUER_ID:
+        required: false
+      APPLE_TEAM_ID:
         required: false
 
 permissions:
@@ -24,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     # Environment secrets only reach jobs that name the environment.
     environment:
-      name: ${{ inputs.upload-debug-symbols && 'development' || '' }}
+      name: ${{ inputs.deliver && 'development' || '' }}
       deployment: false
     defaults:
       run:
@@ -32,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check Sentry auth token
-        if: inputs.upload-debug-symbols
+        if: inputs.deliver
         # An unset secret arrives as an empty string, which sentry_dart_plugin accepts until the upload fails.
         run: ': "${SENTRY_AUTH_TOKEN:?SENTRY_AUTH_TOKEN is missing in the development environment}"'
         env:
@@ -46,10 +58,10 @@ jobs:
       - run: flutter build appbundle --release --flavor "$FLAVOR" --split-debug-info=build/debug-info
         env:
           FLAVOR: ${{ inputs.flavor }}
-          ORG_GRADLE_PROJECT_sentryUploadProguardMapping: ${{ inputs.upload-debug-symbols }}
+          ORG_GRADLE_PROJECT_sentryUploadProguardMapping: ${{ inputs.deliver }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       - name: Upload debug symbols
-        if: inputs.upload-debug-symbols
+        if: inputs.deliver
         run: dart run sentry_dart_plugin
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
@@ -59,7 +71,7 @@ jobs:
     runs-on: macos-latest
     # Environment secrets only reach jobs that name the environment.
     environment:
-      name: ${{ inputs.upload-debug-symbols && 'development' || '' }}
+      name: ${{ inputs.deliver && 'development' || '' }}
       deployment: false
     defaults:
       run:
@@ -67,17 +79,79 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Check Sentry auth token
-        if: inputs.upload-debug-symbols
+        if: inputs.deliver
         # An unset secret arrives as an empty string, which sentry_dart_plugin accepts until the upload fails.
         run: ': "${SENTRY_AUTH_TOKEN:?SENTRY_AUTH_TOKEN is missing in the development environment}"'
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      - name: Check Apple secrets
+        # Repository secrets, so pull requests sign too; pull requests from forks get none and stop here.
+        run: |
+          : "${APPLE_CERTIFICATE_DATA:?APPLE_CERTIFICATE_DATA is missing in the repository secrets}"
+          : "${APPLE_CERTIFICATE_PASSPHRASE:?APPLE_CERTIFICATE_PASSPHRASE is missing in the repository secrets}"
+          : "${APPLE_APP_STORE_CONNECT_KEY:?APPLE_APP_STORE_CONNECT_KEY is missing in the repository secrets}"
+          : "${APPLE_APP_STORE_CONNECT_KEY_ID:?APPLE_APP_STORE_CONNECT_KEY_ID is missing in the repository secrets}"
+          : "${APPLE_APP_STORE_CONNECT_ISSUER_ID:?APPLE_APP_STORE_CONNECT_ISSUER_ID is missing in the repository secrets}"
+          : "${APPLE_TEAM_ID:?APPLE_TEAM_ID is missing in the repository secrets}"
+        env:
+          APPLE_CERTIFICATE_DATA: ${{ secrets.APPLE_CERTIFICATE_DATA }}
+          APPLE_CERTIFICATE_PASSPHRASE: ${{ secrets.APPLE_CERTIFICATE_PASSPHRASE }}
+          APPLE_APP_STORE_CONNECT_KEY: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY }}
+          APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
+          APPLE_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       - uses: ./.github/actions/setup-app
-      - run: flutter build ios --release --no-codesign --flavor "$FLAVOR" --split-debug-info=build/debug-info
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          working-directory: src/app
+      - name: Write signing inputs
+        run: |
+          printf '%s' "$APPLE_CERTIFICATE_DATA" | base64 -d > "$RUNNER_TEMP/distribution.p12"
+          printf '%s' "$APPLE_APP_STORE_CONNECT_KEY" | base64 -d > "$RUNNER_TEMP/AuthKey.p8"
+        env:
+          APPLE_CERTIFICATE_DATA: ${{ secrets.APPLE_CERTIFICATE_DATA }}
+          APPLE_APP_STORE_CONNECT_KEY: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY }}
+      - run: bundle exec fastlane ios prepare_signing flavor:"$FLAVOR"
         env:
           FLAVOR: ${{ inputs.flavor }}
+          APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
+          APPLE_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_CERTIFICATE_PASSPHRASE: ${{ secrets.APPLE_CERTIFICATE_PASSPHRASE }}
+          FASTLANE_WWDR_USE_HTTP1_AND_RETRIES: '1'
+      - name: Build IPA
+        # flutter build ipa exits 0 when only the export of the archive fails.
+        run: |
+          flutter build ipa --release --flavor "$FLAVOR" --split-debug-info=build/debug-info --build-number="$BUILD_NUMBER"
+          ls build/ios/ipa/*.ipa
+        env:
+          FLAVOR: ${{ inputs.flavor }}
+          BUILD_NUMBER: ${{ github.run_number }}
       - name: Upload debug symbols
-        if: inputs.upload-debug-symbols
-        run: dart run sentry_dart_plugin
+        if: inputs.deliver
+        # The sentry section of the pubspec names the production bundle id and the pubspec build number, the app reports the ones it was built with.
+        run: |
+          info_plist=build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app/Info.plist
+          bundle_identifier=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info_plist")
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$info_plist")
+          build_number=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$info_plist")
+          SENTRY_RELEASE="$bundle_identifier@$version+$build_number" SENTRY_DIST="$build_number" dart run sentry_dart_plugin
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      - name: Keep IPA for delivery
+        if: inputs.deliver
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ipa
+          path: src/app/build/ios/ipa/*.ipa
+          if-no-files-found: error
+          retention-days: 1
+      - name: Remove signing secrets
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/distribution.p12" "$RUNNER_TEMP/AuthKey.p8"
+          keychain="$HOME/Library/Keychains/fastlane_tmp_keychain-db"
+          if [ -f "$keychain" ]; then
+            security delete-keychain "$keychain"
+          fi
