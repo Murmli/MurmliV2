@@ -336,8 +336,8 @@ Hintergrund und Entscheidungen: [docs/ci.md](docs/ci.md)
   - Auth (`src/auth`): `npm ci`, `npm run check`.
 - Generierte Dateien (`*.g.dart`, `*.gr.dart`, `*.freezed.dart`) werden nicht committet; CI erzeugt sie in der Composite-Action `.github/actions/setup-app` per build_runner.
 - Funde ohne Fix unterdrücken: Backend per `<NuGetAuditSuppress>` im csproj, App (auch `src/app/Gemfile.lock`) per `[[IgnoredVulns]]` in `src/app/osv-scanner.toml`, Auth per `[[IgnoredVulns]]` in `src/auth/osv-scanner.toml`.
-- Concurrency nur in `ci.yml` setzen. Ausnahme: `deploy.yml` und jeder weitere Workflow, der Dev ändert, bekommt die feste Gruppe `deploy-dev` mit `cancel-in-progress: false`, der aufrufende `deploy`-Job in `ci.yml` keine.
-- Debug-Symbole und R8-Mappings lädt nur `build-app.yml` mit dem Input `deliver` hoch (der iOS-Job lädt damit zusätzlich nach TestFlight), `ci.yml` setzt ihn nur bei Push auf `main`. `dart run sentry_dart_plugin` und sentry-cli nie lokal oder in Pull Requests aufrufen und die Gradle-Property `sentryUploadProguardMapping` dort nie setzen, auch nicht durch Agents (das Gradle-Plugin ruft sentry-cli in jedem Release-Build selbst auf, ohne die Property nur im Dry-Run mit `--no-upload`). `SENTRY_AUTH_TOKEN` liegt nur im Environment `development`, Jobs nennen es nur bei `deliver` und mit `deployment: false`.
+- Concurrency nur in `ci.yml` setzen. Ausnahme: `deploy.yml` und jeder weitere Workflow, der Dev ändert, bekommt die feste Gruppe `deploy-dev` mit `cancel-in-progress: false`, der aufrufende `deploy`-Job in `ci.yml` keine. `deliver-app.yml` ändert Dev nicht und bekommt keine Gruppe.
+- Debug-Symbole und R8-Mappings lädt nur `build-app.yml` mit dem Input `deliver` hoch (der iOS-Job legt damit zusätzlich die IPA als Artifact für `deliver-app.yml` ab), `ci.yml` setzt ihn nur bei Push auf `main`. `dart run sentry_dart_plugin` und sentry-cli nie lokal oder in Pull Requests aufrufen und die Gradle-Property `sentryUploadProguardMapping` dort nie setzen, auch nicht durch Agents (das Gradle-Plugin ruft sentry-cli in jedem Release-Build selbst auf, ohne die Property nur im Dry-Run mit `--no-upload`). `SENTRY_AUTH_TOKEN` liegt nur im Environment `development`, Jobs nennen es nur bei `deliver` und mit `deployment: false`.
 - Release-Builds in `build-app.yml` behalten `--split-debug-info=build/debug-info` (gleich `symbols_path` im Abschnitt `sentry:` der `src/app/pubspec.yaml`) und laufen ohne `--obfuscate`.
 
 ## Aspire und Azure
@@ -455,10 +455,10 @@ Hintergrund und Entscheidungen: [docs/app.md](docs/app.md)
 
 Hintergrund und Entscheidungen: [docs/apple.md](docs/apple.md)
 
-- `build-app.yml` baut iOS immer signiert: `bundle exec fastlane ios prepare_signing flavor:<flavor>`, dann `flutter build ipa`, mit `deliver` folgt vor dem Aufräumen als letzter Step `bundle exec fastlane ios upload`. Kein `build_app`/gym und kein `flutter build ios --config-only`.
-- Jede Datei mit Secrets oder Schlüsseln, die der iOS-Job schreibt (auch indirekt über fastlane), löscht der letzte Step „Remove signing secrets“ (`if: always()`). Neue solche Dateien dort ergänzen.
+- `build-app.yml` baut iOS immer signiert: `bundle exec fastlane ios prepare_signing flavor:<flavor>`, dann `flutter build ipa`, mit `deliver` legt es die IPA als Artifact ab. Hochladen per `bundle exec fastlane ios upload` nur in `deliver-app.yml` (aus `ci.yml` nur bei Push auf `main`, nach allen Checks, parallel zu `deploy`). Kein `build_app`/gym und kein `flutter build ios --config-only`.
+- Jede Datei mit Secrets oder Schlüsseln, die ein Job in `build-app.yml` oder `deliver-app.yml` schreibt (auch indirekt über fastlane), löscht dessen letzter Step „Remove signing secrets“ (`if: always()`). Neue solche Dateien dort ergänzen.
 - `bundle exec fastlane` nie lokal oder als Agent ausführen, nur die CI ruft es auf.
 - Zertifikate, API-Schlüssel, App IDs, Provisioning-Profile, App-Einträge und Tester legt nur ein Mensch an oder löscht sie. Einzige Ausnahme: das Profil des Flavors, das `sigh` in `prepare_signing` anlegt, wenn es fehlt.
-- `APPLE_*` nur als Repository-Secrets, `ci.yml` reicht sie namentlich an `build-app.yml`.
+- `APPLE_*` nur als Repository-Secrets, `ci.yml` reicht sie namentlich an `build-app.yml`, an `deliver-app.yml` nur die drei `APPLE_APP_STORE_CONNECT_*`.
 - Kein `DEVELOPMENT_TEAM` im Xcode-Projekt committen, auch nicht nach dem Signieren für ein Gerät.
-- `src/app/Gemfile.lock` nie von Hand ändern, nur mit dem Docker-Befehl aus [docs/apple.md](docs/apple.md#fastlane-aktualisieren) neu erzeugen (Ruby-Version aus `build-app.yml`).
+- `src/app/Gemfile.lock` nie von Hand ändern, nur mit dem Docker-Befehl aus [docs/apple.md](docs/apple.md#fastlane-aktualisieren) neu erzeugen (Ruby-Version aus `src/app/.ruby-version`).
