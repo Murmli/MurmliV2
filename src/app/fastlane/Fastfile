@@ -1,0 +1,74 @@
+platform :ios do
+  desc "Import the distribution certificate and switch the flavor's Release configuration to manual signing"
+  lane :prepare_signing do |options|
+    flavor = options.fetch(:flavor)
+    signing = {
+      "development" => {
+        app_identifier: "de.murmli.app.dev",
+        profile_name: "Murmli Dev App Store"
+      }
+    }.fetch(flavor)
+    team_id = ENV.fetch("APPLE_TEAM_ID")
+
+    setup_ci
+
+    api_key = connect_api_key
+
+    import_certificate(
+      certificate_path: File.join(ENV.fetch("RUNNER_TEMP"), "distribution.p12"),
+      certificate_password: ENV.fetch("APPLE_CERTIFICATE_PASSPHRASE"),
+      keychain_name: "fastlane_tmp_keychain",
+      keychain_password: ""
+    )
+
+    # import_certificate only logs a failed import and carries on
+    UI.user_error!("No Apple Distribution identity after the import, check APPLE_CERTIFICATE_DATA and APPLE_CERTIFICATE_PASSPHRASE") unless sh("security", "find-identity", "-v", "-p", "codesigning", log: false).include?("Apple Distribution")
+
+    get_provisioning_profile(
+      api_key: api_key,
+      app_identifier: signing[:app_identifier],
+      team_id: team_id,
+      provisioning_name: signing[:profile_name],
+      ignore_profiles_with_different_name: true,
+      # Without this, an unusable same-named portal profile (e.g. after a
+      # certificate rotation) makes sigh silently create a timestamp-suffixed
+      # profile that no longer matches the pinned name below
+      fail_on_name_taken: true
+    )
+
+    # Automatic signing would mint a fresh development certificate on every
+    # ephemeral runner and eventually exhaust the account's certificate quota,
+    # so the archive signs manually with the imported distribution identity
+    update_code_signing_settings(
+      path: "ios/Runner.xcodeproj",
+      use_automatic_signing: false,
+      team_id: team_id,
+      targets: ["Runner"],
+      build_configurations: ["Release-#{flavor}"],
+      code_sign_identity: "Apple Distribution",
+      profile_name: signing[:profile_name]
+    )
+  end
+
+  desc "Upload the IPA built by flutter build ipa to TestFlight"
+  lane :upload do
+    connect_api_key
+
+    # Lanes run inside fastlane/, actions inside src/app, so the path has to be absolute
+    ipa_paths = Dir.glob(File.expand_path("../build/ios/ipa/*.ipa"))
+    UI.user_error!("Expected one IPA in build/ios/ipa, found #{ipa_paths.size}") unless ipa_paths.size == 1
+
+    upload_to_testflight(
+      ipa: ipa_paths.first,
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+  private_lane :connect_api_key do
+    app_store_connect_api_key(
+      key_id: ENV.fetch("APPLE_APP_STORE_CONNECT_KEY_ID"),
+      issuer_id: ENV.fetch("APPLE_APP_STORE_CONNECT_ISSUER_ID"),
+      key_filepath: File.join(ENV.fetch("RUNNER_TEMP"), "AuthKey.p8")
+    )
+  end
+end
