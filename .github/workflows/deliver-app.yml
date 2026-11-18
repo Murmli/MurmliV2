@@ -1,0 +1,57 @@
+name: Deliver app
+
+on:
+  workflow_call:
+    secrets:
+      APPLE_APP_STORE_CONNECT_KEY:
+        required: false
+      APPLE_APP_STORE_CONNECT_KEY_ID:
+        required: false
+      APPLE_APP_STORE_CONNECT_ISSUER_ID:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    name: iOS
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: src/app
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check Apple secrets
+        run: |
+          : "${APPLE_APP_STORE_CONNECT_KEY:?APPLE_APP_STORE_CONNECT_KEY is missing in the repository secrets}"
+          : "${APPLE_APP_STORE_CONNECT_KEY_ID:?APPLE_APP_STORE_CONNECT_KEY_ID is missing in the repository secrets}"
+          : "${APPLE_APP_STORE_CONNECT_ISSUER_ID:?APPLE_APP_STORE_CONNECT_ISSUER_ID is missing in the repository secrets}"
+        env:
+          APPLE_APP_STORE_CONNECT_KEY: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY }}
+          APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
+          APPLE_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER_ID }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: ios-ipa
+          path: src/app/build/ios/ipa
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          working-directory: src/app
+      - name: Write API key
+        run: printf '%s' "$APPLE_APP_STORE_CONNECT_KEY" | base64 -d > "$RUNNER_TEMP/AuthKey.p8"
+        env:
+          APPLE_APP_STORE_CONNECT_KEY: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY }}
+      - name: Upload to TestFlight
+        run: bundle exec fastlane ios upload
+        env:
+          APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
+          APPLE_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER_ID }}
+      - name: Remove signing secrets
+        if: always()
+        # fastlane leaves a copy of the .p8 behind when it is killed during the upload.
+        run: |
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
+          rm -rf "$HOME/.appstoreconnect/private_keys"
+          find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'deliver-*' -exec rm -rf {} +
