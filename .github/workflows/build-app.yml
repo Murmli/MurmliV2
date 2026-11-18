@@ -146,3 +146,14 @@ jobs:
         env:
           APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
           APPLE_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER_ID }}
+      - name: Remove signing secrets
+        if: always()
+        # Also after failures and cancellations; fastlane leaves a .p8 copy behind when it is killed during the upload.
+        run: |
+          rm -f "$RUNNER_TEMP/distribution.p12" "$RUNNER_TEMP/AuthKey.p8"
+          rm -rf "$HOME/.appstoreconnect/private_keys"
+          find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'deliver-*' -exec rm -rf {} +
+          keychain="$HOME/Library/Keychains/fastlane_tmp_keychain-db"
+          if [ -f "$keychain" ]; then
+            security delete-keychain "$keychain"
+          fi
