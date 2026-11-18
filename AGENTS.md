@@ -455,7 +455,8 @@ Hintergrund und Entscheidungen: [docs/app.md](docs/app.md)
 
 Hintergrund und Entscheidungen: [docs/apple.md](docs/apple.md)
 
-- `build-app.yml` baut iOS immer signiert: `bundle exec fastlane ios prepare_signing flavor:<flavor>`, dann `flutter build ipa`, mit `deliver` folgt als letzter Step `bundle exec fastlane ios upload`. Kein `build_app`/gym und kein `flutter build ios --config-only`.
+- `build-app.yml` baut iOS immer signiert: `bundle exec fastlane ios prepare_signing flavor:<flavor>`, dann `flutter build ipa`, mit `deliver` folgt vor dem Aufräumen als letzter Step `bundle exec fastlane ios upload`. Kein `build_app`/gym und kein `flutter build ios --config-only`.
+- Jede Datei mit Secrets oder Schlüsseln, die der iOS-Job schreibt (auch indirekt über fastlane), löscht der letzte Step „Remove signing secrets“ (`if: always()`). Neue solche Dateien dort ergänzen.
 - `bundle exec fastlane` nie lokal oder als Agent ausführen, nur die CI ruft es auf.
 - Zertifikate, API-Schlüssel, App IDs, Provisioning-Profile, App-Einträge und Tester legt nur ein Mensch an oder löscht sie. Einzige Ausnahme: das Profil des Flavors, das `sigh` in `prepare_signing` anlegt, wenn es fehlt.
 - `APPLE_*` nur als Repository-Secrets, `ci.yml` reicht sie namentlich an `build-app.yml`.
