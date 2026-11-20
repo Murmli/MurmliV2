@@ -1,6 +1,6 @@
 # CI
 
-`ci.yml` läuft bei Push auf `main` und bei Pull Requests und ruft `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf, auf `main` danach `deploy.yml` (Ablauf und Wiederholungen von `aspire deploy` in [azure.md](azure.md)) und parallel dazu `deliver-app.yml`, das die iOS-App nach TestFlight ([apple.md](apple.md#upload-nach-testflight)) und die Android-App in den internen Test von Google Play lädt ([google-play.md](google-play.md#upload-nach-google-play)).
+`ci.yml` läuft bei Push auf `main` und bei Pull Requests und ruft `lint.yml`, `test.yml`, `build-app.yml` und `vulnerability-scan.yml` auf, auf `main` danach `deploy-backend.yml` (Ablauf und Wiederholungen von `aspire deploy` in [azure.md](azure.md)) und parallel dazu `deliver-app.yml`, das die iOS-App nach TestFlight ([apple.md](apple.md#upload-nach-testflight)) und die Android-App in den internen Test von Google Play lädt ([google-play.md](google-play.md#upload-nach-google-play)).
 
 Lokale Checks (Befehle in [AGENTS.md](../AGENTS.md#ci)):
 
@@ -30,7 +30,7 @@ Lokale Checks (Befehle in [AGENTS.md](../AGENTS.md#ci)):
 | `main` geschützt, Ready for review und Merge nur durch einen Menschen | Jeder Merge auf `main` deployt Dev. |
 | Concurrency nur in `ci.yml` | In Called Workflows blockiert oder cancelt sie den Caller. |
 | Gruppe `deploy-dev` am Job, ohne Cancel | Ein Abbruch bräche laufende ARM-Deployments ab. |
-| Keine Gruppe am aufrufenden `deploy`-Job | Sonst wartet der Deploy auf eine Sperre, die sein eigener Caller hält. |
+| Keine Gruppe am aufrufenden `deploy-backend`-Job | Sonst wartet der Deploy auf eine Sperre, die sein eigener Caller hält. |
 | Gruppe `google-play-upload` am Android-Job von `deliver-app.yml`, ohne Cancel | Gleichzeitige Uploads nach Google Play scheitern gegenseitig ([google-play.md](google-play.md#entscheidungen)). |
 | Backend-Formatierung nur mit `dotnet format` (ohne `.editorconfig`) | Geprüft und vorerst verworfen (2026-11-14): CSharpier bricht Argumente nur nach Zeilenbreite um und widerspricht dem vollen `dotnet format`; ReSharper `jb cleanupcode` erzwingt ein Argument pro Zeile, verlängert den Code aber stark, ist 190 MB groß, proprietär und hat keinen Prüfmodus. `dotnet format` selbst kann Argumentlisten weder umbrechen noch prüfen. |
 | osv-scanner-action auf exakter Version | Die Action hat keinen gleitenden Major-Tag. |
@@ -39,4 +39,4 @@ Lokale Checks (Befehle in [AGENTS.md](../AGENTS.md#ci)):
 | Kein `--obfuscate` | Für lesbare Stacktraces reicht `--split-debug-info`. Laut Flutter lieferten `runtimeType` und `Enum.toString()` verschleierte Namen, und Issue-Titel bräuchten zusätzlich die Obfuscation-Map. |
 | R8-Mapping über das Sentry Android Gradle Plugin | Das Android-SDK ordnet das Mapping über eine UUID in den Assets der App zu, die das Plugin vor R8 erzeugt und beim Upload mitgibt. `sentry_dart_plugin` lädt keine Mappings hoch. |
 | Upload-Fehler lassen den Job scheitern | Fehlende Symbole sollen auffallen, auch um den Preis eines blockierten Deploys. |
-| Environment mit `deployment: false` | Build- und Upload-Jobs deployen nichts, Deployments nach `development` stammen nur aus `deploy.yml`. |
+| Environment mit `deployment: false` | Build- und Upload-Jobs deployen nichts, Deployments nach `development` stammen nur aus `deploy-backend.yml`. |
