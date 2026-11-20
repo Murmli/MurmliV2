@@ -1,60 +1,46 @@
 # API
 
-`UseApi()` in `Murmli.Backend.Api` richtet die Pipeline der API ein, eigene Middleware und alle Endpunkte. `Program.cs` und `ApiHost` der Tests richten die Pipeline nur über `UseApi()` ein, sie ist in beiden gleich (`ApiHost` mappt auf Wunsch zusätzlich einen Test-Endpunkt, der wirft).
-
-Lokal lauscht die API über das Launch-Profil `http` in `Murmli.Backend.Api.Host/Properties/launchSettings.json` fest auf Port 5020, damit lokale Clients (etwa der Flavor `local` der App, siehe [app.md](app.md#flavors)) eine stabile Adresse haben.
+Lokal lauscht die API über das Launch-Profil `http` fest auf Port 5020, damit lokale Clients eine stabile Adresse haben (etwa der Flavor `local`, siehe [app.md](app.md#flavors)).
 
 ## Pipeline
 
-1. `UseRouting`, `UseAuthentication` und `UseAuthorization` fügt `WebApplication` selbst vor der eigenen Middleware ein (im Environment `Development` davor die Developer Exception Page). Anfragen ohne Anmeldung an geschützte Endpunkte enden hier mit 401.
-2. `UserTelemetryMiddleware` ergänzt bei angemeldeten Nutzern mit Konto die Konto-Id (siehe [telemetry.md](telemetry.md#konto-id)).
-3. `UseExceptionHandler()` fängt unbehandelte Exceptions, loggt sie mit `UserId` und antwortet mit 500 als Problem Details (`application/problem+json` mit `traceId`, ohne Details der Exception). Schickt der Client einen `Accept`-Header ohne JSON, bleibt die 500-Antwort ohne Body.
+1. `UseRouting`, `UseAuthentication` und `UseAuthorization` fügt `WebApplication` selbst ein (im Environment `Development` davor die Developer Exception Page). Geschützte Endpunkte ohne Anmeldung enden hier mit 401.
+2. `UserTelemetryMiddleware` (siehe [telemetry.md](telemetry.md#konto-id)).
+3. `UseExceptionHandler()` loggt unbehandelte Exceptions mit `UserId` und antwortet mit 500 als Problem Details (mit `traceId`, ohne Details der Exception). Ohne JSON im `Accept`-Header bleibt die 500-Antwort ohne Body.
 4. Die Endpunkte.
 
-Exceptions vor Schritt 3 (Authentifizierung, Abruf der Konto-Id) erreichen den Handler nicht. Sie behandelt Kestrel (500 ohne Body, Log ohne `UserId`), lokal die Developer Exception Page.
+Exceptions vor Schritt 3 (Authentifizierung, Abruf der Konto-Id) behandelt Kestrel: 500 ohne Body, Log ohne `UserId`, lokal die Developer Exception Page.
 
 ## Versionierung
 
-Die App erreicht Nutzer über die Stores, alte Versionen bleiben noch lange in Gebrauch und sprechen weiter mit der API. Deshalb trägt der Pfad die Major-Version (etwa `/v1/users/me`), eine Version per Header oder Query gibt es nicht.
-
-- `UseApi()` mappt alle Endpunkte in die Gruppe `/v1`. Ohne Version bleiben nur `/health` und das OpenAPI-Dokument.
-- Pfade ohne Version wie `/users/me` sind unbekannte Routen: ohne Anmeldung antwortet die API mit 401 (die Fallback-Policy gilt auch für unbekannte Routen), mit Anmeldung mit 404.
-- Bis zum ersten Live-Gang geht jede Änderung in `v1`, auch inkompatible. Danach ändert sich eine Version nur rückwärtskompatibel (neue Endpunkte, neue Felder in Antworten, Clients ignorieren unbekannte Felder), alles andere bekommt eine neue Version.
+Der Pfad trägt die Major-Version (`/v1/...`), weil alte App-Versionen aus den Stores noch lange mit der API sprechen. Clients ignorieren unbekannte Felder, deshalb sind neue Felder rückwärtskompatibel. Pfade ohne Version sind unbekannte Routen: ohne Anmeldung 401 (die Fallback-Policy gilt auch für unbekannte Routen), mit Anmeldung 404.
 
 ## OpenAPI-Dokument
 
-Die API liefert unter `/openapi/v1.json` ein OpenAPI-3.2-Dokument, das alle Endpunkte mit HTTP-Methode (`MapGet`, `MapPost` usw.) unter `/v1` automatisch beschreibt, auch neue. `/health` steht nicht darin, Health-Check-Endpunkte tragen keine API-Beschreibung. Es dient derzeit dazu, einen Client-Generator für Flutter auszuprobieren.
-
-- Eingeschaltet ist es nur lokal und in Azure Dev: `OpenApi:Enabled` steht in `appsettings.Development.json` und `appsettings.azure-dev.json` des AppHost, `AddApi()` des AppHost reicht den Wert als `OpenApi__Enabled` an die API. Dort ist das Dokument ohne Anmeldung erreichbar.
-- In jeder anderen Umgebung mappt die API die Route nicht: ohne Anmeldung antwortet sie mit 401 (die Fallback-Policy gilt auch für unbekannte Routen), mit Anmeldung mit 404.
+- `/openapi/v1.json` (OpenAPI 3.2) beschreibt automatisch alle Endpunkte unter `/v1`, `/health` nicht. Es dient derzeit dazu, einen Client-Generator für Flutter auszuprobieren.
+- Eingeschaltet nur lokal und in Azure Dev (`OpenApi:Enabled`, vom AppHost als `OpenApi__Enabled` weitergereicht), dort ohne Anmeldung erreichbar. Sonst ist die Route nicht gemappt (401 bzw. 404 wie bei Pfaden ohne Version).
 
 ## Produktsuche
 
-`GET /v1/products?search=<Begriff>` sucht Produkte, die Regeln der Abfrage stehen in [database.md](database.md#produktsuche-und-extensions). Hat kein Wort des Begriffs mindestens 3 Zeichen, antwortet die API mit 400 als Validation Problem mit `errors.search`.
+`GET /v1/products?search=<Begriff>`, Regeln der Abfrage siehe [database.md](database.md#produktsuche-und-extensions). Hat kein Wort mindestens 3 Zeichen, antwortet die API mit 400 (Validation Problem mit `errors.search`).
 
-Die Treffer (höchstens 25) sind so sortiert, jede Stufe entscheidet nur bei Gleichstand der vorigen ([#74](https://github.com/Murmli/MurmliV2/issues/74)):
+Höchstens 25 Treffer, jede Stufe entscheidet nur bei Gleichstand der vorigen ([#74](https://github.com/Murmli/MurmliV2/issues/74)):
 
 1. Treffer über den Code, auch ohne Nährwerte.
-2. Produkte mit Kalorienwert vor Produkten ohne.
+2. Mit Kalorienwert vor ohne.
 3. Mehr ausgefüllte Nährwerte (von 8) vor weniger.
 4. Name beginnt mit dem Suchbegriff.
-5. Höhere Beliebtheit (`popularity_key`) vor niedrigerer, ohne Beliebtheit gilt als am wenigsten beliebt.
+5. Höherer `popularity_key` vor niedrigerem, ohne gilt als niedrigster.
 6. Name, dann Code.
 
-Produkte ohne Nährwerte bleiben auffindbar, rutschen aber nach hinten. Thekenartikel brauchen keine eigene Regel: Ihr Code wechselt mit jeder Packung und meist fehlen Nährwerte, sie rutschen also ohnehin nach hinten.
-
-## Tests
-
-- `ProductEndpointsTests` in `Murmli.Backend.Api.Tests` deckt die Produktsuche ab.
-- `WebApplicationExtensionsTests` in `Murmli.Backend.Api.Tests` deckt das OpenAPI-Dokument ab (erreichbar, wenn eingeschaltet, Version 3.2, nur Pfade unter `/v1`, 401 und 404, wenn ausgeschaltet) und dass Pfade ohne Version mit 404 antworten und unbehandelte Exceptions mit 500 als Problem Details.
-- `Api/ExtensionsTests` in `Murmli.Backend.Aspire.Tests` deckt das Weiterreichen des Schalters `OpenApi:Enabled` ab.
+Thekenartikel brauchen keine eigene Regel: Ihr Code wechselt mit jeder Packung und meist fehlen Nährwerte, sie rutschen ohnehin nach hinten.
 
 ## Entscheidungen
 
 | Entscheidung | Grund |
 | --- | --- |
 | Präfix per `MapGroup` statt Asp.Versioning | Asp.Versioning hat noch kein Release für .NET 11, sein OpenAPI-Paket hängt an Microsoft.OpenApi 2.x, ASP.NET Core 11 braucht 3.x. Der Wechsel ist [#68](https://github.com/Murmli/MurmliV2/issues/68) und behält Pfade und Dokumentnamen. |
-| Kein `WithGroupName("v1")` | Mit nur dem Dokument `v1` landen Endpunkte ohne Gruppennamen ohnehin darin. Mit einer zweiten Version setzt Asp.Versioning die Gruppennamen. |
-| Schalter `OpenApi:Enabled` statt `IsDevelopment()` | Die API läuft in Azure Dev als Production, `Development` setzt nur `aspire run` über die launchSettings. `IsDevelopment()` schlösse Dev aus. |
-| Fehlerantworten als Problem Details über `AddProblemDetails()` | `UseExceptionHandler()` ohne Pfad braucht den `IProblemDetailsService` für die 500-Antwort. Über ihn schreiben auch `TypedResults.ValidationProblem` (400, Produktsuche) und `TypedResults.Problem` (502, Konto löschen), samt `traceId`. Ohne JSON im `Accept`-Header schreiben sie ihre Problem Details ohne den Dienst selbst. |
-| Suchbegriff im Query-String | Suchbegriffe gelten nicht als Gesundheitsdaten, die Regel „Keine Gesundheitsdaten in URLs“ greift deshalb nicht. |
+| Kein `WithGroupName("v1")` | Mit nur dem Dokument `v1` landen alle Endpunkte ohnehin darin, ab einer zweiten Version setzt Asp.Versioning die Gruppennamen. |
+| Schalter `OpenApi:Enabled` statt `IsDevelopment()` | Die API läuft in Azure Dev als Production, `Development` setzt nur `aspire run` über die launchSettings. |
+| Problem Details über `AddProblemDetails()` | `UseExceptionHandler()` ohne Pfad braucht den `IProblemDetailsService`. Über ihn schreiben auch `TypedResults.ValidationProblem` (400) und `TypedResults.Problem` (502, Konto löschen) samt `traceId`, ohne JSON im `Accept`-Header schreiben die beiden ihre Problem Details selbst. |
+| Suchbegriff im Query-String | Suchbegriffe sind keine Gesundheitsdaten, „Keine Gesundheitsdaten in URLs“ greift nicht. |

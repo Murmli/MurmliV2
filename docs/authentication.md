@@ -1,124 +1,92 @@
 # Authentifizierung
 
-Better Auth (npm-Paket `better-auth`) läuft als eigener Node-Dienst `auth` in `src/auth`. Wer sich dort anmeldet, holt sich ein kurzlebiges JWT, die API prüft es selbst anhand der von `auth` veröffentlichten Schlüssel, ohne Introspection. `AddApi()` registriert den JWT-Bearer-Handler und eine Fallback-Policy, die jeden Endpunkt ohne eigene Auth-Metadaten schützt, auch unbekannte Routen. Ohne Anmeldung erreichbar ist nur, was ausdrücklich `AllowAnonymous()` bekommt, derzeit `/health` und, wo eingeschaltet, das OpenAPI-Dokument (siehe [api.md](api.md#openapi-dokument)).
-
-Die App spricht mit Better Auth nur zum Anmelden, Abmelden und Holen bzw. Erneuern des JWT, alles andere läuft über die API. Die API greift nie auf die Tabellen von Better Auth zu, sie nutzt immer die HTTP-API von `auth`.
+Better Auth läuft als eigener Node-Dienst `auth` (`src/auth`). Angemeldete Clients holen dort ein kurzlebiges JWT, die API prüft es lokal mit den von `auth` veröffentlichten Schlüsseln, ohne Introspection.
 
 ## Anmeldung
 
-1. `POST /api/auth/sign-in/email` mit E-Mail und Passwort. Die Antwort trägt im Header `set-auth-token` das signierte Session-Token (Plugin `bearer` mit `requireSignature: true`, unsignierte Tokens lehnt `auth` ab).
-2. `GET /api/auth/token` mit `Authorization: Bearer <Session-Token>` liefert das JWT: ES256, 15 Minuten gültig, nur die Claims `sub` (Better-Auth-ID), `iss` (öffentliche URL von `auth`), `aud` (`murmli-api`), `iat` und `exp`. E-Mail und Name stehen nicht darin.
-3. Die API wird mit `Authorization: Bearer <JWT>` aufgerufen, vor Ablauf holt der Client über Schritt 2 ein neues JWT.
-4. `POST /api/auth/sign-out` beendet die Session. Ohne Abmeldung gilt eine Session nach Better Auths Standard 7 Tage und verlängert sich bei Nutzung.
+1. `POST /api/auth/sign-in/email` mit E-Mail und Passwort: Der Header `set-auth-token` trägt das signierte Session-Token (Plugin `bearer` mit `requireSignature: true`).
+2. `GET /api/auth/token` mit `Authorization: Bearer <Session-Token>` liefert das JWT: ES256, 15 Minuten gültig, nur `sub` (Better-Auth-ID), `iss` (`BETTER_AUTH_URL`, eigener Endpunkt von `auth`), `aud` (`murmli-api`), `iat` und `exp`.
+3. API-Aufrufe mit `Authorization: Bearer <JWT>`, vor Ablauf ein neues JWT über Schritt 2.
+4. `POST /api/auth/sign-out`. Ohne Abmeldung gilt eine Session 7 Tage und verlängert sich bei Nutzung (Standard von Better Auth).
 
-Die App meldet noch niemanden an, den Ablauf nutzen derzeit `AuthenticationTests` und lokale Clients. Entschieden ist, dass die App ihn übernimmt, sobald sie eine Anmeldung bekommt, dann entfällt dieser Absatz.
+Entschieden, noch nicht gebaut: Die App übernimmt diesen Ablauf, sobald sie eine Anmeldung bekommt, dann entfällt dieser Absatz. Bis dahin nutzen ihn nur `AuthenticationTests` und lokale Clients.
 
 ## Konfiguration
 
-- `AddAuth()` in `Auth/Extensions.cs` des AppHost startet `src/auth` als Node-App mit externem HTTP-Ingress, in Azure mit 0 bis 1 Replica. Lokal lauscht `auth` fest auf Port 5021, damit lokale Clients (etwa Bruno und der Flavor `local` der App, siehe [app.md](app.md#flavors)) eine stabile Adresse haben.
-- `AddAuth()` setzt `BETTER_AUTH_URL` auf den eigenen HTTP-Endpunkt (daraus werden `iss` und die Adressen im Discovery-Dokument), `JWT_AUDIENCE` auf `murmli-api` sowie `BETTER_AUTH_SECRET` und `AUTH_SERVICE_KEY` aus den Secret-Parametern `better-auth-secret` und `auth-service-key` (Herkunft der Werte siehe [azure.md](azure.md#secret-parameter)).
-- `better-auth-secret` verschlüsselt die privaten Schlüssel in `jwks` und signiert die Session-Tokens. Der Wert wird nie geändert, ein neuer machte die gespeicherten Schlüssel unlesbar und alle Sessions ungültig. Rotation ginge nur über `BETTER_AUTH_SECRETS` und bräuchte eine Änderung am AppHost.
-- `WithAuth()` reicht der API `Authentication__Schemes__Bearer__MetadataAddress` (`<auth>/.well-known/openid-configuration`), `Authentication__Schemes__Bearer__ValidIssuer` (der Endpunkt von `auth`), `Authentication__Schemes__Bearer__ValidAudiences__0` (`murmli-api`), `AuthService__BaseAddress` und `AuthService__Key`. Nur im Run-Mode setzt es zusätzlich `Authentication__Schemes__Bearer__RequireHttpsMetadata=false`, weil `auth` lokal nur http spricht. Die API wartet auf `auth`.
-- `AddApi()` bindet `AuthService` als `AuthServiceOptions` und prüft es beim Start, ohne Werte startet die API nicht.
-- Der Handler bindet die Sektion `Authentication:Schemes:Bearer` selbst. Mit `MetadataAddress` lädt er beim ersten Request mit Token das Discovery-Dokument samt Schlüsseln und cacht sie. Trägt ein Token einen unbekannten `kid`, lädt er die Metadaten neu (Standard von JwtBearer).
-- Er akzeptiert nur Tokens mit `iss` gleich dem Endpunkt von `auth` und `aud` gleich `murmli-api`.
+- Lokal lauscht `auth` fest auf Port 5021 als stabile Adresse für lokale Clients (etwa den Flavor `local`, siehe [app.md](app.md#flavors)). In Azure läuft es mit 0 bis 1 Replica.
+- `better-auth-secret` (`BETTER_AUTH_SECRET`) verschlüsselt die privaten Schlüssel in `jwks` und signiert die Session-Tokens. Ein neuer Wert machte die gespeicherten Schlüssel unlesbar und alle Sessions ungültig. Rotation ginge nur über `BETTER_AUTH_SECRETS` und bräuchte eine Änderung am AppHost.
+- `auth-service-key` (`AUTH_SERVICE_KEY`) ist das einzige, was `POST /service/delete-user` am öffentlichen Ingress schützt. Er lässt sich jederzeit ersetzen, der neue Wert wirkt mit dem nächsten Deploy.
+- `RequireHttpsMetadata=false` bekommt die API nur im Run-Mode, weil `auth` lokal nur http spricht.
 
 ## Dienst `auth`
 
-- TypeScript in `src/auth/src`, Node führt es per Type Stripping direkt aus (`node src/main.ts`), ohne Build-Schritt. Erlaubt ist deshalb nur Syntax, die Node durch bloßes Entfernen der Typen ausführen kann (`erasableSyntaxOnly`), Importe tragen die Endung `.ts`.
-- Die Node-Version steht nur in `src/auth/.nvmrc`. Aspire erzeugt daraus beim Publish das Dockerfile (`node:26-alpine`), die CI liest sie in `setup-auth` (siehe [ci.md](ci.md)).
-- Paketversionen sind exakt gepinnt. `@better-auth/core` ist nur für `runWithTransaction` eine direkte Dependency und bleibt auf derselben Version wie `better-auth`.
-- Das Image enthält nur `dependencies`: `AddAuth()` setzt im Publish-Mode `--omit=dev`, das generierte Dockerfile installiert mit `npm ci --omit=dev`. Was `auth` zur Laufzeit importiert, gehört deshalb in `dependencies`, sonst fehlt es erst in Azure (lokal und in der CI ist alles installiert).
-- Datenbank: lokal über `MURMLI_URI` mit Passwort (Container), in Azure mit Entra-Token (`@azure/postgresql-auth` mit `DefaultAzureCredential`, Identity `backend-identity`) als Nutzer `PGUSER`. `PGUSER` ist der Principal-Name von `backend-identity`, der AppHost setzt ihn nur im Publish-Mode.
+- Node führt das TypeScript per Type Stripping ohne Build aus (`node src/main.ts`): nur Syntax, die nach bloßem Entfernen der Typen läuft (`erasableSyntaxOnly`), Importe mit Endung `.ts`.
+- Die Node-Version steht nur in `src/auth/.nvmrc`, Aspire erzeugt daraus beim Publish das Dockerfile.
+- In Azure meldet sich `auth` per Entra-Token als `backend-identity` an Postgres an (`PGUSER`, nur im Publish-Mode gesetzt).
 - Beim Start migriert `auth` sein Schema (siehe [database.md](database.md#schemas)), legt im Run-Mode den Test-Nutzer an und lauscht erst danach. Scheitert das, beendet es sich mit Fehler.
-- Endpunkte:
-  - `GET /health`
-  - `GET /.well-known/openid-configuration`: minimales Discovery-Dokument (`issuer`, `jwks_uri`), `jwks_uri` zeigt auf `/api/auth/jwks`.
-  - `POST /service/delete-user`: siehe „Konto löschen“.
-  - Alles andere geht an Better Auth (`/api/auth/*`).
-- Request-Bodies sind auf 64 KiB begrenzt, einen größeren per `Content-Length` angekündigten Body lehnt `auth` mit 413 ab. `/service/delete-user` liest höchstens 4096 Zeichen.
-- Die Registrierung ist aus (`disableSignUp`). Better Auths Selbstlöschung `user.deleteUser` bleibt aus (Standard, Grund siehe „Entscheidungen“).
 
 ### Rate Limiting
 
-- Better Auths Rate Limiting ist nur in Azure aktiv (`NODE_ENV=production`), im Speicher pro Replica. Die Client-IP liest es aus `X-Forwarded-For`.
-- Offen, bis ein Mensch es nach dem ersten Deploy geprüft hat, danach entfällt dieser Punkt: ob Container Apps an ein vom Client gesendetes `X-Forwarded-For` anhängt. Prüfung: einmal normal und einmal mit gefälschtem Header anmelden, die IP der Session muss jeweils die echte sein und im Log darf keine Warnung „Rate limiting could not determine a client IP“ stehen. Hängt Container Apps an, muss `advanced.ipAddress.trustedProxies` gesetzt werden.
+- Nur in Azure aktiv (`NODE_ENV=production`), im Speicher pro Replica, Client-IP aus `X-Forwarded-For`.
+- Offen, bis ein Mensch es nach dem ersten Deploy geprüft hat, dann entfällt dieser Punkt: ob Container Apps an ein vom Client gesendetes `X-Forwarded-For` anhängt. Prüfung: einmal normal und einmal mit gefälschtem Header anmelden, die IP der Session muss jeweils die echte sein, im Log darf keine Warnung „Rate limiting could not determine a client IP“ stehen. Hängt Container Apps an, `advanced.ipAddress.trustedProxies` setzen.
 
 ## Nutzer anlegen
 
-- Lokal: Im Run-Mode reicht der AppHost `SEED_USER_EMAIL=test@murmli.de` und `SEED_USER_PASSWORD=password` an `auth`, das den Nutzer beim Start anlegt, wenn er fehlt. Postgres läuft lokal ohne Volume, nach einem Neustart des AppHost fehlt er also wieder.
-- Azure: Ein Mensch legt Nutzer an, mit `az containerapp exec --name auth --resource-group rg-murmli-dev --command sh` und darin `npm run create-user -- <email> <name>` (fragt das Passwort ab). Agents führen das nie gegen Azure aus.
+- Lokal: Im Run-Mode legt `auth` beim Start `test@murmli.de` mit Passwort `password` an, wenn er fehlt (Postgres läuft ohne Volume).
+- Azure (nur ein Mensch): `az containerapp exec --name auth --resource-group rg-murmli-dev --command sh`, darin `npm run create-user -- <email> <name>` (fragt das Passwort ab).
 
 ## Datenmodell
 
-- Name, E-Mail, Passwort-Hashes, Sessions und Schlüssel liegen in den Tabellen von Better Auth im Schema `better-auth` (siehe [database.md](database.md#schemas)).
-- `identity.users`: eigene, zufällige Id, Better-Auth-ID (`auth_user_id`, gleich `sub`, unique) und Anlagezeitpunkt. Keine E-Mail, kein Name.
-- `identity.deleted_users`: Löschvermerke mit Better-Auth-ID (nicht eindeutig) und Löschzeitpunkt, siehe „Konto löschen“.
-- `UserRegistry.GetOrCreateAsync` legt das Konto beim ersten Aufruf an, `GET /v1/users/me` liefert `{"id": "..."}`. Verhindert ein Löschvermerk die Anlage, antwortet es mit 401.
-- Alle Nutzerdaten hängen an `identity.users.id`, nie an der Better-Auth-ID. Ein Wechsel des Identity-Providers berührt so nur die Zuordnung, nicht die Daten.
+- `identity.users` trägt nur eigene zufällige Id, `auth_user_id` (gleich `sub`, unique) und Anlagezeitpunkt, Name und E-Mail liegen nur bei Better Auth. Nutzerdaten hängen an der eigenen Id, damit ein Wechsel des Identity-Providers nur die Zuordnung berührt.
+- `GET /v1/users/me` legt das Konto beim ersten Aufruf an, verhindert ein Löschvermerk (`identity.deleted_users`) das, antwortet es mit 401.
 
 ## Konto löschen
 
-`DELETE /v1/users/me` ruft `UserRegistry.DeleteAsync` auf und antwortet mit 204, wenn alles gelöscht ist. Die Schritte laufen ohne gemeinsame Transaktion, jeder lässt sich wiederholen:
+`DELETE /v1/users/me` antwortet mit 204, wenn alles gelöscht ist. Die Schritte laufen ohne gemeinsame Transaktion, jeder lässt sich wiederholen:
 
-1. Die eigene Id des Kontos lesen, nur für den Log. Sie fehlt, wenn der Nutzer nie `GET /v1/users/me` aufgerufen hat.
-2. Einen Löschvermerk (Better-Auth-ID, Zeitpunkt) in `identity.deleted_users` schreiben.
-3. Das Konto in `identity.users` löschen. Nutzerdaten in Postgres hängen per Fremdschlüssel mit `ON DELETE CASCADE` an `identity.users` und verschwinden mit. Daten außerhalb von Postgres (derzeit keine) muss `DeleteAsync` ausdrücklich vor dem Aufruf von `auth` löschen, ausgenommen Telemetrie mit der eigenen Id (siehe „Entscheidungen“).
-4. Vermerke löschen, die älter als 24 Stunden sind.
-5. Den Nutzer in Better Auth löschen: `POST <AuthService:BaseAddress>/service/delete-user` mit dem Service-Key und `{"userId": "<Better-Auth-ID>"}`, Timeout 10 s. Die ID steht im Body, nicht in der Adresse, und damit weder in den Logs der HttpClientFactory noch im HttpClient-Span. Jede 2xx-Antwort gilt als Erfolg, jeder andere Status, ein Timeout oder ein Verbindungsfehler führt zu 502.
+1. Löschvermerk (Better-Auth-ID, Zeitpunkt) schreiben.
+2. Konto in `identity.users` löschen, Nutzerdaten folgen per `ON DELETE CASCADE`.
+3. Vermerke löschen, die älter als 24 Stunden sind.
+4. Nutzer in `auth` löschen per `POST /service/delete-user`, Timeout 10 s. Die ID steht im Body, damit sie weder in den Logs der HttpClientFactory noch im HttpClient-Span landet. Kein 2xx, Timeout oder Verbindungsfehler ergeben 502, geloggt wird nur Statuscode bzw. Exception (`AuthUserDeletionFailed`), nie der Antwort-Body. `auth` antwortet auch für unbekannte IDs mit 204.
 
-`auth` löscht Sessions, Accounts und den Nutzer mit Better Auths eigenem Code (`internalAdapter.deleteUser`) in einer Transaktion: Scheitert ein Teil, bleibt der Nutzer vollständig erhalten. Es antwortet mit 204, auch für unbekannte IDs, mit 401 ohne gültigen Service-Key und mit 400 bei ungültigem Body.
-
-Scheitert ein Schritt, kann sich der Nutzer weiter anmelden und die Löschung wiederholen, auch mit demselben Token. Weder der Endpunkt noch der Abruf der Konto-Id in `UserTelemetryMiddleware` davor reichen `RequestAborted` weiter (siehe „Entscheidungen“).
+Scheitert ein Schritt, kann sich der Nutzer weiter anmelden und die Löschung wiederholen, auch mit demselben Token.
 
 ### Löschvermerk und `iat`
 
-- Lokal geprüfte JWTs bleiben bis `exp` plus 5 Minuten Clock Skew von JwtBearer gültig, bei 15 Minuten Lebensdauer rund 20 Minuten. Ohne Vermerk legte `GET /v1/users/me` mit einem solchen Token nach der Löschung sofort ein neues Konto an.
-- `GetOrCreateAsync` legt kein Konto an, wenn ein Vermerk für die Better-Auth-ID existiert, der nicht vor dem `iat` des Tokens liegt. Fehlt `iat`, genügt irgendein Vermerk. Ein vorhandenes Konto liefert es immer.
-- Ein neues JWT nach einem gescheiterten Aufruf von `auth` hat ein späteres `iat` und darf ein Konto anlegen, damit der Nutzer die Löschung wiederholen kann.
-- Vermerke bleiben 24 Stunden, weit über den rund 20 Minuten. Aufgeräumt wird erst bei der nächsten Löschung.
-- Restrisiko: Eine Kontoanlage parallel zu einer laufenden Löschung desselben Nutzers hinterlässt ein leeres Konto, das nur die Better-Auth-ID trägt.
-
-### Service-Key
-
-- Die API schickt `auth-service-key` als `Authorization: Bearer <Service-Key>`, `auth` vergleicht ihn in konstanter Zeit mit `AUTH_SERVICE_KEY`. `/service/delete-user` hängt am öffentlichen Ingress, nur der Service-Key schützt ihn.
-- Der Service-Key lässt sich jederzeit ersetzen, der neue Wert wirkt mit dem nächsten Deploy.
-- Scheitert der Aufruf, loggt die API den Statuscode (`AuthUserDeletionFailed`), nie den Antwort-Body. Antwortet `auth` nicht (Timeout, Verbindungsfehler), gibt es keinen Statuscode, der Logeintrag trägt dann die Exception.
+- Lokal geprüfte JWTs gelten bis `exp` plus 5 Minuten Clock Skew von JwtBearer, also rund 20 Minuten. Ohne Vermerk legte `GET /v1/users/me` mit einem solchen Token nach der Löschung sofort ein neues Konto an.
+- Kein neues Konto, wenn ein Vermerk nicht vor dem `iat` des Tokens liegt (ohne `iat` genügt jeder Vermerk), ein vorhandenes Konto wird immer geliefert. Ein nach einem gescheiterten Aufruf von `auth` geholtes JWT hat ein späteres `iat`, so lässt sich die Löschung wiederholen.
+- Vermerke bleiben 24 Stunden (weit über diese rund 20 Minuten), aufgeräumt wird erst bei der nächsten Löschung.
+- Restrisiko: Eine Kontoanlage parallel zur Löschung desselben Nutzers hinterlässt ein leeres Konto mit nur der Better-Auth-ID.
 
 ## Logs und Telemetrie
 
-- Der Nutzer erscheint in der Telemetrie der API nur mit der eigenen Id (`UserId`), am Request-Span und an allen Logs und Exceptions, die nach dem Abruf der Konto-Id in der Anfrage entstehen (siehe [telemetry.md](telemetry.md#konto-id)). `sub`, E-Mail und Token loggt der Code nie.
-- Mit `Telemetry:RecordSensitiveData` (lokal und in Azure Dev) steht die Better-Auth-ID als SQL-Parameterwert in den Command-Logs von EF Core, durch den Abruf der Konto-Id bei jeder angemeldeten Anfrage. Akzeptierte Ausnahme: Dort gibt es nur Testdaten, in jeder anderen Umgebung bleibt der Schalter aus.
-- Telemetrie von `auth` siehe [telemetry.md](telemetry.md#auth).
+Konto-Id siehe [telemetry.md](telemetry.md#konto-id), `auth` siehe [telemetry.md](telemetry.md#auth). Akzeptierte Ausnahme: Mit `Telemetry:RecordSensitiveData` (nur lokal und in Azure Dev, dort nur Testdaten) steht die Better-Auth-ID als SQL-Parameterwert in den Command-Logs von EF Core, weil jede angemeldete Anfrage die Konto-Id abfragt.
 
 ## Tests
 
-- `Murmli.Backend.Api.Tests` startet die API ohne `MetadataAddress`, mit eigenem Issuer (`https://auth.test`), der Audience `murmli-api` und einem zufälligen symmetrischen Schlüssel über `SigningKeys` (`TestTokens`). So läuft der echte Prüfpfad des Handlers, ohne Metadatenabruf.
-- `ApiHost` richtet die API wie `Program.cs` ein (`AddTelemetry()`, `AddApi()`, `UseApi()`) und ersetzt den Primary Handler aller HttpClients durch `AuthServiceHttpMessageHandler` (zeichnet Anfragen an `auth` auf, Statuscode oder Transportfehler einstellbar) und die Uhr durch einen `FakeTimeProvider`. `TestTokens.Create` setzt `iat` auf Wunsch, `exp` und `nbf` kommen weiter aus der echten Zeit, weil JwtBearer dafür die Systemuhr nutzt. Auf Wunsch mappt `ApiHost` einen Endpunkt, der wirft, und sammelt Spans und Logs im Speicher. Die Listener für Spans sind prozessweit: Die Liste enthält auch Spans parallel laufender Hosts und ist erst nach dem Entsorgen des Hosts vollständig und stabil. Tests werten sie deshalb erst danach aus und finden ihre Anfrage über eine eigene Trace-ID im `traceparent`.
-- Echte Tokens gibt es nur im End-to-End-Test `AuthenticationTests` in `Murmli.Backend.Aspire.Tests`: Er meldet den Test-Nutzer am lokal gestarteten `auth` an, holt das JWT und löscht das Konto über die API, außerdem prüft er, dass Registrierung und `/service/delete-user` ohne Service-Key scheitern. Die Tests einer Collection teilen sich eine `AppHostFixture`, so läuft Aspires npm-Installer nie parallel. Kein Test spricht mit Azure.
-- `Auth/ExtensionsTests` in `Murmli.Backend.Aspire.Tests` prüft die Trennung von Publish- und Run-Mode (`PGUSER` und `--omit=dev` nur im Publish-Mode, Test-Nutzer und `RequireHttpsMetadata=false` nur im Run-Mode) und dass Issuer und Audience von API und `auth` übereinstimmen.
-- Dass `/health` ohne Anmeldung erreichbar bleibt, deckt `HealthTests` in `Murmli.Backend.Aspire.Tests` ab.
+- `TestTokens` signieren mit einem zufälligen symmetrischen Schlüssel über `SigningKeys` statt `MetadataAddress`, so läuft der echte Prüfpfad ohne Metadatenabruf. `exp` und `nbf` kommen aus der echten Zeit, weil JwtBearer die Systemuhr nutzt, nicht den `FakeTimeProvider` von `ApiHost`.
+- Die Span-Listener von `ApiHost` sind prozessweit: Die Liste enthält auch Spans parallel laufender Hosts und ist erst nach dem Entsorgen des Hosts vollständig. Tests werten sie danach aus und finden ihre Anfrage über eine eigene Trace-ID im `traceparent`.
+- Die Tests einer Collection in `Murmli.Backend.Aspire.Tests` teilen sich eine `AppHostFixture`, damit Aspires npm-Installer nie parallel läuft.
 
 ## Entscheidungen
 
 | Entscheidung | Grund |
 | --- | --- |
-| JWT lokal prüfen | Verworfen: Prüfung durch Better Auth pro Anfrage (`get-session`, also Introspection). Sie kostete einen HTTP-Aufruf pro Anfrage, die API fiele mit `auth` aus (doppelter Kaltstart bei Scale to Zero) und bräuchte einen eigenen Authentication-Handler. Folge: Abmelden wirkt erst mit dem Ablauf des JWT (höchstens rund 20 Minuten), gegen eine neue Kontoanlage nach dem Löschen hilft der Löschvermerk. |
-| Eigenes Discovery-Dokument in `auth` | Better Auths JWT-Plugin liefert nur `/api/auth/jwks`, per Konfiguration lädt JwtBearer Schlüssel nur über ein Discovery-Dokument. Verworfen: das Plugin oauth-provider, es macht Better Auth zum OAuth-Server. Verworfen: ein eigener `ConfigurationManager` in .NET, Code statt Konfiguration. |
-| ES256 statt Better Auths Standard EdDSA | Microsoft.IdentityModel kann EdDSA nicht prüfen ([AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet#2426](https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet/issues/2426), offen), OKP-Schlüssel fielen still weg. Gespeicherte Schlüssel behalten ihren Algorithmus, deshalb bleibt `jwks.keyPairConfig.alg` bei ES256. |
-| Konfiguration nur über die Bindung von `Authentication:Schemes:Bearer` | `AddJwtBearer` bindet die Sektion selbst und baut daraus `TokenValidationParameters`, inklusive `SigningKeys`. Ein im Code ersetztes `TokenValidationParameters` verwirft Issuer, Audiences und Schlüssel aus der Konfiguration. Der Delegate in `AddJwtBearer` läuft nach der Bindung. |
-| `MapInboundClaims = false` | Sonst benennt der Handler `sub` in `ClaimTypes.NameIdentifier` um. Der Code liest `sub` direkt (`GetAuthUserId()` bzw. `FindAuthUserId()`, das ohne `sub` `null` liefert statt zu werfen). |
-| Fallback-Policy mit `RequireClaim("sub")` | Schützt jeden Endpunkt ohne eigene Auth-Metadaten, auch künftige. `sub` ist damit in jedem geschützten Endpunkt vorhanden. Unter .NET 11 fügt `WebApplication` `UseAuthentication` und `UseAuthorization` selbst ein. |
-| API greift nie auf die Tabellen von Better Auth zu | Hooks und Plugin-Logik (etwa ein künftiger Widerruf der Apple-Tokens) laufen nur in Better Auths Code. Verworfen: die Tabellen aus der API lesen oder löschen. Die Trennung ist Konvention: Technisch könnte die gemeinsame Rolle von `backend-identity` sie lesen, dass `api` und `product-import` so an Passwort-Hashes und Sessions kämen, ist ein akzeptiertes Risiko. |
-| Get-or-create über den Unique-Index | EF Core 10 kann kein Upsert. Bei gleichzeitigen ersten Anfragen gewinnt ein Insert, die anderen scheitern mit Unique Violation, leeren den Change Tracker und lesen das Konto. Hat eine gleichzeitige Löschung es inzwischen entfernt, antworten sie mit 401. Die Unique Violation ist nicht transient, die Retry-Strategie der Aspire-Integration wiederholt sie nicht. EF Core loggt dabei für jede unterlegene Anfrage das gescheiterte Kommando und das gescheiterte Speichern als Error. Das ist erwartet und wird nicht unterdrückt. |
+| JWT lokal prüfen | Verworfen: Introspection per `get-session` (HTTP-Aufruf pro Anfrage, API fiele mit `auth` aus, doppelter Kaltstart bei Scale to Zero). Folge: Abmelden wirkt erst mit Ablauf des JWT (bis rund 20 Minuten). |
+| Eigenes Discovery-Dokument in `auth` | Better Auths JWT-Plugin liefert nur `/api/auth/jwks`, JwtBearer lädt Schlüssel per Konfiguration nur über ein Discovery-Dokument. Verworfen: Plugin oauth-provider (macht Better Auth zum OAuth-Server), eigener `ConfigurationManager` (Code statt Konfiguration). |
+| ES256 statt Better Auths Standard EdDSA | Microsoft.IdentityModel prüft kein EdDSA ([AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet#2426](https://github.com/AzureAD/azure-activedirectory-identitymodel-extensions-for-dotnet/issues/2426), offen), OKP-Schlüssel fielen still weg. Gespeicherte Schlüssel behalten ihren Algorithmus. |
+| Nur Bindung von `Authentication:Schemes:Bearer` | Ein im Code ersetztes `TokenValidationParameters` verwirft Issuer, Audiences und `SigningKeys` aus der Bindung. Der Delegate in `AddJwtBearer` läuft nach der Bindung. |
+| Fallback-Policy mit `RequireClaim("sub")` | Gilt für jeden Endpunkt ohne eigene Auth-Metadaten, auch künftige. `GetAuthUserId()` verlässt sich darauf, dass `sub` vorhanden ist, und wirft sonst. |
+| `MapInboundClaims = false` | Sonst wird `sub` zu `ClaimTypes.NameIdentifier`, der Code liest `sub` direkt. |
+| API greift nie auf die Tabellen von Better Auth zu | Hooks und Plugin-Logik (etwa ein künftiger Widerruf der Apple-Tokens) laufen nur in Better Auths Code. Nur Konvention: Die gemeinsame Rolle von `backend-identity` könnte die Tabellen lesen, dass `api` und `product-import` so an Passwort-Hashes und Sessions kämen, ist ein akzeptiertes Risiko. |
+| Get-or-create über den Unique-Index, mehrere Löschvermerke pro Nutzer | EF Core 10 kann kein Upsert. Bei gleichzeitigen ersten Anfragen gewinnt ein Insert, die übrigen lesen nach der Unique Violation das Konto. Die Retry-Strategie wiederholt sie nicht (nicht transient). Die Error-Logs von EF Core dazu sind erwartet und werden nicht unterdrückt. Doppelte Löschvermerke (doppeltes Tippen, Wiederholung) schaden nicht. |
 | `Guid.NewGuid()` statt Version 7 | Version 7 trüge den Anlagezeitpunkt in der Id, die später auch als pseudonyme Kennung gegenüber Drittanbietern dient. |
-| Löschvermerk mit `iat` | Verworfen: bei der Kontoanlage prüfen, ob der Nutzer in Better Auth noch existiert. Die API hat keinen Lesezugriff auf Better Auth. |
-| Löschen über `/service/delete-user` mit Service-Key | Verworfen: Better Auths eingebautes `/delete-user` (`user.deleteUser`, bleibt deshalb aus), es braucht die Session des Nutzers und erlaubte Nutzern die Löschung an der API vorbei. Verworfen: `remove-user` des Admin-Plugins, es braucht einen Admin-Nutzer mit Passwort-Secret und öffnet Endpunkte für Ban, Impersonation und Nutzerlisten am öffentlichen Ingress. |
-| Better Auth als letzter Schritt der Löschung | Verworfen: zuerst in Better Auth löschen. Scheitert danach ein Schritt, kann sich der Nutzer nicht mehr anmelden und die Löschung nicht wiederholen. |
-| Löschung und Anlage in `auth` über `runWithTransaction` | `internalAdapter.deleteUser` löscht Sessions, Accounts und Nutzer in getrennten Statements, ohne Transaktion bliebe bei einem Fehler ein Nutzer ohne Anmeldemöglichkeit zurück. Verworfen: `context.adapter.transaction`, der `internalAdapter` nimmt die Transaktion nur aus dem AsyncLocalStorage, den `runWithTransaction` (`@better-auth/core/context`) setzt. Eine offene Transaktion hält ihren pg-Client ausgecheckt, deshalb hängt an jedem Client ein `error`-Listener: Ohne ihn beendet ein Verbindungsabbruch den Prozess. |
-| Timeout von 10 s trotz Scale to Zero von `auth` | Akzeptiert: In Dev kann die erste Löschung nach einer Pause am Kaltstart von `auth` scheitern (502), sie lässt sich wiederholen. Entschieden, noch nicht gebaut: In Produktion läuft `auth` immer mit mindestens einer Replica. Diese Notiz entfällt, sobald der AppHost das für eine Produktionsumgebung setzt. |
-| Mehrere Vermerke pro Nutzer | Verworfen: Upsert, EF Core 10 kann es nicht. Ein Insert reicht auch bei doppeltem Tippen und bei Wiederholungen. |
-| Löschung ohne `RequestAborted` | Die App darf sich direkt nach dem Tippen schließen, eine begonnene Löschung soll trotzdem durchlaufen. Das gilt auch für den Abruf der Konto-Id in `UserTelemetryMiddleware`, der vor jedem Endpunkt läuft, also auch vor der Löschung: Bräche er ab, begänne die Löschung nie. Er ist eine einzelne Abfrage über den Unique-Index, ein Abbruch spart nichts Messbares. Verworfen: `RequestAborted` nur bei `DELETE` ignorieren, die Prüfung der Methode müsste bei jedem neuen Endpunkt mitgedacht werden. |
-| Telemetrie bleibt beim Löschen erhalten | Requests, Logs und Exceptions mit der eigenen Id in Application Insights löscht `DeleteAsync` nicht, sie laufen mit der Aufbewahrungsfrist aus. Die Id ist zufällig, ihre Zuordnung zu einer Person verschwindet mit dem Konto. Verworfen: die Telemetrie eines Kontos beim Löschen gezielt entfernen, der Aufwand steht in keinem Verhältnis zu pseudonymen Daten mit begrenzter Aufbewahrung. |
-| Nutzer in Azure per `az containerapp exec` und `npm run create-user` | Die Registrierung bleibt aus. `create-user` ist ein Werkzeug nur für Dev, deshalb ohne verdeckte Passworteingabe und ohne Prüfung der E-Mail. Entschieden, noch nicht gebaut: In Produktion gibt es nur die Anmeldung mit Google und Apple und keine Nutzer mit Passwort, diese Notiz entfällt mit dieser Anmeldung. Verworfen: Admin-Plugin oder zeitweise offene Registrierung. Verworfen: ein lokales Skript gegen Postgres in Azure, die Firewall lässt nur Azure zu. |
-| `--omit=dev` nur im Publish-Mode | Aspire 13.6.5 erzeugt für `AddNodeApp` keine eigene Stage für Produktions-Abhängigkeiten. Im Run-Mode gingen die Argumente an Aspires Installer, `npm install --omit=dev` entfernte Biome und tsc aus `src/auth/node_modules`. Verworfen: ein eigenes Dockerfile in `src/auth`, es schaltet die Generierung ab. Verworfen: `WithDockerfileBuilder`, experimentell (ASPIREDOCKERFILEBUILDER001). |
+| Löschvermerk mit `iat` | Verworfen: bei der Kontoanlage prüfen, ob der Nutzer in Better Auth noch existiert, die API hat keinen Lesezugriff auf Better Auth. |
+| Löschen über `/service/delete-user` mit Service-Key | Verworfen: Better Auths `/delete-user` (`user.deleteUser`), braucht die Session des Nutzers und erlaubte Löschungen an der API vorbei. Verworfen: `remove-user` des Admin-Plugins, braucht einen Admin-Nutzer mit Passwort-Secret und öffnet Ban, Impersonation und Nutzerlisten am öffentlichen Ingress. |
+| Better Auth als letzter Schritt der Löschung | Scheitert sonst ein späterer Schritt, kann sich der Nutzer nicht mehr anmelden und die Löschung nicht wiederholen. |
+| Löschung und Anlage in `auth` über `runWithTransaction` (`@better-auth/core/context`, deshalb direkte Dependency) | `internalAdapter.deleteUser` löscht in getrennten Statements, ein Fehler hinterließe einen Nutzer ohne Anmeldemöglichkeit. Verworfen: `context.adapter.transaction`, der `internalAdapter` nimmt die Transaktion nur aus dem AsyncLocalStorage von `runWithTransaction`. Jeder pg-Client braucht einen `error`-Listener, sonst beendet ein Verbindungsabbruch während einer offenen Transaktion den Prozess. |
+| Timeout von 10 s trotz Scale to Zero von `auth` | Akzeptiert: In Dev kann die erste Löschung nach einer Pause am Kaltstart scheitern (502, wiederholbar). Entschieden, noch nicht gebaut: In Produktion läuft `auth` mit mindestens einer Replica, die Notiz entfällt, sobald der AppHost das für eine Produktionsumgebung setzt. |
+| Löschung ohne `RequestAborted` | Eine begonnene Löschung soll durchlaufen, auch wenn sich die App direkt schließt. Das gilt auch für den Abruf der Konto-Id in `UserTelemetryMiddleware` vor jedem Endpunkt, sonst begänne die Löschung nie (eine einzelne Index-Abfrage, ein Abbruch spart nichts). Verworfen: `RequestAborted` nur bei `DELETE` ignorieren, das müsste bei jedem neuen Endpunkt mitgedacht werden. |
+| Telemetrie bleibt beim Löschen erhalten | Sie läuft mit der Aufbewahrungsfrist aus, die zufällige Id verliert ihre Zuordnung mit dem Konto. Verworfen: gezieltes Entfernen, unverhältnismäßig für pseudonyme Daten. |
+| Nutzer in Azure per `npm run create-user`, Registrierung aus | Nur für Dev, deshalb ohne verdeckte Passworteingabe und ohne Prüfung der E-Mail. Entschieden, noch nicht gebaut: In Produktion gibt es nur die Anmeldung mit Google und Apple ohne Passwort-Nutzer, die Notiz entfällt mit dieser Anmeldung. Verworfen: Admin-Plugin, zeitweise offene Registrierung, lokales Skript gegen Postgres in Azure (die Firewall lässt nur Azure zu). |
+| `--omit=dev` nur im Publish-Mode | Aspire 13.6.5 erzeugt für `AddNodeApp` keine eigene Stage für Produktions-Abhängigkeiten. Im Run-Mode entfernte Aspires Installer damit Biome und tsc aus `src/auth/node_modules`. Verworfen: eigenes Dockerfile in `src/auth` (schaltet die Generierung ab), `WithDockerfileBuilder` (experimentell). |
