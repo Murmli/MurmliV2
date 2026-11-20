@@ -43,12 +43,17 @@ android {
     productFlavors {
         create("local") {
             dimension = "environment"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appLabel"] = "Murmli Dev"
         }
         create("development") {
             dimension = "environment"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appLabel"] = "Murmli Dev"
         }
         create("production") {
             dimension = "environment"
+            manifestPlaceholders["appLabel"] = "Murmli"
         }
     }
 }
