@@ -16,6 +16,12 @@ export const auth = betterAuth({
 		transaction: true,
 	},
 	emailAndPassword: { enabled: true, disableSignUp: true },
+	socialProviders: {
+		apple: {
+			// Native iOS identity tokens carry the bundle id as audience, the ID token flow needs no client secret
+			clientId: requireEnvironment("APPLE_BUNDLE_IDENTIFIER"),
+		},
+	},
 	plugins: [
 		bearer({ requireSignature: true }),
 		jwt({
