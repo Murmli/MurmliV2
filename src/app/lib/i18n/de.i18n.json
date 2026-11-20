@@ -26,8 +26,8 @@
       }
     },
     "startTokens": "50 Start-Tokens geschenkt",
-    "continueWithApple": "Weiter mit Apple",
-    "continueWithGoogle": "Weiter mit Google",
+    "continueWithApple": "Mit Apple fortfahren",
+    "signInFailed": "Die Anmeldung hat nicht geklappt. Bitte versuche es noch einmal.",
     "legalNote": "Mit der Anmeldung stimmst du den AGB und der Datenschutzerklärung zu.",
     "crashReportsNote": "Murmli meldet Abstürze und Fehler, damit wir sie beheben können. Abschalten kannst du das in den Einstellungen unter Datenschutz."
   },
@@ -70,10 +70,6 @@
       "system": "System",
       "light": "Hell",
       "dark": "Dunkel"
-    },
-    "onboarding": {
-      "section": "Onboarding",
-      "showAgain": "Onboarding erneut anzeigen"
     },
     "crashReporting": {
       "section": "Datenschutz",

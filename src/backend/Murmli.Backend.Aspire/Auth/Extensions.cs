@@ -23,6 +23,12 @@ public static class Extensions
         IResourceBuilder<ParameterResource> serviceKey
     )
     {
+        var appleBundleIdentifier = builder.Configuration["Apple:BundleIdentifier"];
+        if (string.IsNullOrWhiteSpace(appleBundleIdentifier))
+        {
+            throw new InvalidOperationException("The configuration value Apple:BundleIdentifier is not set.");
+        }
+
         var auth = builder
             .AddNodeApp("auth", "../../auth", "src/main.ts")
             // Fixed locally so local clients (Bruno, the app's local flavor) have a stable address
@@ -36,6 +42,7 @@ public static class Extensions
             .WithEnvironment("BETTER_AUTH_SECRET", betterAuthSecret)
             .WithEnvironment("AUTH_SERVICE_KEY", serviceKey)
             .WithEnvironment("JWT_AUDIENCE", JwtAudience)
+            .WithEnvironment("APPLE_BUNDLE_IDENTIFIER", appleBundleIdentifier)
             .PublishAsAzureContainerApp(
                 (_, containerApp) =>
                 {

@@ -13,6 +13,9 @@ class RecordingCrashReporter implements CrashReporter {
   }) async => calls.add('start $environment');
 
   @override
+  Future<void> setUserId(String? id) async => calls.add('user ${id ?? 'none'}');
+
+  @override
   Future<void> stop() async {
     calls.add('stop');
     await pendingStop?.future;

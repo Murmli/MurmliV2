@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../authentication/signed_in_account_provider.dart';
 import '../build_mode/debug_build_provider.dart';
 import '../flavor/flavor.dart';
 import '../flavor/flavor_provider.dart';
@@ -17,11 +20,17 @@ class CrashReporting extends _$CrashReporting {
   Future<void> _reporterChange = Future.value();
 
   @override
-  bool build() =>
-      ref
-          .watch(sharedPreferencesProvider)
-          .getBool(PreferenceKeys.crashReportingEnabled) ??
-      true;
+  bool build() {
+    ref.listen(signedInAccountProvider, (_, account) {
+      if (state) {
+        unawaited(ref.read(crashReporterProvider).setUserId(account?.id));
+      }
+    });
+    return ref
+            .watch(sharedPreferencesProvider)
+            .getBool(PreferenceKeys.crashReportingEnabled) ??
+        true;
+  }
 
   Future<void> start() async {
     if (state) {
@@ -58,9 +67,10 @@ class CrashReporting extends _$CrashReporting {
       Flavor.development || Flavor.production => _appProjectDsn,
     };
     if (dsn != null && !ref.read(debugBuildProvider)) {
-      await ref
-          .read(crashReporterProvider)
-          .start(dsn: dsn, environment: flavor.name);
+      final reporter = ref.read(crashReporterProvider);
+      await reporter.start(dsn: dsn, environment: flavor.name);
+      // Sentry.close() drops the scope and init creates a new hub.
+      await reporter.setUserId(ref.read(signedInAccountProvider)?.id);
     }
   }
 }

@@ -2,6 +2,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:talker/talker.dart';
 
+import 'package:app/app/core/authentication/account.dart';
+import 'package:app/app/core/authentication/signed_in_account_provider.dart';
 import 'package:app/app/core/build_mode/debug_build_provider.dart';
 import 'package:app/app/core/crash_reporting/crash_reporter_provider.dart';
 import 'package:app/app/core/flavor/flavor.dart';
@@ -15,6 +17,7 @@ ProviderContainer createContainer(
   SharedPreferencesWithCache preferences, {
   Flavor? flavor,
   bool? debugBuild,
+  Account? signedInAccount,
 }) => ProviderContainer.test(
   overrides: [
     sharedPreferencesProvider.overrideWithValue(preferences),
@@ -24,5 +27,9 @@ ProviderContainer createContainer(
     crashReporterProvider.overrideWithValue(RecordingCrashReporter()),
     if (flavor != null) flavorProvider.overrideWithValue(flavor),
     if (debugBuild != null) debugBuildProvider.overrideWithValue(debugBuild),
+    if (signedInAccount != null)
+      signedInAccountProvider.overrideWithBuild(
+        (ref, notifier) => signedInAccount,
+      ),
   ],
 );

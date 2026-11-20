@@ -24,13 +24,29 @@ Flutter-App in `src/app` (Pfade unten relativ dazu). Signieren und Auslieferung 
 
 ## API-Zugriff
 
-- Noch ruft kein App-Code die API auf, der erste Aufruf kommt mit der Anmeldung ([#53](https://github.com/Murmli/MurmliV2/issues/53)), dann entfällt dieser Satz.
+- Der erste Aufruf ist `GET /v1/users/me` bei der [Anmeldung](#anmeldung), das JWT setzt er ausdrücklich am Request. Entschieden, noch nicht gebaut: ein Interceptor für alle Requests mit [#54](https://github.com/Murmli/MurmliV2/issues/54), dann entfällt dieser Punkt.
 - Pfade beginnen mit `/`, weil dio den Pfad als Text an die `baseUrl` (ohne `/` am Ende) hängt: Sonst entstünde bei `development` ein falscher Host, bei `local` ein ungültiger Port. Eine volle URL ignoriert die `baseUrl`, deshalb prüft Code für die eigene API die `origin` statt der Instanz.
 - `ApiTraceInterceptor` gibt nur Requests an die eigene API einen neuen `traceparent` mit, `auth` und Drittanbieter bekommen keinen, auch über dieselbe Instanz. Die API setzt den Trace fort ([telemetry.md](telemetry.md#entscheidungen)).
-- Request-Logs ohne Bodies (Gesundheitsdaten), Header (Token ab [#54](https://github.com/Murmli/MurmliV2/issues/54)) und Query (Nutzereingaben). Auch den Text der `DioException` ersetzt `ApiTraceInterceptor` durch seine Logzeile, denn `main.dart` loggt und Sentry meldet ihn, und dios Standardtext enthält etwa eine `HttpException` mit voller URL samt Query oder eine `FormatException` mit Teilen des Bodies.
+- Request-Logs ohne Bodies (Gesundheitsdaten), Header (Token) und Query (Nutzereingaben). Auch den Text der `DioException` ersetzt `ApiTraceInterceptor` durch seine Logzeile, denn `main.dart` loggt und Sentry meldet ihn, und dios Standardtext enthält etwa eine `HttpException` mit voller URL samt Query oder eine `FormatException` mit Teilen des Bodies.
 - Fehlerdialog (`ApiErrorDialogListener`): nicht bei Abbruch per `CancelToken`, höchstens einer gleichzeitig, keiner (auch nicht nachträglich), solange die App nicht sichtbar ist oder der Navigator fehlt. Der Aufrufer bekommt den Fehler trotzdem.
 - dio ruft auch `onError` in Reihenfolge der Interceptors auf, `handler.resolve` überspringt die folgenden. Deshalb bleibt mit `ApiTraceInterceptor` zuerst jeder Request im Log, und mit der Meldung an `failedApiRequestTraceIdProvider` zuletzt löst ein selbst behobener Fehler keinen Dialog aus.
 - `android.permission.INTERNET` im Haupt-Manifest gibt Release-Builds Netz. Die gleichen Einträge unter `debug` und `profile` stammen aus Flutters Vorlage und bleiben.
+
+## Anmeldung
+
+Ablauf (Endpunkte in [authentication.md](authentication.md#anmeldung)):
+
+1. Apple-Dialog ohne Scopes, mit dem SHA-256 eines zufälligen Nonce.
+2. Identity-Token und roher Nonce an `auth` über `authClientProvider`, eine eigene dio-Instanz ohne die Interceptors der API.
+3. Mit dem Session-Token aus `set-auth-token` das JWT holen, mit diesem `GET /v1/users/me` aufrufen.
+4. `signedInAccountProvider` hält das Konto. Solange keins angemeldet ist, schickt `SignInGuard` jede geschützte Route auf die Onboarding-Seite.
+
+- Abbruch im Apple-Dialog zeigt nichts, ein Fehler bei Apple oder `auth` eine Snackbar, ein Fehler der API nur den globalen Fehlerdialog.
+- Bis [#54](https://github.com/Murmli/MurmliV2/issues/54) liegt nur das Konto im Speicher, nach einem Neustart meldet man sich erneut an, dann entfällt dieser Punkt.
+- Apple nur auf iOS, per `SignInWithAppleButton` des Pakets nach Apples HIG (schwarz, im Dark Mode weiß, Titel „Mit Apple fortfahren“). Google nur auf Android. Entschieden, noch nicht gebaut: die Anmeldung mit Google, bis dahin kann man sich auf Android nicht anmelden, der Satz entfällt mit ihr.
+- Die Onboarding-Seite ist die Anmeldeseite, ein eigenes Onboarding-Flag gibt es nicht.
+- Sign in with Apple braucht ein Gerät mit Apple Account mit Zwei-Faktor-Authentifizierung. Der Simulator ist derzeit unzuverlässig (Apple-Feedback FB25318712), auf einem Gerät testen.
+- Offen bis zum Release: `sign_in_with_apple` 8.2.0 scheitert auf dem iPad mit Fehler 1000 ([aboutyou/dart_packages#489](https://github.com/aboutyou/dart_packages/issues/489)).
 
 ## Absturzberichte (Sentry)
 
@@ -41,7 +57,7 @@ Flutter-App in `src/app` (Pfade unten relativ dazu). Signieren und Auslieferung 
 - Ausschalten beendet Sentry samt nativen SDKs sofort und löscht deren ungesendete Berichte ([Entscheidungen](#entscheidungen)), Einschalten startet es wieder.
 - Nach dem Wiedereinschalten meldet das Android-SDK den letzten ANR der vergangenen 90 Tage (`ApplicationExitInfo`), auch einen aus der Zeit ohne Meldungen oder einen schon gemeldeten: Die Marke des zuletzt gemeldeten ANR lag im gelöschten Cache.
 - Bei Fehlern aus `FlutterError.onError` gehen Kontext und Diagnose der `FlutterErrorDetails` mit (`flutter_error_details`), etwa `NetworkImage("<URL>")` mit voller URL.
-- Nutzer ist die zufällige Installations-ID der nativen SDKs. Die Konto-ID kommt mit [#53](https://github.com/Murmli/MurmliV2/issues/53), [#54](https://github.com/Murmli/MurmliV2/issues/54) und [#55](https://github.com/Murmli/MurmliV2/issues/55).
+- Nutzer ist vor der Anmeldung die zufällige Installations-ID der nativen SDKs, danach die eigene Konto-Id. `CrashReporting` setzt sie per `CrashReporter.setUserId` bei jeder Änderung von `signedInAccountProvider` (bei `null` entfernt es sie) und nach jedem Start von Sentry (`Sentry.close()` verwirft den Scope).
 - Sitzungen (Release Health) gehen auch ohne Fehler an Sentry, eine neue bei jedem Start von Sentry und nach mindestens 30 Sekunden im Hintergrund.
 - Support-Code finden: in Sentry nach `api_trace_id:<Support-Code>` suchen. Das Tag setzt `ApiTraceIdEventProcessor` für `DioException`s der eigenen API, auch in Riverpods `ProviderException` verpackt.
 
@@ -49,8 +65,10 @@ Flutter-App in `src/app` (Pfade unten relativ dazu). Signieren und Auslieferung 
 
 - `flutter test` läuft ohne `--flavor` (der Test des Standard-Flavors verlässt sich darauf) und im Debug-Modus. Tests setzen den Flavor über `pumpApp` bzw. `createContainer` (`flavor`), den Build-Modus über `createContainer` (`debugBuild`). Tests von `CrashReporting` setzen `debugBuild` ausdrücklich, sonst bliebe der Start auch ohne den geprüften Grund aus.
 - `createContainer` (und damit `pumpApp`) setzt einen Talker ohne Konsolenausgabe ein (Logs über `history` prüfen). Was an Sentry geht, prüft `startRecordingSentry`: Sentry rein in Dart mit einem Transport, der Envelopes aufzeichnet.
-- Tests ersetzen den Adapter der Instanz aus `apiClientProvider` durch `RecordingHttpClientAdapter`. Nur der Test, dass Requests keine Trace-Header von Sentry tragen, behält dios echten Adapter und leitet per `HttpOverrides` an einen `HttpServer` auf Loopback: Header, die eine Sentry-Integration wie `sentry_dio` im Adapter setzt, sähe `RecordingHttpClientAdapter` nicht.
+- Tests ersetzen den Adapter der Instanzen aus `apiClientProvider` und `authClientProvider` durch `RecordingHttpClientAdapter`. Nur der Test, dass Requests keine Trace-Header von Sentry tragen, behält dios echten Adapter und leitet per `HttpOverrides` an einen `HttpServer` auf Loopback: Header, die eine Sentry-Integration wie `sentry_dio` im Adapter setzt, sähe `RecordingHttpClientAdapter` nicht.
 - Widget-Tests hängen die Erwartung an einen Request per `expectLater` vor `tester.pumpAndSettle()` an und warten erst danach auf sie: dio arbeitet über Timer, die unter `FakeAsync` nur beim Pumpen laufen. Direkt gewartet hängt der Test, eine erst nach dem Pumpen angehängte Erwartung meldet den Fehler als unbehandelt.
+- Den Apple-Dialog ersetzt `FakeSignInWithApplePlatform` über `SignInWithApplePlatform.instance`. Angemeldet starten Tests über `signedInAccount` von `createContainer` bzw. `pumpApp`.
+- `flutter test` läuft als Android. Widget-Tests für eine Plattform setzen sie per `variant: TargetPlatformVariant.only(...)`, das `debugDefaultTargetPlatformOverride` setzt und auch nach einem Fehlschlag zurücksetzt.
 
 ## Entscheidungen
 
@@ -62,7 +80,9 @@ Flutter-App in `src/app` (Pfade unten relativ dazu). Signieren und Auslieferung 
 | iOS-Configurations wie in Flutters Doku dupliziert, `Runner` und `Debug`, `Release`, `Profile` bleiben | Umbenennen oder Löschen bricht `flutter logs` und `flutter create .` und weicht von der Doku ab, der künftige Flutter-Migrationen folgen. |
 | `local` und `development` teilen `de.murmli.app.dev` | Die Pipeline baut `local` nie, eine eigene ID kostete App ID und App-Eintrag bei Apple und eine App in der Play Console. |
 | Android-Emulator über `10.0.2.2` statt `adb reverse` | `adb reverse` geht bei jedem Neustart des Emulators verloren. |
-| Keine Timeouts in `apiClientProvider` | Die API skaliert in Dev auf null, ein Antwort-Timeout müsste den Kaltstart abdecken, und ohne Aufrufer lässt sich kein Wert messen. Der erste Aufrufer legt sie fest, dann entfällt diese Zeile. |
+| Keine Timeouts in `apiClientProvider` und `authClientProvider` | API und `auth` skalieren in Dev auf null, ein Antwort-Timeout müsste den Kaltstart abdecken, gemessen ist noch keiner. Die Anmeldung zeigt ihren Fortschritt, bis eine Antwort kommt. |
+| Apple nur auf iOS, Google nur auf Android | Siehe [authentication.md](authentication.md#entscheidungen). |
+| Fake über `SignInWithApplePlatform` statt eigener Hülle um `SignInWithApple` | Eine Hülle nur für Tests wäre Test-only-Code in Produktion. |
 | `traceparent` aus eigenem Code statt einer OpenTelemetry-Bibliothek | Ein offizielles OpenTelemetry-SDK für Dart gibt es noch nicht. Spans aus der App gehören zu [Murmli/BackOffice#7](https://github.com/Murmli/BackOffice/issues/7). |
 | Sampled-Flag `01` | Der Support-Code soll immer auf einen aufgezeichneten Trace führen, ohne von der Sonderregel der API für `00` abzuhängen. |
 | Eigener Interceptor statt `talker_dio_logger` | `talker_dio_logger` (Stand 5.2.0) loggt die volle URL samt Query, standardmäßig Bodies und bei Fehlern Header, die Trace-ID nie in Antwort- und Fehler-Logs. |

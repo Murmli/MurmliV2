@@ -55,6 +55,22 @@ public class ExtensionsTests
     }
 
     [Fact]
+    public async Task AddAuth_AppleBundleIdentifierSet_PassesItToAuth()
+    {
+        var environment = await AppHostEnvironment.GetAsync("auth", ["--Apple:BundleIdentifier=de.example.app"]);
+
+        Assert.Equal("de.example.app", environment["APPLE_BUNDLE_IDENTIFIER"]);
+    }
+
+    [Fact]
+    public async Task AddAuth_AppleBundleIdentifierEmpty_Throws()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => AppHostEnvironment.GetAsync("auth", ["--Apple:BundleIdentifier="]));
+
+        Assert.Contains("Apple:BundleIdentifier", exception.Message);
+    }
+
+    [Fact]
     public async Task WithAuth_RunMode_PointsApiAtAuthService()
     {
         var authEnvironment = await AppHostEnvironment.GetAsync("auth", []);

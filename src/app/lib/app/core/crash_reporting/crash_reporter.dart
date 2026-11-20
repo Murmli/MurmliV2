@@ -20,6 +20,12 @@ class CrashReporter {
         ),
       );
 
+  Future<void> setUserId(String? id) async {
+    await Sentry.configureScope(
+      (scope) => scope.setUser(id == null ? null : SentryUser(id: id)),
+    );
+  }
+
   Future<void> stop() async {
     final cacheDirectory = await getApplicationCacheDirectory();
     // Closing flushes the native SDKs (iOS sends every cached report), the

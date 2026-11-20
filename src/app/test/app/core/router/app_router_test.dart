@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:app/app/core/authentication/account.dart';
 import 'package:app/app/core/router/app_router.dart';
-import 'package:app/app/core/storage/preference_keys.dart';
 import 'package:app/app/features/home/widgets/floating_navigation_bar.dart';
 import 'package:app/app/features/home/home_page.dart';
 import 'package:app/app/features/home/home_tab.dart';
@@ -16,37 +16,32 @@ import '../../../helpers/pump_app.dart';
 
 void main() {
   group('AppRouter', () {
-    testWidgets(
-      'start without completed onboarding shows the onboarding page',
-      (tester) async {
-        await pumpApp(tester);
+    testWidgets('start while signed out shows the onboarding page', (
+      tester,
+    ) async {
+      await pumpApp(tester);
 
-        expect(find.byType(OnboardingPage), findsOneWidget);
-        expect(find.byType(HomePage), findsNothing);
-      },
-    );
+      expect(find.byType(OnboardingPage), findsOneWidget);
+      expect(find.byType(HomePage), findsNothing);
+    });
 
-    testWidgets(
-      'start with completed onboarding shows home with the chat tab active',
-      (tester) async {
-        await pumpApp(
-          tester,
-          storedPreferences: {PreferenceKeys.onboardingCompleted: true},
-        );
+    testWidgets('start while signed in shows home with the chat tab active', (
+      tester,
+    ) async {
+      await pumpApp(tester, signedInAccount: const Account(id: 'account'));
 
-        expect(find.byType(OnboardingPage), findsNothing);
-        expect(find.byType(ChatPage), findsOneWidget);
-        expect(
-          tester
-              .widget<FloatingNavigationBar>(find.byType(FloatingNavigationBar))
-              .activeTab,
-          HomeTab.chat,
-        );
-      },
-    );
+      expect(find.byType(OnboardingPage), findsNothing);
+      expect(find.byType(ChatPage), findsOneWidget);
+      expect(
+        tester
+            .widget<FloatingNavigationBar>(find.byType(FloatingNavigationBar))
+            .activeTab,
+        HomeTab.chat,
+      );
+    });
 
     testWidgets(
-      'navigating to settings without completed onboarding shows the onboarding page',
+      'navigating to settings while signed out shows the onboarding page',
       (tester) async {
         await pumpApp(tester);
 

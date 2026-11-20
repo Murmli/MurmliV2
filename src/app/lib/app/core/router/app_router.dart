@@ -1,15 +1,15 @@
 import 'package:auto_route/auto_route.dart';
 
 import 'app_router.gr.dart';
-import 'onboarding_guard.dart';
+import 'sign_in_guard.dart';
 
 export 'app_router.gr.dart';
 
 @AutoRouterConfig()
 class AppRouter extends RootStackRouter {
-  AppRouter({required this.onboardingGuard});
+  AppRouter({required this.signInGuard});
 
-  final OnboardingGuard onboardingGuard;
+  final SignInGuard signInGuard;
 
   @override
   List<AutoRoute> get routes => [
@@ -17,7 +17,7 @@ class AppRouter extends RootStackRouter {
     AutoRoute(
       page: HomeRoute.page,
       initial: true,
-      guards: [onboardingGuard],
+      guards: [signInGuard],
       children: [
         AutoRoute(page: RecipesRoute.page),
         AutoRoute(page: PlannerRoute.page),
@@ -26,6 +26,6 @@ class AppRouter extends RootStackRouter {
         AutoRoute(page: CaloriesRoute.page),
       ],
     ),
-    AutoRoute(page: SettingsRoute.page, guards: [onboardingGuard]),
+    AutoRoute(page: SettingsRoute.page, guards: [signInGuard]),
   ];
 }

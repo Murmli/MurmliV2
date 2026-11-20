@@ -28,6 +28,23 @@ void main() {
   });
 
   group('CrashReporter', () {
+    test('setUserId puts the id as user on reported events and setUserId null removes it', () async {
+      final envelopes = await startRecordingSentry();
+      const crashReporter = CrashReporter();
+
+      await crashReporter.setUserId('account');
+      await Sentry.captureException(StateError('while signed in'));
+      await crashReporter.setUserId(null);
+      await Sentry.captureException(StateError('after signing out'));
+
+      final [signedInEvent, signedOutEvent] = [
+        for (final envelope in envelopes)
+          envelope.items.single.originalObject! as SentryEvent,
+      ];
+      expect(signedInEvent.user?.id, 'account');
+      expect(signedOutEvent.user, isNull);
+    });
+
     test('stop ends reporting and deletes the reports cached by the native SDKs but no other cache', () async {
       final envelopes = await startRecordingSentry();
 

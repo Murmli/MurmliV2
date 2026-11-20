@@ -5,7 +5,7 @@ Signieren der iOS-App und Auslieferung über TestFlight. Flavors und Bundle-IDs 
 ## Einrichtung bei Apple
 
 - Team Murmli im Apple Developer Program.
-- App IDs `de.murmli.app` und `de.murmli.app.dev`, ohne Capabilities.
+- App ID `de.murmli.app.dev` mit der Capability „Sign In with Apple“ als eigene primäre App ID.
 - Ein Zertifikat „Apple Distribution“, gültig etwa ein Jahr ([erneuern](#zertifikat-erneuern)).
 - Team-Schlüssel der App Store Connect API mit der Rolle Admin.
 - App-Store-Profil „Murmli Dev App Store“ für `de.murmli.app.dev` (legt `sigh` an, wenn es fehlt).
@@ -48,14 +48,14 @@ Nach neuen oder geänderten Vereinbarungen scheitern Uploads und API-Aufrufe mit
 
 ### Neue Capability
 
-Etwa „Sign in with Apple“ ([#53](https://github.com/Murmli/MurmliV2/issues/53)). In dieser Reihenfolge, sonst scheitert das Signieren im Pull Request am alten Profil:
+In dieser Reihenfolge, sonst scheitert das Signieren im Pull Request am alten Profil:
 
-1. Capability an beiden App IDs aktivieren, Profil „Murmli Dev App Store“ löschen (`sigh` legt es neu an).
-2. Im Pull Request die Entitlements-Datei des Targets `Runner` ergänzen und per `CODE_SIGN_ENTITLEMENTS` in allen Configurations eintragen.
+1. Capability an der App ID aktivieren, dann das Profil „Murmli Dev App Store“ per „Edit“ > „Generate“ neu erzeugen. Löschen geht auch (`sigh` legt es neu an), dann scheitert aber ein gleichzeitig laufender zweiter iOS-Job an `fail_on_name_taken`.
+2. Im Pull Request das Entitlement in der Datei `src/app/ios/Runner/Runner.entitlements` ergänzen, die alle Configurations des Targets `Runner` per `CODE_SIGN_ENTITLEMENTS` nutzen.
 
 ### `production` bauen
 
-Noch nicht gebaut, die CI baut nur `development` (Abschnitt entfällt, sobald sie `production` baut). Es fehlen ein App-Eintrag „Murmli“ für `de.murmli.app` in App Store Connect (ein Mensch) und ein Eintrag für `production` in der Signing-Map von `prepare_signing`.
+Noch nicht gebaut, die CI baut nur `development` (Abschnitt entfällt, sobald sie `production` baut). Es fehlen der Transfer der Live-App ins Team Murmli, der ihren App-Eintrag und die App ID `de.murmli.app` mitbringt, danach an dieser App ID „Sign In with Apple“ als eigene primäre App ID (beides ein Mensch), und ein Eintrag für `production` in der Signing-Map von `prepare_signing`. Die Live-App nutzt Sign in with Apple nicht, Nutzer müssen also nicht migriert werden.
 
 ### fastlane aktualisieren
 
