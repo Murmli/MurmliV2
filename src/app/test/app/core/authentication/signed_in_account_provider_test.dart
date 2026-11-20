@@ -24,7 +24,8 @@ void main() {
 
   String sentNonce(RequestOptions socialSignIn) =>
       ((socialSignIn.data as Map<String, Object?>)['idToken']!
-          as Map<String, String>)['nonce']!;
+              as Map<String, Object?>)['nonce']!
+          as String;
 
   setUp(() async {
     container = createContainer(await createPreferences());
@@ -168,6 +169,19 @@ void main() {
       recordAuthenticationRequests(
         container,
         respondFromApi: (_) async => jsonResponse(<String, Object?>{}),
+      );
+
+      final result = await signInWithApple();
+
+      expect(result, SignInResult.failed);
+      expect(container.read(signedInAccountProvider), isNull);
+    });
+
+    test('signInWithApple with the API answering with a body that is no JSON object returns failed and stays signed out', () async {
+      installFakeSignInWithApple();
+      recordAuthenticationRequests(
+        container,
+        respondFromApi: (_) async => jsonResponse([accountId]),
       );
 
       final result = await signInWithApple();

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:dart_mappable/dart_mappable.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -10,6 +11,7 @@ import '../api/api_client_provider.dart';
 import '../logging/talker_provider.dart';
 import 'account.dart';
 import 'auth_client_provider.dart';
+import 'sign_in_models.dart';
 
 part 'signed_in_account_provider.g.dart';
 
@@ -49,26 +51,22 @@ class SignedInAccount extends _$SignedInAccount {
       return SignInResult.failed;
     }
     final sessionToken = await _signInWithIdToken(
-      provider: 'apple',
-      idToken: {'token': identityToken, 'nonce': rawNonce},
+      SocialSignInRequest(
+        provider: SocialProvider.apple,
+        idToken: IdTokenRequest(token: identityToken, nonce: rawNonce),
+      ),
     );
     return sessionToken == null
         ? SignInResult.failed
         : _completeSignIn(sessionToken);
   }
 
-  Future<String?> _signInWithIdToken({
-    required String provider,
-    required Map<String, String> idToken,
-  }) async {
+  Future<String?> _signInWithIdToken(SocialSignInRequest request) async {
     const step = 'social sign-in';
     try {
       final response = await ref
           .read(authClientProvider)
-          .post<void>(
-            '/api/auth/sign-in/social',
-            data: {'provider': provider, 'idToken': idToken},
-          );
+          .post<void>('/api/auth/sign-in/social', data: request.toMap());
       // Only this header carries the signed session token, the one in the
       // body is unsigned.
       final sessionToken = response.headers.value('set-auth-token');
@@ -90,12 +88,10 @@ class SignedInAccount extends _$SignedInAccount {
     try {
       final response = await ref
           .read(apiClientProvider)
-          .get<Map<String, Object?>>(
-            '/v1/users/me',
-            options: _authorizedBy(jsonWebToken),
-          );
-      if (response.data case {'id': final String id}) {
-        state = Account(id: id);
+          .get<Object?>('/v1/users/me', options: _authorizedBy(jsonWebToken));
+      if (_parseBody(response.data, UserResponseMapper.fromMap)
+          case final user?) {
+        state = Account(id: user.id);
         return SignInResult.signedIn;
       }
       _logFailure('account request', 'no account id');
@@ -110,12 +106,13 @@ class SignedInAccount extends _$SignedInAccount {
     try {
       final response = await ref
           .read(authClientProvider)
-          .get<Map<String, Object?>>(
+          .get<Object?>(
             '/api/auth/token',
             options: _authorizedBy(sessionToken),
           );
-      if (response.data case {'token': final String jsonWebToken}) {
-        return jsonWebToken;
+      if (_parseBody(response.data, TokenResponseMapper.fromMap)
+          case final tokenResponse?) {
+        return tokenResponse.token;
       }
       _logFailure(step, 'no token');
       return null;
@@ -137,6 +134,17 @@ String _appleErrorCode(Exception error) => switch (error) {
   PlatformException(:final code) => code,
   _ => error.runtimeType.toString(),
 };
+
+T? _parseBody<T>(Object? body, T Function(Map<String, dynamic> map) fromMap) {
+  if (body is! Map<String, Object?>) {
+    return null;
+  }
+  try {
+    return fromMap(body);
+  } on MapperException {
+    return null;
+  }
+}
 
 String _httpOutcome(DioException error) =>
     error.response?.statusCode?.toString() ?? error.type.name;
