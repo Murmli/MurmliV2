@@ -71,6 +71,22 @@ public class ExtensionsTests
     }
 
     [Fact]
+    public async Task AddAuth_GoogleWebClientIdSet_PassesItToAuth()
+    {
+        var environment = await AppHostEnvironment.GetAsync("auth", ["--Google:WebClientId=web-client-id.apps.googleusercontent.com"]);
+
+        Assert.Equal("web-client-id.apps.googleusercontent.com", environment["GOOGLE_WEB_CLIENT_ID"]);
+    }
+
+    [Fact]
+    public async Task AddAuth_GoogleWebClientIdEmpty_Throws()
+    {
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => AppHostEnvironment.GetAsync("auth", ["--Google:WebClientId="]));
+
+        Assert.Contains("Google:WebClientId", exception.Message);
+    }
+
+    [Fact]
     public async Task WithAuth_RunMode_PointsApiAtAuthService()
     {
         var authEnvironment = await AppHostEnvironment.GetAsync("auth", []);

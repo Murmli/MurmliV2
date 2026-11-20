@@ -23,11 +23,8 @@ public static class Extensions
         IResourceBuilder<ParameterResource> serviceKey
     )
     {
-        var appleBundleIdentifier = builder.Configuration["Apple:BundleIdentifier"];
-        if (string.IsNullOrWhiteSpace(appleBundleIdentifier))
-        {
-            throw new InvalidOperationException("The configuration value Apple:BundleIdentifier is not set.");
-        }
+        var appleBundleIdentifier = RequiredConfigurationValue(builder, "Apple:BundleIdentifier");
+        var googleWebClientId = RequiredConfigurationValue(builder, "Google:WebClientId");
 
         var auth = builder
             .AddNodeApp("auth", "../../auth", "src/main.ts")
@@ -43,6 +40,7 @@ public static class Extensions
             .WithEnvironment("AUTH_SERVICE_KEY", serviceKey)
             .WithEnvironment("JWT_AUDIENCE", JwtAudience)
             .WithEnvironment("APPLE_BUNDLE_IDENTIFIER", appleBundleIdentifier)
+            .WithEnvironment("GOOGLE_WEB_CLIENT_ID", googleWebClientId)
             .PublishAsAzureContainerApp(
                 (_, containerApp) =>
                 {
@@ -90,5 +88,16 @@ public static class Extensions
         }
 
         return api;
+    }
+
+    private static string RequiredConfigurationValue(IDistributedApplicationBuilder builder, string key)
+    {
+        var value = builder.Configuration[key];
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException($"The configuration value {key} is not set.");
+        }
+
+        return value;
     }
 }
