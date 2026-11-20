@@ -51,11 +51,11 @@ Nach neuen oder geänderten Vereinbarungen scheitern Uploads und API-Aufrufe mit
 In dieser Reihenfolge, sonst scheitert das Signieren im Pull Request am alten Profil:
 
 1. Capability an der App ID aktivieren, dann das Profil „Murmli Dev App Store“ per „Edit“ > „Generate“ neu erzeugen. Löschen geht auch (`sigh` legt es neu an), dann scheitert aber ein gleichzeitig laufender zweiter iOS-Job an `fail_on_name_taken`.
-2. Im Pull Request das Entitlement in der Datei `src/app/ios/Runner/Runner.entitlements` ergänzen, die alle Configurations des Targets `Runner` per `CODE_SIGN_ENTITLEMENTS` nutzen.
+2. Im Pull Request das Entitlement in `src/app/ios/Runner/Runner.entitlements` ergänzen.
 
 ### `production` bauen
 
-Noch nicht gebaut, die CI baut nur `development` (Abschnitt entfällt, sobald sie `production` baut). Es fehlen der Transfer der Live-App ins Team Murmli, der ihren App-Eintrag und die App ID `de.murmli.app` mitbringt, danach an dieser App ID „Sign In with Apple“ als eigene primäre App ID (beides ein Mensch), und ein Eintrag für `production` in der Signing-Map von `prepare_signing`. Die Live-App nutzt Sign in with Apple nicht, Nutzer müssen also nicht migriert werden.
+Noch nicht gebaut, die CI baut nur `development` (Abschnitt entfällt, sobald sie `production` baut). Es fehlen der Transfer der Live-App samt App-Eintrag und App ID `de.murmli.app` ins Team Murmli, danach an der App ID „Sign In with Apple“ als eigene primäre App ID (beides ein Mensch), und ein Eintrag für `production` in der Signing-Map von `prepare_signing`. Die Live-App nutzt Sign in with Apple nicht, Nutzer müssen nicht migriert werden.
 
 ### fastlane aktualisieren
 
