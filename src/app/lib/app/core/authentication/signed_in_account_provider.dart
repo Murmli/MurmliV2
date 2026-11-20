@@ -31,7 +31,7 @@ class SignedInAccount extends _$SignedInAccount {
     final String? identityToken;
     try {
       final credential = await SignInWithApple.getAppleIDCredential(
-        scopes: [AppleIDAuthorizationScopes.email],
+        scopes: [],
         nonce: sha256.convert(utf8.encode(rawNonce)).toString(),
       );
       identityToken = credential.identityToken;

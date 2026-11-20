@@ -31,7 +31,7 @@ void main() {
   });
 
   group('SignedInAccount', () {
-    test('signInWithApple signs in with the identity token and the hashed nonce, exchanges the session token for a JSON web token and fetches the account with it', () async {
+    test('signInWithApple requests no scopes, signs in with the identity token and the hashed nonce, exchanges the session token for a JSON web token and fetches the account with it', () async {
       final apple = installFakeSignInWithApple();
       final requests = recordAuthenticationRequests(container);
 
@@ -39,7 +39,7 @@ void main() {
 
       expect(result, SignInResult.signedIn);
       expect(container.read(signedInAccountProvider)?.id, accountId);
-      expect(apple.receivedScopes, [AppleIDAuthorizationScopes.email]);
+      expect(apple.receivedScopes, isEmpty);
       final [socialSignIn, tokenRequest] = requests.auth.requests;
       expect(socialSignIn.method, 'POST');
       expect(socialSignIn.uri.path, socialSignInPath);

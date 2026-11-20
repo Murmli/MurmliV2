@@ -36,7 +36,7 @@ Flutter-App in `src/app` (Pfade unten relativ dazu). Signieren und Auslieferung 
 
 Ablauf (Endpunkte in [authentication.md](authentication.md#anmeldung)):
 
-1. Apple-Dialog mit dem Scope `email` und dem SHA-256 eines zufälligen Nonce.
+1. Apple-Dialog ohne Scopes, mit dem SHA-256 eines zufälligen Nonce.
 2. Identity-Token und roher Nonce an `auth` über `authClientProvider`, eine eigene dio-Instanz ohne die Interceptors der API.
 3. Mit dem Session-Token aus `set-auth-token` das JWT holen, mit diesem `GET /v1/users/me` aufrufen.
 4. `signedInAccountProvider` hält das Konto. Solange keins angemeldet ist, schickt `SignInGuard` jede geschützte Route auf die Onboarding-Seite.

@@ -34,7 +34,7 @@ FakeSignInWithApplePlatform installFakeSignInWithApple({
         givenName: null,
         familyName: null,
         authorizationCode: 'apple-authorization-code',
-        email: 'murmli@example.com',
+        email: null,
         identityToken: appleIdentityToken,
         state: null,
       ),

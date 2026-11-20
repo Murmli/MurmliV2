@@ -410,7 +410,7 @@ Hintergrund und Entscheidungen: [docs/authentication.md](docs/authentication.md)
 - Was `auth` zur Laufzeit importiert, gehört in `dependencies`, das Image enthält keine `devDependencies`. `--omit=dev` nur im Publish-Mode setzen (`AddAuth()`), im Run-Mode entfernte Aspires Installer sonst Biome und tsc aus `src/auth/node_modules`.
 - `OpenApi:Enabled` nur in `appsettings.Development.json` und `appsettings.azure-dev.json` des AppHost setzen, sonst ist das OpenAPI-Dokument in weiteren Umgebungen ohne Anmeldung erreichbar.
 - `Apple:BundleIdentifier` nur in `appsettings.Development.json` und `appsettings.azure-<name>.json` des AppHost setzen, nie in `appsettings.json` (eine neue Umgebung erbte sonst die ID von Dev).
-- Sign in with Apple nur über das Identity-Token (`POST /api/auth/sign-in/social` mit `idToken`), ohne Client Secret.
+- Sign in with Apple nur über das Identity-Token (`POST /api/auth/sign-in/social` mit `idToken`), ohne Client Secret, ohne Scopes in der App und mit `mapProfileToUser` samt Platzhalter-E-Mail in `auth` (ohne lehnt Better Auth jede Anmeldung mit Apple ab, mit `profile.email` speicherte es Adressen).
 - Tests stellen eigene Tokens aus (`TestTokens`) und ersetzen `auth` durch `AuthServiceHttpMessageHandler`. Echte Tokens nur im End-to-End-Test `AuthenticationTests` gegen das lokal gestartete `auth`, kein Test spricht mit Azure.
 - `TokenValidationParameters` im Code nie ersetzen, die Werte kommen aus der Bindung von `Authentication:Schemes:Bearer`.
 
