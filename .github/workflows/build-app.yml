@@ -8,7 +8,7 @@ on:
         type: string
         required: true
       deliver:
-        description: Upload debug symbols and R8 mappings to Sentry with the secret SENTRY_AUTH_TOKEN of the environment development, and keep the iOS app as artifact ios-ipa for deliver-app.yml.
+        description: Upload debug symbols and R8 mappings to Sentry with the secret SENTRY_AUTH_TOKEN of the environment development, keep the iOS app as artifact ios-ipa for deliver-app.yml, and keep the Android app bundle as artifact android-aab.
         type: boolean
         required: true
     secrets:
@@ -25,6 +25,10 @@ on:
       APPLE_APP_STORE_CONNECT_ISSUER_ID:
         required: false
       APPLE_TEAM_ID:
+        required: false
+      ANDROID_UPLOAD_KEYSTORE:
+        required: false
+      ANDROID_UPLOAD_KEYSTORE_PASSWORD:
         required: false
 
 permissions:
@@ -49,22 +53,82 @@ jobs:
         run: ': "${SENTRY_AUTH_TOKEN:?SENTRY_AUTH_TOKEN is missing in the development environment}"'
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      - name: Check Android signing secrets
+        # Repository secrets, so pull requests sign too; pull requests from forks get none and stop here.
+        run: |
+          : "${ANDROID_UPLOAD_KEYSTORE:?ANDROID_UPLOAD_KEYSTORE is missing in the repository secrets}"
+          : "${ANDROID_UPLOAD_KEYSTORE_PASSWORD:?ANDROID_UPLOAD_KEYSTORE_PASSWORD is missing in the repository secrets}"
+        env:
+          ANDROID_UPLOAD_KEYSTORE: ${{ secrets.ANDROID_UPLOAD_KEYSTORE }}
+          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
       - uses: ./.github/actions/setup-app
-      - run: flutter build appbundle --release --flavor "$FLAVOR" --split-debug-info=build/debug-info
+      - name: Write upload keystore
+        run: printf '%s' "$ANDROID_UPLOAD_KEYSTORE" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+        env:
+          ANDROID_UPLOAD_KEYSTORE: ${{ secrets.ANDROID_UPLOAD_KEYSTORE }}
+      - name: Build app bundle
+        run: flutter build appbundle --release --flavor "$FLAVOR" --split-debug-info=build/debug-info --build-number="$BUILD_NUMBER"
         env:
           FLAVOR: ${{ inputs.flavor }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          ORG_GRADLE_PROJECT_murmliUploadKeystoreFile: ${{ runner.temp }}/upload.keystore
+          ORG_GRADLE_PROJECT_murmliUploadKeystorePassword: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
           ORG_GRADLE_PROJECT_sentryUploadProguardMapping: ${{ inputs.deliver }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      - name: Check app bundle
+        id: bundle
+        # Without the upload key properties Gradle signs with the debug key, which Google Play rejects.
+        run: |
+          bundle=$(ls build/app/outputs/bundle/"$FLAVOR"Release/*.aab)
+          curl -fsSL -o "$RUNNER_TEMP/bundletool.jar" "https://github.com/google/bundletool/releases/download/$BUNDLETOOL_VERSION/bundletool-all-$BUNDLETOOL_VERSION.jar"
+          echo "$BUNDLETOOL_SHA256  $RUNNER_TEMP/bundletool.jar" | sha256sum --check --quiet
+          upload_key=$(keytool -list -v -keystore "$RUNNER_TEMP/upload.keystore" -storepass:env ANDROID_UPLOAD_KEYSTORE_PASSWORD -alias upload | grep 'SHA256:')
+          signer=$(keytool -printcert -jarfile "$bundle" | grep 'SHA256:' || true)
+          if [ "$signer" != "$upload_key" ]; then
+            echo "::error::$bundle is not signed with the upload key"
+            exit 1
+          fi
+          manifest_value() {
+            java -jar "$RUNNER_TEMP/bundletool.jar" dump manifest --bundle="$bundle" --xpath="$1"
+          }
+          application_id=$(manifest_value /manifest/@package)
+          version_name=$(manifest_value /manifest/@android:versionName)
+          version_code=$(manifest_value /manifest/@android:versionCode)
+          echo "Application ID $application_id, version name $version_name, version code $version_code"
+          {
+            echo "application-id=$application_id"
+            echo "version-name=$version_name"
+            echo "version-code=$version_code"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          FLAVOR: ${{ inputs.flavor }}
+          BUNDLETOOL_VERSION: 1.18.3
+          BUNDLETOOL_SHA256: a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29
+          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
       - name: Upload debug symbols
         if: inputs.deliver
+        # The sentry section of the pubspec names the production application id and the pubspec build number, the app reports the ones it was built with.
         run: dart run sentry_dart_plugin
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_RELEASE: ${{ steps.bundle.outputs.application-id }}@${{ steps.bundle.outputs.version-name }}+${{ steps.bundle.outputs.version-code }}
+          SENTRY_DIST: ${{ steps.bundle.outputs.version-code }}
+      - name: Keep app bundle for delivery
+        if: inputs.deliver
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-aab
+          path: src/app/build/app/outputs/bundle/${{ inputs.flavor }}Release/*.aab
+          if-no-files-found: error
+          retention-days: 1
+      - name: Remove signing secrets
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.keystore"
 
   ios:
     name: iOS
