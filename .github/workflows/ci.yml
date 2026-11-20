@@ -56,7 +56,10 @@ jobs:
     needs: [lint, test, build-app, vulnerability-scan]
     if: github.event_name == 'push'
     uses: ./.github/workflows/deliver-app.yml
+    with:
+      android-application-id: ${{ needs.build-app.outputs.android-application-id }}
     secrets:
       APPLE_APP_STORE_CONNECT_KEY: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY }}
       APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
       APPLE_APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER_ID }}
+      GOOGLE_PLAY_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_KEY }}

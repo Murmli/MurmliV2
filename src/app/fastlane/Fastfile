@@ -72,3 +72,22 @@ platform :ios do
     )
   end
 end
+
+platform :android do
+  desc "Upload the app bundle built by flutter build appbundle to the Play internal testing track"
+  lane :upload do
+    app_bundle_paths = Dir.glob(File.expand_path("../build/app/outputs/bundle/*.aab"))
+    UI.user_error!("Expected one app bundle in build/app/outputs/bundle, found #{app_bundle_paths.size}") unless app_bundle_paths.size == 1
+
+    upload_to_play_store(
+      package_name: ENV.fetch("ANDROID_APPLICATION_ID"),
+      track: "internal",
+      aab: app_bundle_paths.first,
+      json_key_data: ENV.fetch("GOOGLE_PLAY_SERVICE_ACCOUNT_KEY").unpack1("m"),
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+end

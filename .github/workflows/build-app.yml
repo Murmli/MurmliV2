@@ -11,6 +11,10 @@ on:
         description: Upload debug symbols and R8 mappings to Sentry with the secret SENTRY_AUTH_TOKEN of the environment development, keep the iOS app as artifact ios-ipa for deliver-app.yml, and keep the Android app bundle as artifact android-aab.
         type: boolean
         required: true
+    outputs:
+      android-application-id:
+        description: Application ID read from the manifest of the Android app bundle.
+        value: ${{ jobs.android.outputs.application-id }}
     secrets:
       SENTRY_AUTH_TOKEN:
         required: false
@@ -42,6 +46,8 @@ jobs:
     environment:
       name: ${{ inputs.deliver && 'development' || '' }}
       deployment: false
+    outputs:
+      application-id: ${{ steps.bundle.outputs.application-id }}
     defaults:
       run:
         working-directory: src/app
