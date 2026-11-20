@@ -17,6 +17,7 @@ enum SignInResult {
   signedIn,
   canceled,
   failed,
+  invalidCredentials,
   // apiClientProvider already showed the error dialog, callers show nothing.
   apiRequestFailed,
 }
@@ -57,6 +58,34 @@ class SignedInAccount extends _$SignedInAccount {
         : _completeSignIn(sessionToken);
   }
 
+  Future<SignInResult> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    const step = 'email sign-in';
+    final String? sessionToken;
+    try {
+      final response = await ref
+          .read(authClientProvider)
+          .post<void>(
+            '/api/auth/sign-in/email',
+            data: {'email': email, 'password': password},
+          );
+      sessionToken = _sessionTokenOf(response, step);
+    } on DioException catch (error) {
+      _logFailure(step, _httpOutcome(error));
+      return switch (error.response?.statusCode) {
+        // Better Auth answers a malformed address with 400, it gets the same
+        // message as wrong credentials.
+        401 || 400 => SignInResult.invalidCredentials,
+        _ => SignInResult.failed,
+      };
+    }
+    return sessionToken == null
+        ? SignInResult.failed
+        : _completeSignIn(sessionToken);
+  }
+
   Future<String?> _signInWithIdToken({
     required String provider,
     required Map<String, String> idToken,
@@ -69,17 +98,21 @@ class SignedInAccount extends _$SignedInAccount {
             '/api/auth/sign-in/social',
             data: {'provider': provider, 'idToken': idToken},
           );
-      // Only this header carries the signed session token, the one in the
-      // body is unsigned.
-      final sessionToken = response.headers.value('set-auth-token');
-      if (sessionToken == null) {
-        _logFailure(step, 'no session token');
-      }
-      return sessionToken;
+      return _sessionTokenOf(response, step);
     } on DioException catch (error) {
       _logFailure(step, _httpOutcome(error));
       return null;
     }
+  }
+
+  String? _sessionTokenOf(Response<void> response, String step) {
+    // Only this header carries the signed session token, the one in the body
+    // is unsigned.
+    final sessionToken = response.headers.value('set-auth-token');
+    if (sessionToken == null) {
+      _logFailure(step, 'no session token');
+    }
+    return sessionToken;
   }
 
   Future<SignInResult> _completeSignIn(String sessionToken) async {

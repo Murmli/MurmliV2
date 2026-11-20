@@ -6,7 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import 'widgets/brand.dart';
 import 'widgets/feature_card.dart';
-import 'widgets/sign_in_buttons.dart';
+import 'widgets/sign_in_options.dart';
 
 @RoutePage()
 class OnboardingPage extends StatelessWidget {
@@ -55,7 +55,7 @@ class OnboardingPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.space16),
-                    const SignInButtons(),
+                    const SignInOptions(),
                     const SizedBox(height: AppSpacing.space16),
                     Padding(
                       padding: const EdgeInsets.symmetric(

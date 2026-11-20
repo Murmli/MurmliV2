@@ -9,7 +9,10 @@ import 'package:app/app/core/authentication/auth_client_provider.dart';
 import 'http_client_adapter.dart';
 
 const socialSignInPath = '/api/auth/sign-in/social';
+const emailSignInPath = '/api/auth/sign-in/email';
 const tokenPath = '/api/auth/token';
+const signInEmail = 'test@murmli.de';
+const signInPassword = 'correct-horse-battery-staple';
 const signedSessionToken = 'signed-session-token';
 const jsonWebToken = 'json-web-token';
 const accountId = '0198c5a4-2f6e-7b1d-9c3a-4e5f6a7b8c9d';
@@ -29,7 +32,7 @@ ResponseBody jsonResponse(
 
 Future<ResponseBody> respondAsAuth(RequestOptions request) async =>
     switch (request.uri.path) {
-      socialSignInPath => jsonResponse(
+      socialSignInPath || emailSignInPath => jsonResponse(
         {'redirect': false, 'token': 'unsigned-session-token'},
         headers: {
           'set-auth-token': [signedSessionToken],
