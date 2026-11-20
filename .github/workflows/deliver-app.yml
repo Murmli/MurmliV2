@@ -2,6 +2,11 @@ name: Deliver app
 
 on:
   workflow_call:
+    inputs:
+      android-application-id:
+        description: Application ID of the app bundle in the artifact android-aab, output android-application-id of build-app.yml.
+        type: string
+        required: true
     secrets:
       APPLE_APP_STORE_CONNECT_KEY:
         required: false
@@ -9,11 +14,47 @@ on:
         required: false
       APPLE_APP_STORE_CONNECT_ISSUER_ID:
         required: false
+      GOOGLE_PLAY_SERVICE_ACCOUNT_KEY:
+        required: false
 
 permissions:
   contents: read
 
 jobs:
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    # Environment secrets only reach jobs that name the environment.
+    environment:
+      name: development
+      deployment: false
+    # Play deletes the open edit of the service account when another upload starts, so concurrent uploads fail each other.
+    concurrency:
+      group: google-play-upload
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: src/app
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check Google Play secret
+        run: ': "${GOOGLE_PLAY_SERVICE_ACCOUNT_KEY:?GOOGLE_PLAY_SERVICE_ACCOUNT_KEY is missing in the development environment}"'
+        env:
+          GOOGLE_PLAY_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_KEY }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-aab
+          path: src/app/build/app/outputs/bundle
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          working-directory: src/app
+      - name: Upload to Google Play
+        run: bundle exec fastlane android upload
+        env:
+          ANDROID_APPLICATION_ID: ${{ inputs.android-application-id }}
+          GOOGLE_PLAY_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_KEY }}
+
   ios:
     name: iOS
     runs-on: macos-latest
