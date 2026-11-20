@@ -1,4 +1,4 @@
-name: Deploy
+name: Deploy backend
 
 on:
   workflow_call:
