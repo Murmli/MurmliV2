@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'package:app/app/core/authentication/account.dart';
+import 'package:app/app/core/authentication/signed_in_account_provider.dart';
 import 'package:app/app/core/crash_reporting/crash_reporter_provider.dart';
 import 'package:app/app/core/crash_reporting/crash_reporting_provider.dart';
 import 'package:app/app/core/flavor/flavor.dart';
@@ -29,7 +31,10 @@ void main() {
 
           await container.read(crashReportingProvider.notifier).start();
 
-          expect(crashReporterOf(container).calls, ['start ${flavor.name}']);
+          expect(crashReporterOf(container).calls, [
+            'start ${flavor.name}',
+            'user none',
+          ]);
         },
       );
     }
@@ -88,7 +93,10 @@ void main() {
         await container.read(crashReportingProvider.notifier).setEnabled(true);
 
         expect(container.read(crashReportingProvider), isTrue);
-        expect(crashReporterOf(container).calls, ['start development']);
+        expect(crashReporterOf(container).calls, [
+          'start development',
+          'user none',
+        ]);
       },
     );
 
@@ -109,7 +117,68 @@ void main() {
       expect(crashReporter.calls, ['stop']);
       crashReporter.pendingStop!.complete();
       await Future.wait([switchedOff, switchedOn]);
-      expect(crashReporter.calls, ['stop', 'start development']);
+      expect(crashReporter.calls, ['stop', 'start development', 'user none']);
     });
+
+    test(
+      'signing in while crash reporting runs reports the account id as user',
+      () async {
+        final container = createContainer(
+          await createPreferences(),
+          flavor: Flavor.development,
+          debugBuild: false,
+        );
+        await container.read(crashReportingProvider.notifier).start();
+
+        container.read(signedInAccountProvider.notifier).state = const Account(
+          id: 'account',
+        );
+
+        expect(crashReporterOf(container).calls, [
+          'start development',
+          'user none',
+          'user account',
+        ]);
+      },
+    );
+
+    test('setEnabled true after switching off reports the signed-in account as user after the new start', () async {
+      final container = createContainer(
+        await createPreferences(),
+        flavor: Flavor.development,
+        debugBuild: false,
+        signedInAccount: const Account(id: 'account'),
+      );
+      final notifier = container.read(crashReportingProvider.notifier);
+
+      await notifier.setEnabled(false);
+      await notifier.setEnabled(true);
+
+      expect(crashReporterOf(container).calls, [
+        'stop',
+        'start development',
+        'user account',
+      ]);
+    });
+
+    test(
+      'signing in while crash reporting is switched off reports no user',
+      () async {
+        final container = createContainer(
+          await createPreferences({
+            PreferenceKeys.crashReportingEnabled: false,
+          }),
+          flavor: Flavor.development,
+          debugBuild: false,
+        );
+        await container.read(crashReportingProvider.notifier).start();
+
+        container.read(signedInAccountProvider.notifier).state = const Account(
+          id: 'account',
+        );
+
+        expect(crashReporterOf(container).calls, isEmpty);
+      },
+    );
   });
 }

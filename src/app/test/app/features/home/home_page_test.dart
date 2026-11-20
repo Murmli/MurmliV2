@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:app/app/core/storage/preference_keys.dart';
+import 'package:app/app/core/authentication/account.dart';
 import 'package:app/app/features/home/tabs/shopping_list_page.dart';
 import 'package:app/i18n/strings.g.dart';
 
@@ -13,10 +13,7 @@ void main() {
     testWidgets('tapping a navigation bar tab shows that tab with its header', (
       tester,
     ) async {
-      await pumpApp(
-        tester,
-        storedPreferences: {PreferenceKeys.onboardingCompleted: true},
-      );
+      await pumpApp(tester, signedInAccount: const Account(id: 'account'));
 
       await tester.tap(find.text(translations.shoppingList.label));
       await tester.pumpAndSettle();
@@ -30,10 +27,7 @@ void main() {
       'activating a navigation bar tab through the screen reader shows that tab',
       (tester) async {
         final semantics = tester.ensureSemantics();
-        await pumpApp(
-          tester,
-          storedPreferences: {PreferenceKeys.onboardingCompleted: true},
-        );
+        await pumpApp(tester, signedInAccount: const Account(id: 'account'));
 
         tester.semantics.tap(
           find.semantics.byLabel(translations.shoppingList.label),

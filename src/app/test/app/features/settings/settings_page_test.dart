@@ -3,9 +3,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'package:app/app/core/authentication/account.dart';
 import 'package:app/app/core/crash_reporting/crash_reporter_provider.dart';
 import 'package:app/app/core/storage/preference_keys.dart';
-import 'package:app/app/features/onboarding/onboarding_page.dart';
 import 'package:app/app/features/settings/settings_page.dart';
 import 'package:app/i18n/strings.g.dart';
 
@@ -20,7 +20,7 @@ void main() {
   Future<ProviderContainer> openSettings(WidgetTester tester) async {
     final container = await pumpApp(
       tester,
-      storedPreferences: {PreferenceKeys.onboardingCompleted: true},
+      signedInAccount: const Account(id: 'account'),
     );
     await tester.tap(find.byTooltip(germanTranslations.home.settingsTooltip));
     await tester.pumpAndSettle();
@@ -78,22 +78,6 @@ void main() {
       expect(find.text('Settings'), findsOneWidget);
       expect(find.text('Einstellungen'), findsNothing);
     });
-
-    testWidgets(
-      'show onboarding again opens the onboarding and persists it as not completed',
-      (tester) async {
-        await openSettings(tester);
-
-        await tapRow(tester, translations.onboarding.showAgain);
-
-        expect(find.byType(OnboardingPage), findsOneWidget);
-        final storedPreferences = await reopenPreferences();
-        expect(
-          storedPreferences.getBool(PreferenceKeys.onboardingCompleted),
-          isNull,
-        );
-      },
-    );
 
     testWidgets(
       'switching crash reports off persists it and stops crash reporting',

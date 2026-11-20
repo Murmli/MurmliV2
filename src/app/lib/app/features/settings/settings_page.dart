@@ -6,7 +6,6 @@ import '../../core/theme/app_spacing.dart';
 import 'widgets/about_section.dart';
 import 'widgets/crash_reporting_section.dart';
 import 'widgets/language_section.dart';
-import 'widgets/onboarding_section.dart';
 import 'widgets/theme_section.dart';
 
 @RoutePage()
@@ -28,8 +27,6 @@ class SettingsPage extends StatelessWidget {
           LanguageSection(),
           SizedBox(height: AppSpacing.space24),
           ThemeSection(),
-          SizedBox(height: AppSpacing.space24),
-          OnboardingSection(),
           SizedBox(height: AppSpacing.space24),
           CrashReportingSection(),
           SizedBox(height: AppSpacing.space24),

@@ -4,14 +4,14 @@ import 'package:auto_route/auto_route.dart';
 
 import 'app_router.dart';
 
-class OnboardingGuard extends AutoRouteGuard {
-  OnboardingGuard({required this.isOnboardingCompleted});
+class SignInGuard extends AutoRouteGuard {
+  SignInGuard({required this.isSignedIn});
 
-  final bool Function() isOnboardingCompleted;
+  final bool Function() isSignedIn;
 
   @override
   void onNavigation(NavigationResolver resolver, StackRouter router) {
-    if (isOnboardingCompleted()) {
+    if (isSignedIn()) {
       resolver.next();
       return;
     }
