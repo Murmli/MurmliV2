@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -27,6 +28,8 @@ internal sealed class ApiHost : IAsyncDisposable
 
     public const string FailingEndpointMessage = "The endpoint failed on purpose.";
 
+    public const string ExplicitlyAuthorizedEndpointPath = "/explicitly-authorized";
+
     private readonly WebApplication application;
 
     private ApiHost(WebApplication application, HttpClient httpClient, FakeTimeProvider timeProvider, AuthServiceHttpMessageHandler authService)
@@ -48,7 +51,8 @@ internal sealed class ApiHost : IAsyncDisposable
         IReadOnlyDictionary<string, string?>? additionalConfiguration = null,
         bool mapFailingEndpoint = false,
         ICollection<Activity>? activities = null,
-        ICollection<LogRecord>? logRecords = null
+        ICollection<LogRecord>? logRecords = null,
+        bool mapExplicitlyAuthorizedEndpoint = false
     )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -95,6 +99,11 @@ internal sealed class ApiHost : IAsyncDisposable
         if (mapFailingEndpoint)
         {
             application.MapGet(FailingEndpointPath, void () => throw new InvalidOperationException(FailingEndpointMessage));
+        }
+
+        if (mapExplicitlyAuthorizedEndpoint)
+        {
+            application.MapGet(ExplicitlyAuthorizedEndpointPath, () => TypedResults.Ok()).RequireAuthorization();
         }
 
         await application.StartAsync(cancellationToken);

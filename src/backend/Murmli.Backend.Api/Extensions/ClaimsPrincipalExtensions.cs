@@ -9,7 +9,7 @@ internal static class ClaimsPrincipalExtensions
     public static string? FindAuthUserId(this ClaimsPrincipal user) => user.FindFirstValue(JwtRegisteredClaimNames.Sub);
 
     public static string GetAuthUserId(this ClaimsPrincipal user) =>
-        user.FindAuthUserId() ?? throw new InvalidOperationException("The authenticated user has no sub claim, the fallback policy requires it.");
+        user.FindAuthUserId() ?? throw new InvalidOperationException("The authenticated user has no sub claim, the default and fallback policies require it.");
 
     public static DateTimeOffset? GetIssuedAt(this ClaimsPrincipal user) =>
         long.TryParse(user.FindFirstValue(JwtRegisteredClaimNames.Iat), CultureInfo.InvariantCulture, out var unixSeconds)

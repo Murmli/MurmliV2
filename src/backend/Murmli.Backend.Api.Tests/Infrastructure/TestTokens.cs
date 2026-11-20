@@ -14,7 +14,12 @@ internal static class TestTokens
 
     public static string SigningKeyBase64 { get; } = Convert.ToBase64String(SigningKey);
 
-    public static string Create(string authUserId, string audience = Audience, DateTimeOffset? issuedAt = null)
+    public static string Create(string authUserId, string audience = Audience, DateTimeOffset? issuedAt = null) =>
+        Create(new Dictionary<string, object> { ["sub"] = authUserId }, audience, issuedAt);
+
+    public static string CreateWithoutSubject() => Create([], Audience, issuedAt: null);
+
+    private static string Create(Dictionary<string, object> claims, string audience, DateTimeOffset? issuedAt)
     {
         var now = DateTime.UtcNow;
         return new JsonWebTokenHandler().CreateToken(
@@ -22,7 +27,7 @@ internal static class TestTokens
             {
                 Issuer = Issuer,
                 Audience = audience,
-                Claims = new Dictionary<string, object> { ["sub"] = authUserId },
+                Claims = claims,
                 IssuedAt = issuedAt?.UtcDateTime ?? now,
                 NotBefore = now,
                 Expires = now.AddHours(1),

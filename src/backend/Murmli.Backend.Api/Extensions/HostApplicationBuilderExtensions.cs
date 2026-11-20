@@ -18,9 +18,14 @@ public static class HostApplicationBuilderExtensions
         builder.AddMurmliDbContext();
 
         builder.Services.AddAuthentication().AddJwtBearer(options => options.MapInboundClaims = false);
+        var authenticatedUserWithSubjectPolicy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .RequireClaim(JwtRegisteredClaimNames.Sub)
+            .Build();
         builder
             .Services.AddAuthorizationBuilder()
-            .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().RequireClaim(JwtRegisteredClaimNames.Sub).Build());
+            .SetDefaultPolicy(authenticatedUserWithSubjectPolicy)
+            .SetFallbackPolicy(authenticatedUserWithSubjectPolicy);
 
         builder
             .Services.AddOptions<AuthServiceOptions>()
