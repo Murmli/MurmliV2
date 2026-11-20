@@ -27,6 +27,7 @@
     },
     "startTokens": "50 starter tokens on us",
     "continueWithApple": "Continue with Apple",
+    "continueWithGoogle": "Continue with Google",
     "emailSignIn": {
       "email": "Email",
       "password": "Password",

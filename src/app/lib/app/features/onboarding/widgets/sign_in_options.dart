@@ -15,19 +15,22 @@ import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_spacing.dart';
 
 const _appleButtonHeight = 44.0;
+const _googleLogoSize = 20.0;
 
 class SignInOptions extends ConsumerWidget {
   const SignInOptions({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) =>
-      switch (ref.watch(flavorProvider)) {
-        Flavor.local => const _EmailSignInForm(),
-        Flavor.development || Flavor.production =>
-          defaultTargetPlatform == TargetPlatform.iOS
-              ? const _AppleSignInButton()
-              : const SizedBox.shrink(),
-      };
+  Widget build(BuildContext context, WidgetRef ref) => switch (ref.watch(
+    flavorProvider,
+  )) {
+    Flavor.local => const _EmailSignInForm(),
+    Flavor.development || Flavor.production => switch (defaultTargetPlatform) {
+      TargetPlatform.iOS => const _AppleSignInButton(),
+      TargetPlatform.android => const _GoogleSignInButton(),
+      _ => const SizedBox.shrink(),
+    },
+  };
 }
 
 Future<void> _signIn(
@@ -91,6 +94,37 @@ class _AppleSignInButton extends HookConsumerWidget {
           ref.read(signedInAccountProvider.notifier).signInWithApple,
         ),
       ),
+    );
+  }
+}
+
+class _GoogleSignInButton extends HookConsumerWidget {
+  const _GoogleSignInButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isSigningIn = useState(false);
+    return OutlinedButton.icon(
+      onPressed: isSigningIn.value
+          ? null
+          : () => unawaited(
+              _signIn(
+                context,
+                isSigningIn,
+                ref.read(signedInAccountProvider.notifier).signInWithGoogle,
+              ),
+            ),
+      icon: isSigningIn.value
+          ? const SizedBox.square(
+              dimension: 24,
+              child: CircularProgressIndicator(),
+            )
+          : Image.asset(
+              'assets/images/google_logo.png',
+              width: _googleLogoSize,
+              height: _googleLogoSize,
+            ),
+      label: Text(context.t.onboarding.continueWithGoogle),
     );
   }
 }

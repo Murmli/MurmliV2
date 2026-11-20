@@ -3,10 +3,13 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
+import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../api/api_client_provider.dart';
+import '../flavor/flavor.dart';
+import '../flavor/flavor_provider.dart';
 import '../logging/talker_provider.dart';
 import 'account.dart';
 import 'auth_client_provider.dart';
@@ -24,6 +27,14 @@ enum SignInResult {
 
 @Riverpod(keepAlive: true)
 class SignedInAccount extends _$SignedInAccount {
+  late final Future<void> _googleSignInInitialization = GoogleSignInPlatform
+      .instance
+      .init(
+        InitParameters(
+          serverClientId: _googleServerClientIdOf(ref.read(flavorProvider)),
+        ),
+      );
+
   @override
   Account? build() => null;
 
@@ -42,7 +53,7 @@ class SignedInAccount extends _$SignedInAccount {
       )) {
         return SignInResult.canceled;
       }
-      _logFailure('Apple credential', _appleErrorCode(error));
+      _logFailure('Apple credential', _credentialErrorCode(error));
       return SignInResult.failed;
     }
     if (identityToken == null) {
@@ -52,6 +63,36 @@ class SignedInAccount extends _$SignedInAccount {
     final sessionToken = await _signInWithIdToken(
       provider: 'apple',
       idToken: {'token': identityToken, 'nonce': rawNonce},
+    );
+    return sessionToken == null
+        ? SignInResult.failed
+        : _completeSignIn(sessionToken);
+  }
+
+  Future<SignInResult> signInWithGoogle() async {
+    final String? idToken;
+    try {
+      await _googleSignInInitialization;
+      final results = await GoogleSignInPlatform.instance.authenticate(
+        const AuthenticateParameters(),
+      );
+      idToken = results.authenticationTokens.idToken;
+    } on Exception catch (error) {
+      if (error case GoogleSignInException(
+        code: GoogleSignInExceptionCode.canceled,
+      )) {
+        return SignInResult.canceled;
+      }
+      _logFailure('Google credential', _credentialErrorCode(error));
+      return SignInResult.failed;
+    }
+    if (idToken == null) {
+      _logFailure('Google credential', 'no ID token');
+      return SignInResult.failed;
+    }
+    final sessionToken = await _signInWithIdToken(
+      provider: 'google',
+      idToken: {'token': idToken},
     );
     return sessionToken == null
         ? SignInResult.failed
@@ -165,8 +206,18 @@ class SignedInAccount extends _$SignedInAccount {
       ref.read(talkerProvider).warning('Sign-in failed at $step: $reason');
 }
 
-String _appleErrorCode(Exception error) => switch (error) {
+// local shares the app ID de.murmli.app.dev and with it the Google client.
+String _googleServerClientIdOf(Flavor flavor) => switch (flavor) {
+  Flavor.local || Flavor.development =>
+    '919671347923-6osa4hn7cc3f8trnbdb8s826i0jfv63b.apps.googleusercontent.com',
+  Flavor.production => throw UnimplementedError(
+    'The production flavor has no Google client until the release.',
+  ),
+};
+
+String _credentialErrorCode(Exception error) => switch (error) {
   SignInWithAppleAuthorizationException(:final code) => code.name,
+  GoogleSignInException(:final code) => code.name,
   PlatformException(:final code) => code,
   _ => error.runtimeType.toString(),
 };
