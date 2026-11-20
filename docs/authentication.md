@@ -4,12 +4,23 @@ Better Auth läuft als eigener Node-Dienst `auth` (`src/auth`). Angemeldete Clie
 
 ## Anmeldung
 
-1. `POST /api/auth/sign-in/email` mit E-Mail und Passwort: Der Header `set-auth-token` trägt das signierte Session-Token (Plugin `bearer` mit `requireSignature: true`).
+1. Anmelden, das signierte Session-Token steht nur im Header `set-auth-token` (Plugin `bearer` mit `requireSignature: true`, das Token im Body ist unsigniert):
+   - `POST /api/auth/sign-in/email` mit E-Mail und Passwort: Tests, lokale Clients und Nutzer aus `create-user`.
+   - `POST /api/auth/sign-in/social` mit `{"provider":"apple","idToken":{"token":<Identity-Token>,"nonce":<roher Nonce>}}`: die iOS-App ([Sign in with Apple](#sign-in-with-apple)).
 2. `GET /api/auth/token` mit `Authorization: Bearer <Session-Token>` liefert das JWT: ES256, 15 Minuten gültig, nur `sub` (Better-Auth-ID), `iss` (`BETTER_AUTH_URL`, eigener Endpunkt von `auth`), `aud` (`murmli-api`), `iat` und `exp`.
 3. API-Aufrufe mit `Authorization: Bearer <JWT>`, vor Ablauf ein neues JWT über Schritt 2.
 4. `POST /api/auth/sign-out`. Ohne Abmeldung gilt eine Session 7 Tage und verlängert sich bei Nutzung (Standard von Better Auth).
 
-Entschieden, noch nicht gebaut: Die App übernimmt diesen Ablauf, sobald sie eine Anmeldung bekommt, dann entfällt dieser Absatz. Bis dahin nutzen ihn nur `AuthenticationTests` und lokale Clients.
+Die App nutzt diesen Ablauf mit Sign in with Apple ([app.md](app.md#anmeldung)).
+
+## Sign in with Apple
+
+- Better Auths Apple-Provider prüft das Identity-Token: Signatur gegen Apples Schlüssel (`https://appleid.apple.com/auth/keys`, bei jeder Anmeldung abgerufen, ohne Cache), Issuer, Audience (`clientId`, gleich der Bundle-ID) und Alter höchstens 1 Stunde. Der Claim `nonce` muss dem rohen Nonce oder dessen SHA-256 (hex) gleichen: Die App schickt den Hash an Apple und den rohen Nonce an `auth`.
+- Better Auth vergibt keine Nonces, der Nonce verhindert also nicht, dass ein Token innerhalb der Stunde erneut verwendet wird.
+- Kein Client Secret, keine Services ID und kein Schlüssel nötig.
+- Die erste Anmeldung mit Apple legt den Nutzer an (`disableSignUp` gilt nur für die Registrierung per E-Mail): E-Mail aus dem Token (kann eine private Relay-Adresse sein), Name leer (die App fragt nur den Scope `email` an). Ein Token ohne E-Mail ergibt 401.
+- Implizite Verknüpfung (Standard von Better Auth): Eine Anmeldung mit Apple, deren bestätigte E-Mail der eines vorhandenen bestätigten Nutzers gleicht (etwa eines aus `create-user` in Dev), landet bei diesem Nutzer.
+- Better Auth speichert das Identity-Token in seiner Tabelle `account`, aber kein Refresh-Token, und widerruft nie bei Apple ([#51](https://github.com/Murmli/MurmliV2/issues/51)).
 
 ## Konfiguration
 
@@ -17,6 +28,7 @@ Entschieden, noch nicht gebaut: Die App übernimmt diesen Ablauf, sobald sie ein
 - `better-auth-secret` (`BETTER_AUTH_SECRET`) verschlüsselt die privaten Schlüssel in `jwks` und signiert die Session-Tokens. Ein neuer Wert machte die gespeicherten Schlüssel unlesbar und alle Sessions ungültig. Rotation ginge nur über `BETTER_AUTH_SECRETS` und bräuchte eine Änderung am AppHost.
 - `auth-service-key` (`AUTH_SERVICE_KEY`) ist das einzige, was `POST /service/delete-user` am öffentlichen Ingress schützt. Er lässt sich jederzeit ersetzen, der neue Wert wirkt mit dem nächsten Deploy.
 - `RequireHttpsMetadata=false` bekommt die API nur im Run-Mode, weil `auth` lokal nur http spricht.
+- `AddAuth()` setzt `APPLE_BUNDLE_IDENTIFIER` aus `Apple:BundleIdentifier` (`appsettings.Development.json` für `aspire run` und Tests, `appsettings.azure-<name>.json` pro Umgebung), derzeit überall `de.murmli.app.dev`, das sich die Flavors `local` und `development` teilen. Fehlt der Wert oder ist er leer, wirft der AppHost.
 
 ## Dienst `auth`
 
@@ -34,6 +46,7 @@ Entschieden, noch nicht gebaut: Die App übernimmt diesen Ablauf, sobald sie ein
 
 - Lokal: Im Run-Mode legt `auth` beim Start `test@murmli.de` mit Passwort `password` an, wenn er fehlt (Postgres läuft ohne Volume).
 - Azure (nur ein Mensch): `az containerapp exec --name auth --resource-group rg-murmli-dev --command sh`, darin `npm run create-user -- <email> <name>` (fragt das Passwort ab).
+- Apple: Better Auth legt den Nutzer bei der ersten Anmeldung an ([Sign in with Apple](#sign-in-with-apple)).
 
 ## Datenmodell
 
@@ -67,6 +80,7 @@ Konto-Id siehe [telemetry.md](telemetry.md#konto-id), `auth` siehe [telemetry.md
 - `TestTokens` signieren mit einem zufälligen symmetrischen Schlüssel über `SigningKeys` statt `MetadataAddress`, so läuft der echte Prüfpfad ohne Metadatenabruf. `exp` und `nbf` kommen aus der echten Zeit, weil JwtBearer die Systemuhr nutzt, nicht den `FakeTimeProvider` von `ApiHost`.
 - Die Span-Listener von `ApiHost` sind prozessweit: Die Liste enthält auch Spans parallel laufender Hosts und ist erst nach dem Entsorgen des Hosts vollständig. Tests werten sie danach aus und finden ihre Anfrage über eine eigene Trace-ID im `traceparent`.
 - Die Tests einer Collection in `Murmli.Backend.Aspire.Tests` teilen sich eine `AppHostFixture`, damit Aspires npm-Installer nie parallel läuft.
+- `AuthenticationTests` zeigt auch, dass der Apple-Provider konfiguriert ist: Ein ungültiges Identity-Token ergibt 401 statt 404, ohne Apple anzufragen. `Auth/ExtensionsTests` prüft, dass die Bundle-ID bei `auth` ankommt und der AppHost ohne sie wirft.
 
 ## Entscheidungen
 
@@ -88,5 +102,9 @@ Konto-Id siehe [telemetry.md](telemetry.md#konto-id), `auth` siehe [telemetry.md
 | Timeout von 10 s trotz Scale to Zero von `auth` | Akzeptiert: In Dev kann die erste Löschung nach einer Pause am Kaltstart scheitern (502, wiederholbar). Entschieden, noch nicht gebaut: In Produktion läuft `auth` mit mindestens einer Replica, die Notiz entfällt, sobald der AppHost das für eine Produktionsumgebung setzt. |
 | Löschung ohne `RequestAborted` | Eine begonnene Löschung soll durchlaufen, auch wenn sich die App direkt schließt. Das gilt auch für den Abruf der Konto-Id in `UserTelemetryMiddleware` vor jedem Endpunkt, sonst begänne die Löschung nie (eine einzelne Index-Abfrage, ein Abbruch spart nichts). Verworfen: `RequestAborted` nur bei `DELETE` ignorieren, das müsste bei jedem neuen Endpunkt mitgedacht werden. |
 | Telemetrie bleibt beim Löschen erhalten | Sie läuft mit der Aufbewahrungsfrist aus, die zufällige Id verliert ihre Zuordnung mit dem Konto. Verworfen: gezieltes Entfernen, unverhältnismäßig für pseudonyme Daten. |
-| Nutzer in Azure per `npm run create-user`, Registrierung aus | Nur für Dev, deshalb ohne verdeckte Passworteingabe und ohne Prüfung der E-Mail. Entschieden, noch nicht gebaut: In Produktion gibt es nur die Anmeldung mit Google und Apple ohne Passwort-Nutzer, die Notiz entfällt mit dieser Anmeldung. Verworfen: Admin-Plugin, zeitweise offene Registrierung, lokales Skript gegen Postgres in Azure (die Firewall lässt nur Azure zu). |
+| Nutzer in Azure per `npm run create-user`, Registrierung per E-Mail aus | Nur für Dev, deshalb ohne verdeckte Passworteingabe und ohne Prüfung der E-Mail. Entschieden, noch nicht gebaut: In Produktion gibt es nur die Anmeldung mit Apple und Google ([#53](https://github.com/Murmli/MurmliV2/issues/53)), ohne Passwort-Nutzer, die Notiz entfällt, sobald eine Produktionsumgebung ohne Anmeldung per E-Mail läuft. Verworfen: Admin-Plugin, zeitweise offene Registrierung, lokales Skript gegen Postgres in Azure (die Firewall lässt nur Azure zu). |
+| Sign in with Apple über das Identity-Token des nativen Dialogs, ohne Client Secret | Verworfen: Better Auths Redirect-Ablauf, braucht Services ID, Schlüssel und eine öffentliche Redirect-URL und öffnet einen Browser statt des nativen Dialogs. |
+| Apple nur auf iOS, Google nur auf Android | Apple auf Android bräuchte den Web-Ablauf mit Services ID, Schlüssel, eigenem Redirect-Endpunkt in `auth` und einem Custom Tab statt eines nativen Dialogs. Folge: Ein mit Apple angelegtes Konto ist auf Android nicht per Apple erreichbar. |
+| Nur der Scope `email` | Murmli nutzt den Namen von Apple nicht, einen Namen fragt die App selbst ab (frei wählbares Pseudonym, entschieden, noch nicht gebaut). Apple liefert den Namen ohnehin nur bei der ersten Autorisierung. |
+| Authorization Code von Apple vorerst nicht eingelöst | Das Einlösen gegen ein Refresh-Token braucht Schlüssel und Client Secret, Better Auths Weg über das Identity-Token kann es nicht. Bis dahin angelegte Konten lassen sich nur in den Apple-Einstellungen trennen. Entschieden, noch nicht gebaut: Einlösen mit [#51](https://github.com/Murmli/MurmliV2/issues/51), dann entfällt diese Zeile. |
 | `--omit=dev` nur im Publish-Mode | Aspire 13.6.5 erzeugt für `AddNodeApp` keine eigene Stage für Produktions-Abhängigkeiten. Im Run-Mode entfernte Aspires Installer damit Biome und tsc aus `src/auth/node_modules`. Verworfen: eigenes Dockerfile in `src/auth` (schaltet die Generierung ab), `WithDockerfileBuilder` (experimentell). |
