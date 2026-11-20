@@ -14,7 +14,7 @@ Flutter-App in `src/app` (Pfade unten relativ dazu). Signieren und Auslieferung 
 - `local` braucht ein laufendes `aspire run` ([AGENTS.md](../AGENTS.md#aspire-und-azure)) und läuft nur im Simulator bzw. Emulator, auf echten Geräten gegen `development` testen.
 - Ab targetSdk 37 (Android 17) braucht `local` für `10.0.2.2` die Berechtigung für das lokale Netzwerk ([Local network permission](https://developer.android.com/privacy-and-security/local-network-permission)). Heute gilt Flutters Standard-targetSdk 36.
 - `development` nutzt die Standard-Domain der Container-Apps-Umgebung. Wird die Umgebung neu angelegt, ändert sie sich, dann `AppEndpoints` und diese Tabelle anpassen.
-- `production` hat bis zum Release keine Adressen, sie zu lesen wirft `UnimplementedError`, bewusst ohne Prüfung beim Start oder Build. Entfällt, sobald es mit dem Release Werte gibt.
+- `production` hat bis zum Release keine Adressen und keinen Google-Client ([Anmeldung](#anmeldung)), beides zu lesen wirft `UnimplementedError`, bewusst ohne Prüfung beim Start oder Build. Entfällt, sobald es mit dem Release Werte gibt.
 - Flavor-Namen sind klein und ohne `-`, weil Flutter den Flavor auf iOS aus dem Teil nach dem `-` im Namen der Configuration ableitet und `flavorProvider` den Namen per `byName` auf `Flavor` abbildet.
 
 ## Starten und Bauen
@@ -37,17 +37,19 @@ Flutter-App in `src/app` (Pfade unten relativ dazu). Signieren und Auslieferung 
 Welche Anmeldung die Onboarding-Seite zeigt, hängt von Flavor und Plattform ab (`SignInOptions`):
 
 - `local`: auf iOS und Android nur das Formular für E-Mail und Passwort direkt auf der Onboarding-Seite, weder Apple noch Google. Test-Nutzer für `aspire run`: [authentication.md](authentication.md#nutzer-anlegen).
-- `development` und `production`: Apple nur auf iOS, per `SignInWithAppleButton` des Pakets nach Apples HIG (schwarz, im Dark Mode weiß, Titel „Mit Apple fortfahren“), Google nur auf Android, nie das Formular. Entschieden, noch nicht gebaut: die Anmeldung mit Google ([#53](https://github.com/Murmli/MurmliV2/issues/53)), bis dahin kann man sich auf Android nicht anmelden, der Satz entfällt mit ihr.
+- `development` und `production`: Apple nur auf iOS, per `SignInWithAppleButton` des Pakets nach Apples HIG (schwarz, im Dark Mode weiß, Titel „Mit Apple fortfahren“), Google nur auf Android, mit dem offiziellen „G“ (`assets/images/google_logo.png`) und dem Titel „Weiter mit Google“ als `OutlinedButton` im Stil des Themes (Schrift und Farben nicht nach Googles Branding-Richtlinien), nie das Formular.
 
 Ablauf (Endpunkte in [authentication.md](authentication.md#anmeldung)):
 
 1. Anmelden bei `auth` über `authClientProvider`, eine eigene dio-Instanz ohne die Interceptors der API:
    - Apple (`signInWithApple`): Apple-Dialog ohne Scopes mit dem SHA-256 eines zufälligen Nonce, dann Identity-Token und roher Nonce an `auth`.
+   - Google (`signInWithGoogle`): `google_sign_in_android` zeigt über den Credential Manager Googles nativen Dialog des Button-Ablaufs (`GetSignInWithGoogleOption`, nicht das Bottom Sheet), ohne Nonce, dann das ID-Token an `auth`. Die `serverClientId` (Web-Client-ID, [authentication.md](authentication.md#sign-in-with-google)) steht pro Flavor im Switch `_googleServerClientIdOf` in `signed_in_account_provider.dart`, `production` wirft dort bis zum Release ([Flavors](#flavors)). Die Initialisierung läuft einmal pro Prozess.
    - E-Mail und Passwort (`signInWithEmail`): beide an `auth`.
 2. Mit dem Session-Token aus `set-auth-token` das JWT holen, mit diesem `GET /v1/users/me` aufrufen.
 3. `signedInAccountProvider` hält das Konto. Solange keins angemeldet ist, schickt `SignInGuard` jede geschützte Route auf die Onboarding-Seite.
 
-- Abbruch im Apple-Dialog zeigt nichts, 401 oder 400 auf die Anmeldung mit E-Mail und Passwort (`invalidCredentials`) die Snackbar zu falschen Anmeldedaten, ein anderer Fehler bei Apple oder `auth` die allgemeine Snackbar, ein Fehler der API nur den globalen Fehlerdialog.
+- Abbruch im Dialog von Apple oder Google zeigt nichts, 401 oder 400 auf die Anmeldung mit E-Mail und Passwort (`invalidCredentials`) die Snackbar zu falschen Anmeldedaten, ein anderer Fehler bei Apple, Google oder `auth` die allgemeine Snackbar, ein Fehler der API nur den globalen Fehlerdialog.
+- Ein falscher SHA-1 oder Paketname im Android-Client bei Google kommt nach der Kontoauswahl als Abbruch an (für das Plugin nicht von einem Abbruch durch den Nutzer zu unterscheiden), es passiert also nichts. Das gilt auch für Debug-Builds ([authentication.md](authentication.md#sign-in-with-google)).
 - Bis [#54](https://github.com/Murmli/MurmliV2/issues/54) liegt nur das Konto im Speicher, nach einem Neustart meldet man sich erneut an, dann entfällt dieser Punkt.
 - Die Onboarding-Seite ist die Anmeldeseite, ein eigenes Onboarding-Flag gibt es nicht.
 - Sign in with Apple braucht ein Gerät mit Apple Account mit Zwei-Faktor-Authentifizierung. Der Simulator ist derzeit unzuverlässig (Apple-Feedback FB25318712), auf einem Gerät testen.
@@ -72,7 +74,7 @@ Ablauf (Endpunkte in [authentication.md](authentication.md#anmeldung)):
 - `createContainer` (und damit `pumpApp`) setzt einen Talker ohne Konsolenausgabe ein (Logs über `history` prüfen). Was an Sentry geht, prüft `startRecordingSentry`: Sentry rein in Dart mit einem Transport, der Envelopes aufzeichnet.
 - Tests ersetzen den Adapter der Instanzen aus `apiClientProvider` und `authClientProvider` durch `RecordingHttpClientAdapter`. Nur der Test, dass Requests keine Trace-Header von Sentry tragen, behält dios echten Adapter und leitet per `HttpOverrides` an einen `HttpServer` auf Loopback: Header, die eine Sentry-Integration wie `sentry_dio` im Adapter setzt, sähe `RecordingHttpClientAdapter` nicht.
 - Widget-Tests hängen die Erwartung an einen Request per `expectLater` vor `tester.pumpAndSettle()` an und warten erst danach auf sie: dio arbeitet über Timer, die unter `FakeAsync` nur beim Pumpen laufen. Direkt gewartet hängt der Test, eine erst nach dem Pumpen angehängte Erwartung meldet den Fehler als unbehandelt.
-- Den Apple-Dialog ersetzt `FakeSignInWithApplePlatform` über `SignInWithApplePlatform.instance`. Angemeldet starten Tests über `signedInAccount` von `createContainer` bzw. `pumpApp`.
+- Den Apple-Dialog ersetzt `FakeSignInWithApplePlatform` über `SignInWithApplePlatform.instance`, den von Google `FakeGoogleSignInPlatform` über `GoogleSignInPlatform.instance` (`installFakeGoogleSignIn` in `test/helpers/google_sign_in.dart` setzt nach dem Test die vorige Instanz zurück). Angemeldet starten Tests über `signedInAccount` von `createContainer` bzw. `pumpApp`.
 - `flutter test` läuft als Android. Widget-Tests für eine Plattform setzen sie per `variant: TargetPlatformVariant.only(...)`, das `debugDefaultTargetPlatformOverride` setzt und auch nach einem Fehlschlag zurücksetzt.
 
 ## Entscheidungen
@@ -86,9 +88,10 @@ Ablauf (Endpunkte in [authentication.md](authentication.md#anmeldung)):
 | `local` und `development` teilen `de.murmli.app.dev` | Die Pipeline baut `local` nie, eine eigene ID kostete App ID und App-Eintrag bei Apple und eine App in der Play Console. |
 | Android-Emulator über `10.0.2.2` statt `adb reverse` | `adb reverse` geht bei jedem Neustart des Emulators verloren. |
 | Keine Timeouts in `apiClientProvider` und `authClientProvider` | API und `auth` skalieren in Dev auf null, ein Antwort-Timeout müsste den Kaltstart abdecken, gemessen ist noch keiner. Die Anmeldung zeigt ihren Fortschritt, bis eine Antwort kommt. |
-| Im Flavor `local` nur E-Mail und Passwort, sonst nur Apple bzw. Google | `local` läuft nur im Simulator bzw. Emulator ([Flavors](#flavors)), dort ist Sign in with Apple unzuverlässig, und Google bräuchte einen Google-Client im lokalen `auth`. Apple nur auf iOS, Google nur auf Android siehe [authentication.md](authentication.md#entscheidungen). |
+| Im Flavor `local` nur E-Mail und Passwort, sonst nur Apple bzw. Google | `local` läuft nur im Simulator bzw. Emulator ([Flavors](#flavors)), dort ist Sign in with Apple unzuverlässig, und Google bräuchte im Google-Cloud-Projekt einen Android-Client für den Debug-Schlüssel jedes Entwicklers. Apple nur auf iOS, Google nur auf Android siehe [authentication.md](authentication.md#entscheidungen). |
 | Formular direkt auf der Onboarding-Seite statt eigener Route | In `local` gibt es nichts anderes zu wählen, eine eigene Route kostete bei jedem Start einen Tipp mehr. |
-| Fake über `SignInWithApplePlatform` statt eigener Hülle um `SignInWithApple` | Eine Hülle nur für Tests wäre Test-only-Code in Produktion. |
+| Fakes über `SignInWithApplePlatform` und `GoogleSignInPlatform` statt eigener Hüllen | Eine Hülle nur für Tests wäre Test-only-Code in Produktion. |
+| Nur `google_sign_in_android` samt `google_sign_in_platform_interface` statt `google_sign_in` | `google_sign_in` bringt `google_sign_in_ios` mit, das das GoogleSignIn-SDK in die iOS-App linkt, obwohl iOS nur Apple anbietet. Die App ruft deshalb `GoogleSignInPlatform.instance` direkt auf, auf iOS bleibt dort der nie aufgerufene Platzhalter. Bietet die App Google später auch auf iOS an, wechselt die Abhängigkeit zu `google_sign_in`, und die beiden Aufrufe werden `GoogleSignIn.instance.initialize` bzw. `authenticate`. Der Test-Fake bleibt, weil auch `google_sign_in` an `GoogleSignInPlatform.instance` delegiert. iOS braucht dann zusätzlich einen iOS-OAuth-Client sowie `GIDClientID` und ein URL-Schema in der `Info.plist`. |
 | `traceparent` aus eigenem Code statt einer OpenTelemetry-Bibliothek | Ein offizielles OpenTelemetry-SDK für Dart gibt es noch nicht. Spans aus der App gehören zu [Murmli/BackOffice#7](https://github.com/Murmli/BackOffice/issues/7). |
 | Sampled-Flag `01` | Der Support-Code soll immer auf einen aufgezeichneten Trace führen, ohne von der Sonderregel der API für `00` abzuhängen. |
 | Eigener Interceptor statt `talker_dio_logger` | `talker_dio_logger` (Stand 5.2.0) loggt die volle URL samt Query, standardmäßig Bodies und bei Fehlern Header, die Trace-ID nie in Antwort- und Fehler-Logs. |

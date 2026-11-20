@@ -6,22 +6,34 @@ Better Auth läuft als eigener Node-Dienst `auth` (`src/auth`). Angemeldete Clie
 
 1. Anmelden, das signierte Session-Token steht nur im Header `set-auth-token` (Plugin `bearer` mit `requireSignature: true`, das Token im Body ist unsigniert):
    - `POST /api/auth/sign-in/email` mit E-Mail und Passwort: die App im Flavor `local`, Tests, andere lokale Clients und Nutzer aus `create-user`.
-   - `POST /api/auth/sign-in/social` mit `{"provider":"apple","idToken":{"token":<Identity-Token>,"nonce":<roher Nonce>}}`: die iOS-App außer im Flavor `local` ([Sign in with Apple](#sign-in-with-apple)).
+   - `POST /api/auth/sign-in/social` mit `{"provider":"apple","idToken":{"token":<Identity-Token>,"nonce":<roher Nonce>}}` aus der iOS-App bzw. `{"provider":"google","idToken":{"token":<ID-Token>}}` aus der Android-App, beide außer im Flavor `local` ([Apple und Google](#apple-und-google)).
 2. `GET /api/auth/token` mit `Authorization: Bearer <Session-Token>` liefert das JWT: ES256, 15 Minuten gültig, nur `sub` (Better-Auth-ID), `iss` (`BETTER_AUTH_URL`, eigener Endpunkt von `auth`), `aud` (`murmli-api`), `iat` und `exp`.
 3. API-Aufrufe mit `Authorization: Bearer <JWT>`, vor Ablauf ein neues JWT über Schritt 2.
 4. `POST /api/auth/sign-out`. Ohne Abmeldung gilt eine Session 7 Tage und verlängert sich bei Nutzung (Standard von Better Auth).
 
 Welche Anmeldung die App je nach Flavor und Plattform zeigt, steht in [app.md](app.md#anmeldung).
 
-## Sign in with Apple
+## Apple und Google
 
-- Better Auths Apple-Provider prüft das Identity-Token: Signatur gegen Apples Schlüssel (`https://appleid.apple.com/auth/keys`, bei jeder Anmeldung abgerufen, ohne Cache), Issuer, Audience (`clientId`, gleich der Bundle-ID) und Alter höchstens 1 Stunde. Der Claim `nonce` muss dem rohen Nonce oder dessen SHA-256 (hex) gleichen: Die App schickt den Hash an Apple und den rohen Nonce an `auth`.
-- Better Auth vergibt keine Nonces, der Nonce verhindert also nicht, dass ein Token innerhalb der Stunde erneut verwendet wird.
-- Kein Client Secret, keine Services ID und kein Schlüssel nötig.
-- Die erste Anmeldung mit Apple legt den Nutzer an (`disableSignUp` gilt nur für die Registrierung per E-Mail), mit leerem Namen: Die App fragt bei Apple keine Scopes an.
-- Better Auth verlangt eine E-Mail pro Nutzer und lehnt die Anmeldung sonst mit 401 ab. `mapProfileToUser` setzt deshalb immer den Platzhalter `<sub>@apple.placeholder.invalid` (Muster aus Better Auths Doku „Handling Providers Without Email“), nie eine E-Mail aus dem Token. An die reservierte Domain `.invalid` wird nie zugestellt.
-- Der Platzhalter ist pro Apple-Nutzer eindeutig, Better Auth verknüpft eine Anmeldung mit Apple deshalb nie implizit per E-Mail mit einem anderen Nutzer.
-- Better Auth speichert das Identity-Token in seiner Tabelle `account`, aber kein Refresh-Token, und widerruft nie bei Apple ([#51](https://github.com/Murmli/MurmliV2/issues/51)).
+- Better Auths Provider prüft das ID-Token (bei Apple Identity-Token): Signatur gegen die Schlüssel des Anbieters (bei jeder Anmeldung abgerufen, ohne Cache), Issuer, Audience (`clientId`) und Alter höchstens 1 Stunde. Kein Client Secret nötig.
+- Better Auth vergibt keine Nonces, ein Token lässt sich also innerhalb der Stunde erneut verwenden, auch mit Apples Nonce.
+- Die erste Anmeldung legt den Nutzer an (`disableSignUp` gilt nur für die Registrierung per E-Mail), mit leerem Namen.
+- Better Auth verlangt eine E-Mail pro Nutzer (ohne lehnt es die Anmeldung mit 401 ab), Murmli speichert aber keine E-Mail, keinen Namen und kein Bild der Anbieter. `mapProfileToUser` setzt deshalb immer den Platzhalter `<sub>@apple.placeholder.invalid` bzw. `<sub>@google.placeholder.invalid` (Muster aus Better Auths Doku „Handling Providers Without Email“), nie eine E-Mail aus dem Token, bei Google zusätzlich leeren Namen, kein Bild und `emailVerified` false (Googles ID-Token trägt E-Mail, Name und Bild). An die reservierte Domain `.invalid` wird nie zugestellt.
+- Der Platzhalter ist pro Konto beim Anbieter eindeutig, Better Auth verknüpft eine Anmeldung deshalb nie implizit per E-Mail mit einem anderen Nutzer.
+- Die `databaseHooks` für `account` setzen `idToken` bei jedem Anlegen und Ändern auf `NULL`: Better Auth speichert kein ID-Token der Anbieter ([Entscheidungen](#entscheidungen)) und kein Refresh-Token, und es widerruft nie beim Anbieter (Apple: [#51](https://github.com/Murmli/MurmliV2/issues/51)).
+
+### Sign in with Apple
+
+- Audience ist die Bundle-ID (`Apple:BundleIdentifier`), Schlüssel von `https://appleid.apple.com/auth/keys`.
+- Der Claim `nonce` muss dem rohen Nonce oder dessen SHA-256 (hex) gleichen: Die App schickt den Hash an Apple und den rohen Nonce an `auth`.
+- Keine Services ID und kein Schlüssel nötig. Die App fragt bei Apple keine Scopes an.
+
+### Sign in with Google
+
+- Audience ist die Web-Client-ID (`Google:WebClientId`, kein Geheimnis), die die App als `serverClientId` an Google gibt, Schlüssel von `https://www.googleapis.com/oauth2/v3/certs`. Ohne Nonce ([Entscheidungen](#entscheidungen)).
+- Einrichtung bei Google (nur ein Mensch): Google-Cloud-Projekt „Murmli Dev“, getrennt von „Murmli Google Play“ mit dem Service-Account für Uploads ([google-play.md](google-play.md#einrichtung-bei-google-play)). Darin die Google Auth Platform mit Zielgruppe „Extern“ im Status „Testing“ (Sign in with Google mit Basisdaten braucht keine Testnutzer), ein Web-Client, dessen ID `Google:WebClientId` ist, und Android-Clients für `de.murmli.app.dev` mit dem SHA-1 des App-Signaturschlüssels von Google Play und dem des Upload-Schlüssels, keiner für Debug-Schlüssel.
+- Mit einem Debug-Schlüssel signierte Builds (etwa `fvm flutter run --flavor development`) können sich deshalb nicht mit Google anmelden, nur Installationen aus dem internen Test und mit dem Upload-Schlüssel signierte Builds ([app.md](app.md#anmeldung)).
+- Entschieden, noch nicht eingerichtet: Produktion bekommt ein eigenes Google-Cloud-Projekt, weil Googles OAuth-Richtlinien getrennte Projekte für Test und Produktion verlangen. Der Punkt entfällt, sobald es eingerichtet ist und hier steht.
 
 ## Konfiguration
 
@@ -29,7 +41,7 @@ Welche Anmeldung die App je nach Flavor und Plattform zeigt, steht in [app.md](a
 - `better-auth-secret` (`BETTER_AUTH_SECRET`) verschlüsselt die privaten Schlüssel in `jwks` und signiert die Session-Tokens. Ein neuer Wert machte die gespeicherten Schlüssel unlesbar und alle Sessions ungültig. Rotation ginge nur über `BETTER_AUTH_SECRETS` und bräuchte eine Änderung am AppHost.
 - `auth-service-key` (`AUTH_SERVICE_KEY`) ist das einzige, was `POST /service/delete-user` am öffentlichen Ingress schützt. Er lässt sich jederzeit ersetzen, der neue Wert wirkt mit dem nächsten Deploy.
 - `RequireHttpsMetadata=false` bekommt die API nur im Run-Mode, weil `auth` lokal nur http spricht.
-- `AddAuth()` setzt `APPLE_BUNDLE_IDENTIFIER` aus `Apple:BundleIdentifier` (`appsettings.Development.json` für `aspire run` und Tests, `appsettings.azure-<name>.json` pro Umgebung), derzeit überall `de.murmli.app.dev` (Flavor `development`). Fehlt der Wert oder ist er leer, wirft der AppHost.
+- `AddAuth()` setzt `APPLE_BUNDLE_IDENTIFIER` aus `Apple:BundleIdentifier` und `GOOGLE_WEB_CLIENT_ID` aus `Google:WebClientId` (`appsettings.Development.json` für `aspire run` und Tests, `appsettings.azure-<name>.json` pro Umgebung), derzeit überall `de.murmli.app.dev` (Flavor `development`) bzw. der Web-Client aus dem Google-Cloud-Projekt „Murmli Dev“. Fehlt ein Wert oder ist er leer, wirft der AppHost.
 
 ## Dienst `auth`
 
@@ -47,7 +59,7 @@ Welche Anmeldung die App je nach Flavor und Plattform zeigt, steht in [app.md](a
 
 - Lokal: Im Run-Mode legt `auth` beim Start `test@murmli.de` mit Passwort `password` an, wenn er fehlt (Postgres läuft ohne Volume).
 - Azure (nur ein Mensch): `az containerapp exec --name auth --resource-group rg-murmli-dev --command sh`, darin `npm run create-user -- <email> <name>` (fragt das Passwort ab).
-- Apple: Better Auth legt den Nutzer bei der ersten Anmeldung an ([Sign in with Apple](#sign-in-with-apple)).
+- Apple und Google: Better Auth legt den Nutzer bei der ersten Anmeldung an ([Apple und Google](#apple-und-google)).
 
 ## Datenmodell
 
@@ -81,7 +93,7 @@ Konto-Id siehe [telemetry.md](telemetry.md#konto-id), `auth` siehe [telemetry.md
 - `TestTokens` signieren mit einem zufälligen symmetrischen Schlüssel über `SigningKeys` statt `MetadataAddress`, so läuft der echte Prüfpfad ohne Metadatenabruf. `exp` und `nbf` kommen aus der echten Zeit, weil JwtBearer die Systemuhr nutzt, nicht den `FakeTimeProvider` von `ApiHost`.
 - Die Span-Listener von `ApiHost` sind prozessweit: Die Liste enthält auch Spans parallel laufender Hosts und ist erst nach dem Entsorgen des Hosts vollständig. Tests werten sie danach aus und finden ihre Anfrage über eine eigene Trace-ID im `traceparent`.
 - Die Tests einer Collection in `Murmli.Backend.Aspire.Tests` teilen sich eine `AppHostFixture`, damit Aspires npm-Installer nie parallel läuft.
-- `AuthenticationTests` zeigt auch, dass der Apple-Provider konfiguriert ist: Ein ungültiges Identity-Token ergibt 401 statt 404, ohne Apple anzufragen. `Auth/ExtensionsTests` prüft, dass die Bundle-ID bei `auth` ankommt und der AppHost ohne sie wirft.
+- `AuthenticationTests` zeigt auch, dass die Provider für Apple und Google konfiguriert sind: Ein ungültiges ID-Token ergibt jeweils 401 statt 404, ohne den Anbieter anzufragen. `Auth/ExtensionsTests` prüft, dass Bundle-ID und Web-Client-ID bei `auth` ankommen und der AppHost ohne sie wirft.
 
 ## Entscheidungen
 
@@ -103,9 +115,11 @@ Konto-Id siehe [telemetry.md](telemetry.md#konto-id), `auth` siehe [telemetry.md
 | Timeout von 10 s trotz Scale to Zero von `auth` | Akzeptiert: In Dev kann die erste Löschung nach einer Pause am Kaltstart scheitern (502, wiederholbar). Entschieden, noch nicht gebaut: In Produktion läuft `auth` mit mindestens einer Replica, die Notiz entfällt, sobald der AppHost das für eine Produktionsumgebung setzt. |
 | Löschung ohne `RequestAborted` | Eine begonnene Löschung soll durchlaufen, auch wenn sich die App direkt schließt. Das gilt auch für den Abruf der Konto-Id in `UserTelemetryMiddleware` vor jedem Endpunkt, sonst begänne die Löschung nie (eine einzelne Index-Abfrage, ein Abbruch spart nichts). Verworfen: `RequestAborted` nur bei `DELETE` ignorieren, das müsste bei jedem neuen Endpunkt mitgedacht werden. |
 | Telemetrie bleibt beim Löschen erhalten | Sie läuft mit der Aufbewahrungsfrist aus, die zufällige Id verliert ihre Zuordnung mit dem Konto. Verworfen: gezieltes Entfernen, unverhältnismäßig für pseudonyme Daten. |
-| Nutzer in Azure per `npm run create-user`, Registrierung per E-Mail aus | Nur für Dev, deshalb ohne verdeckte Passworteingabe und ohne Prüfung der E-Mail. Die App bietet die Anmeldung per E-Mail nur im Flavor `local` an, diese Nutzer melden sich deshalb nur mit anderen Clients an (etwa Bruno). Entschieden, noch nicht gebaut: In Produktion gibt es nur die Anmeldung mit Apple und Google ([#53](https://github.com/Murmli/MurmliV2/issues/53)), ohne Passwort-Nutzer, die Notiz entfällt, sobald eine Produktionsumgebung ohne Anmeldung per E-Mail läuft. Verworfen: Admin-Plugin, zeitweise offene Registrierung, lokales Skript gegen Postgres in Azure (die Firewall lässt nur Azure zu). |
-| Sign in with Apple über das Identity-Token des nativen Dialogs, ohne Client Secret | Verworfen: Better Auths Redirect-Ablauf, braucht Services ID, Schlüssel und eine öffentliche Redirect-URL und öffnet einen Browser statt des nativen Dialogs. |
-| Apple nur auf iOS, Google nur auf Android (im Flavor `local` keins von beiden, siehe [app.md](app.md#entscheidungen)) | Apple auf Android bräuchte den Web-Ablauf mit Services ID, Schlüssel, eigenem Redirect-Endpunkt in `auth` und einem Custom Tab statt eines nativen Dialogs. Folge: Ein mit Apple angelegtes Konto ist auf Android nicht per Apple erreichbar. |
-| Keine Scopes bei Apple, Platzhalter-E-Mail | Murmli braucht von Apple weder Namen noch E-Mail. Den Namen fragt die App selbst ab, als frei wählbares Pseudonym (entschieden, noch nicht gebaut, der Vermerk entfällt, sobald die App den Namen abfragt). Braucht Murmli doch eine E-Mail, bekommen neue Nutzer den Scope `email` bei Apple und Google, vorhandene tragen sie in der App ein: Apple fragt Name und E-Mail nur bei der ersten Autorisierung ab. Verworfen: der Scope `email`, er speicherte eine echte oder eine Relay-Adresse, die Murmli nicht nutzt. |
+| Nutzer in Azure per `npm run create-user`, Registrierung per E-Mail aus | Nur für Dev, deshalb ohne verdeckte Passworteingabe und ohne Prüfung der E-Mail. Die App bietet die Anmeldung per E-Mail nur im Flavor `local` an, diese Nutzer melden sich deshalb nur mit anderen Clients an (etwa Bruno). Entschieden, noch nicht gebaut: eine Produktionsumgebung nur mit der Anmeldung über Apple und Google, ohne Passwort-Nutzer, die Notiz entfällt, sobald sie läuft. Verworfen: Admin-Plugin, zeitweise offene Registrierung, lokales Skript gegen Postgres in Azure (die Firewall lässt nur Azure zu). |
+| Apple und Google über das ID-Token des nativen Dialogs, ohne Client Secret | Verworfen: Better Auths Redirect-Ablauf, braucht ein Client Secret (bei Apple aus Services ID und Schlüssel) und eine öffentliche Redirect-URL und öffnet einen Browser statt des nativen Dialogs. |
+| Apple nur auf iOS, Google nur auf Android (im Flavor `local` keins von beiden, siehe [app.md](app.md#entscheidungen)) | Apple auf Android bräuchte den Web-Ablauf mit Services ID, Schlüssel, eigenem Redirect-Endpunkt in `auth` und einem Custom Tab statt eines nativen Dialogs. Google auf iOS bräuchte einen iOS-Client bei Google und das GoogleSignIn-SDK in der App. Folge: Ein mit Apple angelegtes Konto ist auf Android nicht erreichbar, ein mit Google angelegtes nicht auf iOS. |
+| Keine Scopes bei Apple, Platzhalter-E-Mail bei Apple und Google | Murmli braucht von den Anbietern weder Namen noch E-Mail noch Bild. Den Namen fragt die App selbst ab, als frei wählbares Pseudonym (entschieden, noch nicht gebaut, der Vermerk entfällt, sobald die App den Namen abfragt). Braucht Murmli doch eine E-Mail, bekommen neue Nutzer den Scope `email` bei Apple, bei Google übernimmt `mapProfileToUser` sie aus dem ID-Token (vorhandene Google-Nutzer nur mit `overrideUserInfoOnSignIn`, bei ihrer nächsten Anmeldung), vorhandene Apple-Nutzer tragen sie in der App ein: Apple fragt Name und E-Mail nur bei der ersten Autorisierung ab. Verworfen: der Scope `email` bei Apple, er speicherte eine echte oder eine Relay-Adresse, die Murmli nicht nutzt. |
+| Google ohne Nonce | Den Nonce nimmt nur `init` an, das laut Vertrag von `google_sign_in` genau einmal läuft (`google_sign_in_android` 7.2.19 prüft das nicht), alle Anmeldungen bis zum Neustart trügen also denselben. Weil Better Auth keine Nonces vergibt, verhinderte auch ein frischer nicht, dass ein Token erneut verwendet wird. |
+| Keine ID-Tokens der Anbieter speichern (`databaseHooks` für `account`) | Googles ID-Token trägt E-Mail, Name und Bild, Murmli speichert nichts davon. Better Auth braucht das gespeicherte Token nicht: Die Anmeldung prüft das Token der Anfrage, gelesen wird es nur beim Abmelden über `createEndSessionURL` (kann kein eingebauter Provider), beim Erneuern über `/refresh-token` (braucht ein Refresh-Token, das der native Ablauf nie speichert) und von `/get-access-token`, das es dem angemeldeten Nutzer nur zurückgibt (die App ruft es nie auf). Verworfen: `account.encryptOAuthTokens`, verschlüsselt in Better Auth 1.7.25 nur Access- und Refresh-Token, nicht `idToken`. |
 | Authorization Code von Apple vorerst nicht eingelöst | Das Einlösen gegen ein Refresh-Token braucht Schlüssel und Client Secret, Better Auths Weg über das Identity-Token kann es nicht. Bis dahin angelegte Konten lassen sich nur in den Apple-Einstellungen trennen. Entschieden, noch nicht gebaut: Einlösen mit [#51](https://github.com/Murmli/MurmliV2/issues/51), dann entfällt diese Zeile. |
 | `--omit=dev` nur im Publish-Mode | Aspire 13.6.5 erzeugt für `AddNodeApp` keine eigene Stage für Produktions-Abhängigkeiten. Im Run-Mode entfernte Aspires Installer damit Biome und tsc aus `src/auth/node_modules`. Verworfen: eigenes Dockerfile in `src/auth` (schaltet die Generierung ab), `WithDockerfileBuilder` (experimentell). |
