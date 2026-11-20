@@ -30,7 +30,7 @@ Der iOS-Job von `build-app.yml` läuft auf macOS und signiert in jedem Lauf, bei
 
 ## Upload nach TestFlight
 
-`deliver-app.yml` läuft nur bei Push auf `main`, nach `lint`, `test`, `build-app` und `vulnerability-scan` und parallel zu `deploy`. Sein Job iOS läuft auf macOS, Ruby und fastlane kommen wie beim [Build](#build-in-der-ci) aus `src/app`.
+`deliver-app.yml` läuft nur bei Push auf `main`, nach `lint`, `test`, `build-app` und `vulnerability-scan` und parallel zu `deploy-backend`. Sein Job iOS läuft auf macOS, Ruby und fastlane kommen wie beim [Build](#build-in-der-ci) aus `src/app`.
 
 1. Der Job lädt das Artifact `ios-ipa` nach `src/app/build/ios/ipa` herunter.
 2. `bundle exec fastlane ios upload` lädt die IPA mit dem API-Schlüssel aus `$RUNNER_TEMP/AuthKey.p8` per `upload_to_testflight` hoch, ohne auf die Verarbeitung zu warten.
@@ -48,7 +48,7 @@ Upload und Deploy nach Dev blockieren sich nicht gegenseitig.
 
 - iOS nutzt `github.run_number` als Build-Nummer (`CFBundleVersion`): Sie steigt mit jedem Lauf von `ci.yml`, Läufe von Pull Requests hinterlassen Lücken.
 - TestFlight lehnt eine schon hochgeladene Build-Nummer ab, „Re-run all jobs“ nach einem erfolgreichen Upload scheitert deshalb beim Upload.
-- `deploy` und `deliver-app` lassen sich unabhängig voneinander wiederholen. Nach einem gescheiterten Deploy wiederholt „Re-run failed jobs“ nur den Deploy. Nach einem gescheiterten Upload wiederholt es den Upload mit der IPA des Laufs, solange das Artifact existiert (ein Tag). Ist es abgelaufen, baut „Re-run all jobs“ neu, mit derselben Build-Nummer, die der gescheiterte Upload nicht verbraucht hat. Der Upload nach Google Play scheitert dann, wenn er im ersten Versuch gelungen war ([google-play.md](google-play.md#build-nummer)). Re-runs auf `main` startet ohnehin nur ein Mensch.
+- `deploy-backend` und `deliver-app` lassen sich unabhängig voneinander wiederholen. Nach einem gescheiterten Deploy wiederholt „Re-run failed jobs“ nur den Deploy. Nach einem gescheiterten Upload wiederholt es den Upload mit der IPA des Laufs, solange das Artifact existiert (ein Tag). Ist es abgelaufen, baut „Re-run all jobs“ neu, mit derselben Build-Nummer, die der gescheiterte Upload nicht verbraucht hat. Der Upload nach Google Play scheitert dann, wenn er im ersten Versuch gelungen war ([google-play.md](google-play.md#build-nummer)). Re-runs auf `main` startet ohnehin nur ein Mensch.
 - Android nutzt dieselbe Build-Nummer als `versionCode` ([google-play.md](google-play.md#build-nummer)).
 
 ## Abläufe
@@ -92,7 +92,7 @@ Nach einer Änderung am `Gemfile` derselbe Befehl ohne `--update fastlane`.
 | Kein fastlane match | Bräuchte ein Repo oder einen Bucket für Zertifikate und Profile und zusätzlich `MATCH_PASSWORD`. |
 | Signieren auch in Pull Requests | Fehler beim Signieren (abgelaufenes Zertifikat, Profil ohne neue Capability, fehlende Vereinbarung) fallen im Pull Request auf statt erst nach dem Merge auf `main`. |
 | Apple-Secrets im Repository statt im Environment `development` | Pull Requests signieren auch, das Environment lässt nur `main` zu. Pull Requests aus Forks bekommen keine Secrets und scheitern an deren Prüfung, das ist hingenommen: Pull Requests öffnen nur Maintainer. |
-| Upload nach TestFlight in `deliver-app.yml` nach allen Checks, parallel zu `deploy`, ohne Gruppe `deploy-dev` | `build-app` läuft parallel zu `lint`, `test` und `vulnerability-scan`, ein Upload dort brächte einen Build nach TestFlight, obwohl Tests oder Scan desselben Laufs rot sind. Ein gescheiterter Upload soll den Deploy nach Dev nicht blockieren und umgekehrt. Android folgt demselben Muster ([google-play.md](google-play.md#upload-nach-google-play)). Keine Gruppe `deploy-dev`, weil der Upload Azure Dev nicht ändert. |
+| Upload nach TestFlight in `deliver-app.yml` nach allen Checks, parallel zu `deploy-backend`, ohne Gruppe `deploy-dev` | `build-app` läuft parallel zu `lint`, `test` und `vulnerability-scan`, ein Upload dort brächte einen Build nach TestFlight, obwohl Tests oder Scan desselben Laufs rot sind. Ein gescheiterter Upload soll den Deploy nach Dev nicht blockieren und umgekehrt. Android folgt demselben Muster ([google-play.md](google-play.md#upload-nach-google-play)). Keine Gruppe `deploy-dev`, weil der Upload Azure Dev nicht ändert. |
 | Upload auf macOS | `upload_to_testflight` lädt per altool hoch, das es nur auf macOS gibt. fastlanes Upload unter Linux (Stand 2.242.0) bräuchte Apples Transporter für Linux auf dem Runner, den die GitHub-Runner nicht mitbringen, und eine `AppStoreInfo.plist` neben der IPA, die `flutter build ipa` nicht erzeugt. |
 | IPA als Artifact im öffentlichen Repo | Angemeldete GitHub-Nutzer können es herunterladen, das ist hingenommen: Die IPA ist für den App Store signiert und lässt sich nicht auf Geräten installieren (das Profil enthält keine Geräte), sie enthält keine Secrets, und ihr Inhalt (Dart-AOT-Snapshot ohne Symbole, Assets, `Info.plist`, eingebettetes Profil mit Team-ID und App ID) ist ohnehin öffentlich. Das Artifact verfällt nach einem Tag. |
 | `ITSAppUsesNonExemptEncryption` auf `false` | Die App verschlüsselt nur per HTTPS, das von der Exportkontrolle ausgenommen ist. Ohne den Eintrag wartet jeder Build auf „Missing Compliance“. |

@@ -103,7 +103,7 @@ die Defaults hier greifen für neue Projekte und neue Testsuiten.
   `Murmli.Backend.slnx` gehören Bibliotheken in den Solution-Ordner `/src/`,
   ausführbare Hosts (`*.Host` und der AppHost `Murmli.Backend.Aspire`) in
   `/src/hosts/`, Testprojekte (`*.Tests`) in `/tests/`; die Ordner sind rein
-  virtuell, Pfade in CI, `deploy.yml` und ProjectReferences bleiben gleich.
+  virtuell, Pfade in CI, `deploy-backend.yml` und ProjectReferences bleiben gleich.
 - Ausführbare Services (`*.Host`) enthalten nur Start und Host-Konfiguration
   (`Program.cs`, `launchSettings.json`, `appsettings*.json`,
   Runtime-Optionen); die Logik liegt in einer Bibliothek, die der Host

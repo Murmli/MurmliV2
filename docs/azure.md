@@ -6,14 +6,14 @@ Betriebsdoku (Einrichtung, Deploy-Ablauf): [BackOffice, docs/03_Betrieb/Deployme
 
 - Umgebungen heißen `azure-<name>`, derzeit `azure-dev` in `rg-murmli-dev`.
 - `aspire publish` und `aspire deploy` immer mit `--environment azure-<name>`. Ohne läuft der AppHost als Production: `aspire publish` gelingt, schreibt aber Artefakte, die von Dev abweichen (kein OpenAPI-Dokument, kein `Telemetry:RecordSensitiveData`, keine tägliche Obergrenze des Workspaces, Registry-SKU Basic).
-- Dev deployt nur `deploy.yml`: GitHub-Environment `development` (nur `main`), OIDC als Managed Identity mit Contributor und einem auf AcrPull beschränkten RBAC Administrator auf `rg-murmli-dev`.
-- `deploy.yml` liest die Aspire-CLI-Version aus dem `Sdk`-Attribut (`Aspire.AppHost.Sdk`) des AppHost-csproj.
+- Dev deployt nur `deploy-backend.yml`: GitHub-Environment `development` (nur `main`), OIDC als Managed Identity mit Contributor und einem auf AcrPull beschränkten RBAC Administrator auf `rg-murmli-dev`.
+- `deploy-backend.yml` liest die Aspire-CLI-Version aus dem `Sdk`-Attribut (`Aspire.AppHost.Sdk`) des AppHost-csproj.
 - Das Image von `auth` baut Aspire aus einem generierten Dockerfile (Node-Version aus `src/auth/.nvmrc`, `node:26-alpine`, nur `dependencies`) mit Docker auf dem Runner.
 
 ## Secret-Parameter
 
 - `better-auth-secret` und `auth-service-key` (Bedeutung siehe [authentication.md](authentication.md#konfiguration)) sind AppHost-Parameter mit `secret: true`.
-- Dev: GitHub-Secrets `BETTER_AUTH_SECRET` und `AUTH_SERVICE_KEY` im Environment `development`. `ci.yml` reicht sie ausdrücklich an `deploy.yml`, dort kommen sie als `Parameters__better_auth_secret` und `Parameters__auth_service_key` an den AppHost. Ein fehlendes Secret käme als leerer String an, den Aspire akzeptiert, deshalb bricht `deploy.yml` vorher ab. In Azure wird aus jedem ein Container-App-Secret.
+- Dev: GitHub-Secrets `BETTER_AUTH_SECRET` und `AUTH_SERVICE_KEY` im Environment `development`. `ci.yml` reicht sie ausdrücklich an `deploy-backend.yml`, dort kommen sie als `Parameters__better_auth_secret` und `Parameters__auth_service_key` an den AppHost. Ein fehlendes Secret käme als leerer String an, den Aspire akzeptiert, deshalb bricht `deploy-backend.yml` vorher ab. In Azure wird aus jedem ein Container-App-Secret.
 - Lokal: User-Secrets `Parameters:better-auth-secret` und `Parameters:auth-service-key` des AppHost, etwa mit `openssl rand -base64 32` erzeugt. Aspire-Tests, die den AppHost starten, übergeben beide als Argument.
 
 ## Anmeldung beim Deploy (Aspire 13.6.5)

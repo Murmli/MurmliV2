@@ -31,7 +31,7 @@ Der Android-Job von `build-app.yml` läuft auf ubuntu und signiert in jedem Lauf
 
 ## Upload nach Google Play
 
-`deliver-app.yml` läuft wie für iOS ([apple.md](apple.md#upload-nach-testflight)) nur bei Push auf `main`, nach `lint`, `test`, `build-app` und `vulnerability-scan` und parallel zu `deploy`. Sein Job Android läuft auf ubuntu, Ruby und fastlane kommen wie auf iOS ([apple.md](apple.md#build-in-der-ci)) aus `src/app`.
+`deliver-app.yml` läuft wie für iOS ([apple.md](apple.md#upload-nach-testflight)) nur bei Push auf `main`, nach `lint`, `test`, `build-app` und `vulnerability-scan` und parallel zu `deploy-backend`. Sein Job Android läuft auf ubuntu, Ruby und fastlane kommen wie auf iOS ([apple.md](apple.md#build-in-der-ci)) aus `src/app`.
 
 1. Der Job lädt das Artifact `android-aab` nach `src/app/build/app/outputs/bundle` herunter.
 2. `bundle exec fastlane android upload` lädt das App-Bundle per `upload_to_play_store` in den internen Test, mit dem Status `completed` (ohne Einführen in der Play Console) und ohne Metadaten, Versionshinweise, Grafiken und Screenshots, auch falls später `src/app/fastlane/metadata/android` entsteht. Das neue Release ersetzt das bisherige des internen Tests. Den Paketnamen bekommt die Lane per `ANDROID_APPLICATION_ID` aus dem Output `android-application-id` von `build-app.yml`, also aus dem App-Bundle ([Build in der CI](#build-in-der-ci)), das Fastfile kennt keine Zuordnung von Flavor zu Paketname.

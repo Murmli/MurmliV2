@@ -38,10 +38,10 @@ jobs:
   vulnerability-scan:
     uses: ./.github/workflows/vulnerability-scan.yml
 
-  deploy:
+  deploy-backend:
     needs: [lint, test, build-app, vulnerability-scan]
     if: github.event_name == 'push'
-    uses: ./.github/workflows/deploy.yml
+    uses: ./.github/workflows/deploy-backend.yml
     permissions:
       contents: read
       id-token: write
