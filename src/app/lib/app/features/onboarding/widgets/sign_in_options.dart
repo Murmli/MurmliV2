@@ -16,18 +16,46 @@ import '../../../core/theme/app_spacing.dart';
 
 const _appleButtonHeight = 44.0;
 
+// Google's branding guidelines prescribe these values instead of the app theme:
+// https://developers.google.com/identity/branding-guidelines
+const _googleButtonHeight = 40.0;
+const _googleButtonStartPadding = 12.0;
+const _googleLogoTextGap = 10.0;
+const _googleButtonEndPadding = 12.0;
+const _googleLogoSize = 20.0;
+const _googleLightColors = (
+  fill: Color(0xFFFFFFFF),
+  stroke: Color(0xFF747775),
+  text: Color(0xFF1F1F1F),
+);
+const _googleDarkColors = (
+  fill: Color(0xFF131314),
+  stroke: Color(0xFF8E918F),
+  text: Color(0xFFE3E3E3),
+);
+const _googleLabelStyle = TextStyle(
+  fontFamily: 'GoogleSans',
+  fontWeight: FontWeight.w500,
+  fontSize: 14,
+  height: 20 / 14,
+  leadingDistribution: TextLeadingDistribution.even,
+  letterSpacing: 0,
+);
+
 class SignInOptions extends ConsumerWidget {
   const SignInOptions({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) =>
-      switch (ref.watch(flavorProvider)) {
-        Flavor.local => const _EmailSignInForm(),
-        Flavor.development || Flavor.production =>
-          defaultTargetPlatform == TargetPlatform.iOS
-              ? const _AppleSignInButton()
-              : const SizedBox.shrink(),
-      };
+  Widget build(BuildContext context, WidgetRef ref) => switch (ref.watch(
+    flavorProvider,
+  )) {
+    Flavor.local => const _EmailSignInForm(),
+    Flavor.development || Flavor.production => switch (defaultTargetPlatform) {
+      TargetPlatform.iOS => const _AppleSignInButton(),
+      TargetPlatform.android => const _GoogleSignInButton(),
+      _ => const SizedBox.shrink(),
+    },
+  };
 }
 
 Future<void> _signIn(
@@ -90,6 +118,61 @@ class _AppleSignInButton extends HookConsumerWidget {
           isSigningIn,
           ref.read(signedInAccountProvider.notifier).signInWithApple,
         ),
+      ),
+    );
+  }
+}
+
+class _GoogleSignInButton extends HookConsumerWidget {
+  const _GoogleSignInButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isSigningIn = useState(false);
+    final colors = Theme.of(context).brightness == Brightness.dark
+        ? _googleDarkColors
+        : _googleLightColors;
+    return OutlinedButton(
+      style: OutlinedButton.styleFrom(
+        tapTargetSize: MaterialTapTargetSize.padded,
+        minimumSize: const Size.fromHeight(_googleButtonHeight),
+        padding: const EdgeInsetsDirectional.only(
+          start: _googleButtonStartPadding,
+          end: _googleButtonEndPadding,
+        ),
+        backgroundColor: colors.fill,
+        disabledBackgroundColor: colors.fill,
+        foregroundColor: colors.text,
+        disabledForegroundColor: colors.text,
+        overlayColor: colors.text,
+        side: BorderSide(color: colors.stroke),
+        shape: const StadiumBorder(),
+        textStyle: _googleLabelStyle,
+      ),
+      onPressed: isSigningIn.value
+          ? null
+          : () => unawaited(
+              _signIn(
+                context,
+                isSigningIn,
+                ref.read(signedInAccountProvider.notifier).signInWithGoogle,
+              ),
+            ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        spacing: _googleLogoTextGap,
+        children: [
+          SizedBox.square(
+            dimension: _googleLogoSize,
+            child: isSigningIn.value
+                ? CircularProgressIndicator(color: colors.text)
+                : Image.asset(
+                    'assets/images/google_logo.png',
+                    excludeFromSemantics: true,
+                  ),
+          ),
+          Flexible(child: Text(context.t.onboarding.continueWithGoogle)),
+        ],
       ),
     );
   }

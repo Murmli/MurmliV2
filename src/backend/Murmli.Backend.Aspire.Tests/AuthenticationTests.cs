@@ -56,6 +56,19 @@ public sealed class AuthenticationTests(AppHostFixture appHost) : IDisposable
     }
 
     [Fact(Timeout = 60_000)]
+    public async Task SignInWithGoogle_InvalidIdToken_IsRejected()
+    {
+        using var response = await authClient.PostAsJsonAsync(
+            "/api/auth/sign-in/social",
+            new { provider = "google", idToken = new { token = "not-a-jwt" } },
+            TestContext.Current.CancellationToken
+        );
+
+        // 401 instead of 404 shows the provider is configured, a non-JWT token fails before Better Auth fetches Google's keys
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact(Timeout = 60_000)]
     public async Task SeedUser_SignInAndDeleteAccount_RemovesUserEverywhere()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
@@ -11,6 +12,7 @@ import 'package:app/app/features/onboarding/onboarding_page.dart';
 import 'package:app/i18n/strings.g.dart';
 
 import '../../../helpers/authentication.dart';
+import '../../../helpers/google_sign_in.dart';
 import '../../../helpers/pump_app.dart';
 import '../../../helpers/sign_in_with_apple.dart';
 
@@ -31,6 +33,9 @@ void main() {
   Finder submitButton() =>
       find.widgetWithText(FilledButton, translations.emailSignIn.submit);
 
+  Finder googleButton() =>
+      find.bySemanticsLabel(translations.continueWithGoogle);
+
   Future<void> enterCredentials(WidgetTester tester) async {
     await tester.enterText(emailField(), '  $signInEmail ');
     await tester.enterText(passwordField(), signInPassword);
@@ -41,6 +46,13 @@ void main() {
     await tester.ensureVisible(appleButton);
     await tester.pump();
     await tester.tap(appleButton);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> tapGoogleButton(WidgetTester tester) async {
+    await tester.ensureVisible(googleButton());
+    await tester.pump();
+    await tester.tap(googleButton());
     await tester.pumpAndSettle();
   }
 
@@ -102,15 +114,112 @@ void main() {
       },
     );
 
+    testWidgets(
+      'with the flavor development on Android tapping the Google button with a successful sign-in opens home',
+      variant: TargetPlatformVariant.only(TargetPlatform.android),
+      (tester) async {
+        installFakeGoogleSignIn();
+        final container = await pumpApp(tester, flavor: Flavor.development);
+        recordAuthenticationRequests(container);
+
+        await tapGoogleButton(tester);
+
+        expect(find.byType(HomePage), findsOneWidget);
+        expect(find.byType(OnboardingPage), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'with the flavor development on Android canceling the Google dialog shows the Google button again without a snackbar',
+      variant: TargetPlatformVariant.only(TargetPlatform.android),
+      (tester) async {
+        installFakeGoogleSignIn(
+          exception: const GoogleSignInException(
+            code: GoogleSignInExceptionCode.canceled,
+          ),
+        );
+        await pumpApp(tester, flavor: Flavor.development);
+
+        await tapGoogleButton(tester);
+
+        expect(find.byType(OnboardingPage), findsOneWidget);
+        expect(find.byType(SnackBar), findsNothing);
+        expect(
+          tester.getSemantics(googleButton()),
+          isSemantics(isButton: true, isEnabled: true, hasTapAction: true),
+        );
+      },
+    );
+
+    testWidgets(
+      'with the flavor development on Android tapping the Google button again while the sign-in is running starts no second sign-in',
+      variant: TargetPlatformVariant.only(TargetPlatform.android),
+      (tester) async {
+        final googleSignIn = installFakeGoogleSignIn();
+        final container = await pumpApp(tester, flavor: Flavor.development);
+        final socialSignInResponseReleased = Completer<void>();
+        recordAuthenticationRequests(
+          container,
+          respondFromAuth: (request) async {
+            if (request.uri.path == socialSignInPath) {
+              await socialSignInResponseReleased.future;
+            }
+            return respondAsAuth(request);
+          },
+        );
+        await tester.ensureVisible(googleButton());
+        await tester.pump();
+
+        await tester.tap(googleButton());
+        await tester.pump();
+        await tester.tap(googleButton());
+        await tester.pump();
+
+        expect(
+          tester.getSemantics(googleButton()),
+          isSemantics(isButton: true, isEnabled: false, hasTapAction: false),
+        );
+        socialSignInResponseReleased.complete();
+        await tester.pumpAndSettle();
+        expect(googleSignIn.authenticateCalls, 1);
+        expect(find.byType(HomePage), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'with the flavor development on Android the Google button has a tap area at least 48 high',
+      variant: TargetPlatformVariant.only(TargetPlatform.android),
+      (tester) async {
+        await pumpApp(tester, flavor: Flavor.development);
+
+        expect(
+          tester.getSize(googleButton()).height,
+          greaterThanOrEqualTo(kMinInteractiveDimension),
+        );
+      },
+    );
+
     for (final flavor in [Flavor.development, Flavor.production]) {
       testWidgets(
-        'with the flavor ${flavor.name} on Android shows no Apple button',
+        'with the flavor ${flavor.name} on Android shows the Google button and no Apple button',
         variant: TargetPlatformVariant.only(TargetPlatform.android),
         (tester) async {
           await pumpApp(tester, flavor: flavor);
 
           expect(find.byType(OnboardingPage), findsOneWidget);
+          expect(googleButton(), findsOneWidget);
           expect(find.byType(SignInWithAppleButton), findsNothing);
+        },
+      );
+
+      testWidgets(
+        'with the flavor ${flavor.name} on iOS shows the Apple button and no Google button',
+        variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+        (tester) async {
+          await pumpApp(tester, flavor: flavor);
+
+          expect(find.byType(SignInWithAppleButton), findsOneWidget);
+          expect(googleButton(), findsNothing);
         },
       );
 
@@ -129,7 +238,7 @@ void main() {
     }
 
     testWidgets(
-      'with the flavor local shows the email form and no Apple button',
+      'with the flavor local shows the email form and neither the Apple nor the Google button',
       variant: mobilePlatforms,
       (tester) async {
         await pumpApp(tester, flavor: Flavor.local);
@@ -138,6 +247,7 @@ void main() {
         expect(passwordField(), findsOneWidget);
         expect(submitButton(), findsOneWidget);
         expect(find.byType(SignInWithAppleButton), findsNothing);
+        expect(googleButton(), findsNothing);
       },
     );
 

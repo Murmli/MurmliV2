@@ -57,6 +57,7 @@ Ersetzen geht nur über Google, der App-Signaturschlüssel bleibt unberührt:
 1. Neuen Schlüssel wie oben erzeugen, Zertifikat exportieren: `keytool -export -rfc -keystore murmli-upload.keystore -alias upload -file upload_certificate.pem`.
 2. In jeder App unter „Play App Signing“ das Zurücksetzen des Upload-Schlüssels beantragen und `upload_certificate.pem` hochladen.
 3. Nach Googles Bestätigung beide Secrets ersetzen.
+4. Im Google-Cloud-Projekt „Murmli Dev“ den SHA-1 im Android-Client des Upload-Schlüssels durch den des neuen ersetzen, sonst können sich mit ihm signierte Builds nicht mit Google anmelden ([authentication.md](authentication.md#sign-in-with-google)).
 
 ### Service-Account-Schlüssel ersetzen
 

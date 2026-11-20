@@ -4,14 +4,17 @@ import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:sign_in_with_apple_platform_interface/sign_in_with_apple_platform_interface.dart';
 import 'package:talker/talker.dart';
 
 import 'package:app/app/core/authentication/signed_in_account_provider.dart';
+import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/logging/talker_provider.dart';
 
 import '../../../helpers/authentication.dart';
+import '../../../helpers/google_sign_in.dart';
 import '../../../helpers/preferences.dart';
 import '../../../helpers/provider_container.dart';
 import '../../../helpers/sign_in_with_apple.dart';
@@ -22,6 +25,9 @@ void main() {
   Future<SignInResult> signInWithApple() =>
       container.read(signedInAccountProvider.notifier).signInWithApple();
 
+  Future<SignInResult> signInWithGoogle() =>
+      container.read(signedInAccountProvider.notifier).signInWithGoogle();
+
   Future<SignInResult> signInWithEmail() => container
       .read(signedInAccountProvider.notifier)
       .signInWithEmail(email: signInEmail, password: signInPassword);
@@ -31,7 +37,10 @@ void main() {
           as Map<String, String>)['nonce']!;
 
   setUp(() async {
-    container = createContainer(await createPreferences());
+    container = createContainer(
+      await createPreferences(),
+      flavor: Flavor.development,
+    );
   });
 
   group('SignedInAccount', () {
@@ -178,6 +187,123 @@ void main() {
 
       expect(result, SignInResult.failed);
       expect(container.read(signedInAccountProvider), isNull);
+    });
+
+    test('signInWithGoogle initializes with the development server client ID, signs in with the ID token, exchanges the session token for a JSON web token and fetches the account with it', () async {
+      final google = installFakeGoogleSignIn();
+      final requests = recordAuthenticationRequests(container);
+
+      final result = await signInWithGoogle();
+
+      expect(result, SignInResult.signedIn);
+      expect(container.read(signedInAccountProvider)?.id, accountId);
+      expect(
+        google.receivedInitParameters.single.serverClientId,
+        '919671347923-6osa4hn7cc3f8trnbdb8s826i0jfv63b.apps.googleusercontent.com',
+      );
+      final [socialSignIn, tokenRequest] = requests.auth.requests;
+      expect(socialSignIn.method, 'POST');
+      expect(socialSignIn.uri.path, socialSignInPath);
+      expect(socialSignIn.data, {
+        'provider': 'google',
+        'idToken': {'token': googleIdToken},
+      });
+      expect(tokenRequest.uri.path, tokenPath);
+      expect(
+        tokenRequest.headers['Authorization'],
+        'Bearer $signedSessionToken',
+      );
+      final accountRequest = requests.api.requests.single;
+      expect(accountRequest.uri.path, '/v1/users/me');
+      expect(accountRequest.headers['Authorization'], 'Bearer $jsonWebToken');
+    });
+
+    test('signInWithGoogle canceled by the user returns canceled without requests and stays signed out', () async {
+      installFakeGoogleSignIn(
+        exception: const GoogleSignInException(
+          code: GoogleSignInExceptionCode.canceled,
+        ),
+      );
+      final requests = recordAuthenticationRequests(container);
+
+      final result = await signInWithGoogle();
+
+      expect(result, SignInResult.canceled);
+      expect(requests.auth.requests, isEmpty);
+      expect(container.read(signedInAccountProvider), isNull);
+    });
+
+    const googleErrorDescription =
+        'Account google-user@murmli.de is not allowed';
+    const googleErrorDetails = 'developer console project 919671347923';
+    for (final (googleFailure, errorCode) in <(Exception, String)>[
+      (
+        const GoogleSignInException(
+          code: GoogleSignInExceptionCode.clientConfigurationError,
+          description: googleErrorDescription,
+          details: googleErrorDetails,
+        ),
+        'clientConfigurationError',
+      ),
+      (
+        PlatformException(
+          code: 'channel-error',
+          message: googleErrorDescription,
+          details: googleErrorDetails,
+        ),
+        'channel-error',
+      ),
+    ]) {
+      test(
+        'signInWithGoogle failing with ${googleFailure.runtimeType} $errorCode returns failed without requests, stays signed out and logs a warning with only the error code',
+        () async {
+          installFakeGoogleSignIn(exception: googleFailure);
+          final requests = recordAuthenticationRequests(container);
+
+          final result = await signInWithGoogle();
+
+          expect(result, SignInResult.failed);
+          expect(requests.auth.requests, isEmpty);
+          expect(container.read(signedInAccountProvider), isNull);
+          final log = container.read(talkerProvider).history.single;
+          expect(log.logLevel, LogLevel.warning);
+          expect(log.message, contains(errorCode));
+          expect(
+            log.message,
+            isNot(
+              anyOf(
+                contains(googleErrorDescription),
+                contains(googleErrorDetails),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    test('signInWithGoogle without an ID token returns failed without requests and stays signed out', () async {
+      installFakeGoogleSignIn(idToken: null);
+      final requests = recordAuthenticationRequests(container);
+
+      final result = await signInWithGoogle();
+
+      expect(result, SignInResult.failed);
+      expect(requests.auth.requests, isEmpty);
+      expect(container.read(signedInAccountProvider), isNull);
+    });
+
+    test('signInWithGoogle called again after a cancel initializes Google sign-in only once', () async {
+      final google = installFakeGoogleSignIn(
+        exception: const GoogleSignInException(
+          code: GoogleSignInExceptionCode.canceled,
+        ),
+      );
+
+      await signInWithGoogle();
+      await signInWithGoogle();
+
+      expect(google.receivedInitParameters, hasLength(1));
+      expect(google.authenticateCalls, 2);
     });
 
     test('signInWithEmail posts email and password, exchanges the session token for a JSON web token and fetches the account with it', () async {

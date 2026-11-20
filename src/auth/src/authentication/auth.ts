@@ -25,6 +25,24 @@ export const auth = betterAuth({
 				email: `${profile.sub}@apple.placeholder.invalid`,
 			}),
 		},
+		google: {
+			// Android ID tokens carry the web client id (the app's serverClientId) as audience, the ID token flow needs no client secret
+			clientId: requireEnvironment("GOOGLE_WEB_CLIENT_ID"),
+			// Better Auth requires an email per user, Murmli stores no email, name or picture from Google
+			mapProfileToUser: (profile) => ({
+				email: `${profile.sub}@google.placeholder.invalid`,
+				name: "",
+				image: undefined,
+				emailVerified: false,
+			}),
+		},
+	},
+	databaseHooks: {
+		// Provider ID tokens carry personal data such as Google's email, name and picture, Murmli stores none
+		account: {
+			create: { before: async () => ({ data: { idToken: null } }) },
+			update: { before: async () => ({ data: { idToken: null } }) },
+		},
 	},
 	plugins: [
 		bearer({ requireSignature: true }),
