@@ -5,6 +5,14 @@ plugins {
     id("io.sentry.android.gradle")
 }
 
+val uploadKeystoreFile = providers.gradleProperty("murmliUploadKeystoreFile").orNull?.takeIf { it.isNotBlank() }
+val uploadKeystorePassword = providers.gradleProperty("murmliUploadKeystorePassword").orNull?.takeIf { it.isNotBlank() }
+if ((uploadKeystoreFile == null) != (uploadKeystorePassword == null)) {
+    throw GradleException(
+        "Set both murmliUploadKeystoreFile and murmliUploadKeystorePassword to sign with the upload key, or neither to sign with the debug key.",
+    )
+}
+
 android {
     namespace = "de.murmli.app"
     compileSdk = flutter.compileSdkVersion
@@ -16,7 +24,6 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "de.murmli.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -30,11 +37,22 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (uploadKeystoreFile != null) {
+            create("upload") {
+                storeFile = file(uploadKeystoreFile)
+                storePassword = uploadKeystorePassword
+                keyAlias = "upload"
+                // keytool's PKCS12 keystores protect the key with the store password.
+                keyPassword = uploadKeystorePassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Local release builds without the upload key properties sign with the debug key.
+            signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
         }
     }
 
@@ -43,12 +61,17 @@ android {
     productFlavors {
         create("local") {
             dimension = "environment"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appLabel"] = "Murmli Dev"
         }
         create("development") {
             dimension = "environment"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appLabel"] = "Murmli Dev"
         }
         create("production") {
             dimension = "environment"
+            manifestPlaceholders["appLabel"] = "Murmli"
         }
     }
 }

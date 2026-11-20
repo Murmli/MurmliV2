@@ -49,7 +49,7 @@ Upload und Deploy nach Dev blockieren sich nicht gegenseitig.
 - iOS nutzt `github.run_number` als Build-Nummer (`CFBundleVersion`): Sie steigt mit jedem Lauf von `ci.yml`, Läufe von Pull Requests hinterlassen Lücken.
 - TestFlight lehnt eine schon hochgeladene Build-Nummer ab, „Re-run all jobs“ nach einem erfolgreichen Upload scheitert deshalb beim Upload.
 - `deploy` und `deliver-app` lassen sich unabhängig voneinander wiederholen. Nach einem gescheiterten Deploy wiederholt „Re-run failed jobs“ nur den Deploy. Nach einem gescheiterten Upload wiederholt es den Upload mit der IPA des Laufs, solange das Artifact existiert (ein Tag). Ist es abgelaufen, baut „Re-run all jobs“ neu, mit derselben Build-Nummer, die der gescheiterte Upload nicht verbraucht hat. Re-runs auf `main` startet ohnehin nur ein Mensch.
-- Android behält seine bisherige Build-Nummer bis [#102](https://github.com/Murmli/MurmliV2/issues/102).
+- Android nutzt dieselbe Build-Nummer als `versionCode` ([google-play.md](google-play.md#build-nummer)).
 
 ## Abläufe
 
