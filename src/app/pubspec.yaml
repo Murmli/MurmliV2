@@ -102,6 +102,7 @@ flutter:
 
   assets:
     - assets/fonts/BricolageGrotesque-OFL.txt
+    - assets/fonts/GoogleSans-OFL.txt
     - assets/fonts/PlusJakartaSans-OFL.txt
     - assets/images/google_logo.png
 
@@ -109,6 +110,9 @@ flutter:
     - family: BricolageGrotesque
       fonts:
         - asset: assets/fonts/BricolageGrotesque.ttf
+    - family: GoogleSans
+      fonts:
+        - asset: assets/fonts/GoogleSans.ttf
     - family: PlusJakartaSans
       fonts:
         - asset: assets/fonts/PlusJakartaSans.ttf

@@ -52,6 +52,7 @@ Future<void> main() async {
 Stream<LicenseEntry> _fontLicenses() async* {
   const fontLicenses = [
     ('Bricolage Grotesque', 'assets/fonts/BricolageGrotesque-OFL.txt'),
+    ('Google Sans', 'assets/fonts/GoogleSans-OFL.txt'),
     ('Plus Jakarta Sans', 'assets/fonts/PlusJakartaSans-OFL.txt'),
   ];
   for (final (fontName, licenseAsset) in fontLicenses) {

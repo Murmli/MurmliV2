@@ -34,7 +34,7 @@ void main() {
       find.widgetWithText(FilledButton, translations.emailSignIn.submit);
 
   Finder googleButton() =>
-      find.widgetWithText(OutlinedButton, translations.continueWithGoogle);
+      find.bySemanticsLabel(translations.continueWithGoogle);
 
   Future<void> enterCredentials(WidgetTester tester) async {
     await tester.enterText(emailField(), '  $signInEmail ');
@@ -145,8 +145,56 @@ void main() {
         expect(find.byType(OnboardingPage), findsOneWidget);
         expect(find.byType(SnackBar), findsNothing);
         expect(
-          tester.widget<OutlinedButton>(googleButton()).onPressed,
-          isNotNull,
+          tester.getSemantics(googleButton()),
+          isSemantics(isButton: true, isEnabled: true, hasTapAction: true),
+        );
+      },
+    );
+
+    testWidgets(
+      'with the flavor development on Android tapping the Google button again while the sign-in is running starts no second sign-in',
+      variant: TargetPlatformVariant.only(TargetPlatform.android),
+      (tester) async {
+        final googleSignIn = installFakeGoogleSignIn();
+        final container = await pumpApp(tester, flavor: Flavor.development);
+        final socialSignInResponseReleased = Completer<void>();
+        recordAuthenticationRequests(
+          container,
+          respondFromAuth: (request) async {
+            if (request.uri.path == socialSignInPath) {
+              await socialSignInResponseReleased.future;
+            }
+            return respondAsAuth(request);
+          },
+        );
+        await tester.ensureVisible(googleButton());
+        await tester.pump();
+
+        await tester.tap(googleButton());
+        await tester.pump();
+        await tester.tap(googleButton());
+        await tester.pump();
+
+        expect(
+          tester.getSemantics(googleButton()),
+          isSemantics(isButton: true, isEnabled: false, hasTapAction: false),
+        );
+        socialSignInResponseReleased.complete();
+        await tester.pumpAndSettle();
+        expect(googleSignIn.authenticateCalls, 1);
+        expect(find.byType(HomePage), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'with the flavor development on Android the Google button has a tap area at least 48 high',
+      variant: TargetPlatformVariant.only(TargetPlatform.android),
+      (tester) async {
+        await pumpApp(tester, flavor: Flavor.development);
+
+        expect(
+          tester.getSize(googleButton()).height,
+          greaterThanOrEqualTo(kMinInteractiveDimension),
         );
       },
     );
