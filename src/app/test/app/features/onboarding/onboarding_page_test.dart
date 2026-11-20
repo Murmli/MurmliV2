@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
+import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/features/home/home_page.dart';
 import 'package:app/app/features/onboarding/onboarding_page.dart';
 import 'package:app/i18n/strings.g.dart';
@@ -14,6 +17,25 @@ import '../../../helpers/sign_in_with_apple.dart';
 void main() {
   final translations = AppLocale.de.buildSync().onboarding;
 
+  final mobilePlatforms = TargetPlatformVariant({
+    TargetPlatform.iOS,
+    TargetPlatform.android,
+  });
+
+  Finder emailField() =>
+      find.widgetWithText(TextField, translations.emailSignIn.email);
+
+  Finder passwordField() =>
+      find.widgetWithText(TextField, translations.emailSignIn.password);
+
+  Finder submitButton() =>
+      find.widgetWithText(FilledButton, translations.emailSignIn.submit);
+
+  Future<void> enterCredentials(WidgetTester tester) async {
+    await tester.enterText(emailField(), '  $signInEmail ');
+    await tester.enterText(passwordField(), signInPassword);
+  }
+
   Future<void> tapAppleButton(WidgetTester tester) async {
     final appleButton = find.byType(SignInWithAppleButton);
     await tester.ensureVisible(appleButton);
@@ -24,11 +46,11 @@ void main() {
 
   group('OnboardingPage', () {
     testWidgets(
-      'tapping the Apple button with a successful sign-in opens home',
+      'with the flavor development tapping the Apple button with a successful sign-in opens home',
       variant: TargetPlatformVariant.only(TargetPlatform.iOS),
       (tester) async {
         installFakeSignInWithApple();
-        final container = await pumpApp(tester);
+        final container = await pumpApp(tester, flavor: Flavor.development);
         recordAuthenticationRequests(container);
 
         await tapAppleButton(tester);
@@ -39,11 +61,11 @@ void main() {
     );
 
     testWidgets(
-      'tapping the Apple button with a failed sign-in shows the failure and the Apple button again',
+      'with the flavor development tapping the Apple button with a failed sign-in shows the failure and the Apple button again',
       variant: TargetPlatformVariant.only(TargetPlatform.iOS),
       (tester) async {
         installFakeSignInWithApple();
-        final container = await pumpApp(tester);
+        final container = await pumpApp(tester, flavor: Flavor.development);
         recordAuthenticationRequests(
           container,
           respondFromAuth: (_) async => ResponseBody.fromString('', 401),
@@ -61,7 +83,7 @@ void main() {
     );
 
     testWidgets(
-      'canceling the Apple dialog shows the Apple button again without a snackbar',
+      'with the flavor development canceling the Apple dialog shows the Apple button again without a snackbar',
       variant: TargetPlatformVariant.only(TargetPlatform.iOS),
       (tester) async {
         installFakeSignInWithApple(
@@ -70,7 +92,7 @@ void main() {
             message: 'The user canceled the authorization attempt.',
           ),
         );
-        await pumpApp(tester);
+        await pumpApp(tester, flavor: Flavor.development);
 
         await tapAppleButton(tester);
 
@@ -80,14 +102,130 @@ void main() {
       },
     );
 
+    for (final flavor in [Flavor.development, Flavor.production]) {
+      testWidgets(
+        'with the flavor ${flavor.name} on Android shows no Apple button',
+        variant: TargetPlatformVariant.only(TargetPlatform.android),
+        (tester) async {
+          await pumpApp(tester, flavor: flavor);
+
+          expect(find.byType(OnboardingPage), findsOneWidget);
+          expect(find.byType(SignInWithAppleButton), findsNothing);
+        },
+      );
+
+      testWidgets(
+        'with the flavor ${flavor.name} shows no email form',
+        variant: mobilePlatforms,
+        (tester) async {
+          await pumpApp(tester, flavor: flavor);
+
+          expect(find.byType(OnboardingPage), findsOneWidget);
+          expect(emailField(), findsNothing);
+          expect(passwordField(), findsNothing);
+          expect(submitButton(), findsNothing);
+        },
+      );
+    }
+
     testWidgets(
-      'on Android shows no Apple button',
-      variant: TargetPlatformVariant.only(TargetPlatform.android),
+      'with the flavor local shows the email form and no Apple button',
+      variant: mobilePlatforms,
       (tester) async {
-        await pumpApp(tester);
+        await pumpApp(tester, flavor: Flavor.local);
+
+        expect(emailField(), findsOneWidget);
+        expect(passwordField(), findsOneWidget);
+        expect(submitButton(), findsOneWidget);
+        expect(find.byType(SignInWithAppleButton), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'with the flavor local tapping sign-in sends the trimmed email with the password and opens home',
+      (tester) async {
+        final container = await pumpApp(tester, flavor: Flavor.local);
+        final requests = recordAuthenticationRequests(container);
+        await enterCredentials(tester);
+
+        await tester.ensureVisible(submitButton());
+        await tester.pump();
+        await tester.tap(submitButton());
+        await tester.pumpAndSettle();
+
+        expect(requests.auth.requests.first.data, {
+          'email': signInEmail,
+          'password': signInPassword,
+        });
+        expect(find.byType(HomePage), findsOneWidget);
+        expect(find.byType(OnboardingPage), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'with the flavor local submitting rejected credentials from the password field shows the invalid credentials message and the form again',
+      (tester) async {
+        final container = await pumpApp(tester, flavor: Flavor.local);
+        recordAuthenticationRequests(
+          container,
+          respondFromAuth: (_) async => ResponseBody.fromString('', 401),
+        );
+        await enterCredentials(tester);
+
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
 
         expect(find.byType(OnboardingPage), findsOneWidget);
-        expect(find.byType(SignInWithAppleButton), findsNothing);
+        expect(
+          find.widgetWithText(
+            SnackBar,
+            translations.emailSignIn.invalidCredentials,
+          ),
+          findsOneWidget,
+        );
+        expect(emailField(), findsOneWidget);
+        expect(submitButton(), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'with the flavor local submitting again while the email sign-in is running disables the fields and sends no second request',
+      (tester) async {
+        final container = await pumpApp(tester, flavor: Flavor.local);
+        final emailSignInResponseReleased = Completer<void>();
+        final requests = recordAuthenticationRequests(
+          container,
+          respondFromAuth: (request) async {
+            if (request.uri.path == emailSignInPath) {
+              await emailSignInResponseReleased.future;
+            }
+            return respondAsAuth(request);
+          },
+        );
+        await enterCredentials(tester);
+        await tester.ensureVisible(submitButton());
+        await tester.pump();
+
+        await tester.tap(submitButton());
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.tap(find.byType(FilledButton));
+        await tester.pump();
+
+        expect(tester.widget<TextField>(emailField()).enabled, isFalse);
+        expect(tester.widget<TextField>(passwordField()).enabled, isFalse);
+        expect(
+          tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+          isNull,
+        );
+        emailSignInResponseReleased.complete();
+        await tester.pumpAndSettle();
+        expect(
+          requests.auth.requests.where(
+            (request) => request.uri.path == emailSignInPath,
+          ),
+          hasLength(1),
+        );
+        expect(find.byType(HomePage), findsOneWidget);
       },
     );
   });

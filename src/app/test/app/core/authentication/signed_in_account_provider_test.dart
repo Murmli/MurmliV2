@@ -22,6 +22,10 @@ void main() {
   Future<SignInResult> signInWithApple() =>
       container.read(signedInAccountProvider.notifier).signInWithApple();
 
+  Future<SignInResult> signInWithEmail() => container
+      .read(signedInAccountProvider.notifier)
+      .signInWithEmail(email: signInEmail, password: signInPassword);
+
   String sentNonce(RequestOptions socialSignIn) =>
       ((socialSignIn.data as Map<String, Object?>)['idToken']!
           as Map<String, String>)['nonce']!;
@@ -175,5 +179,75 @@ void main() {
       expect(result, SignInResult.failed);
       expect(container.read(signedInAccountProvider), isNull);
     });
+
+    test('signInWithEmail posts email and password, exchanges the session token for a JSON web token and fetches the account with it', () async {
+      final requests = recordAuthenticationRequests(container);
+
+      final result = await signInWithEmail();
+
+      expect(result, SignInResult.signedIn);
+      expect(container.read(signedInAccountProvider)?.id, accountId);
+      final [emailSignIn, tokenRequest] = requests.auth.requests;
+      expect(emailSignIn.method, 'POST');
+      expect(emailSignIn.uri.path, emailSignInPath);
+      expect(emailSignIn.data, {
+        'email': signInEmail,
+        'password': signInPassword,
+      });
+      expect(tokenRequest.uri.path, tokenPath);
+      expect(
+        tokenRequest.headers['Authorization'],
+        'Bearer $signedSessionToken',
+      );
+      final accountRequest = requests.api.requests.single;
+      expect(accountRequest.uri.path, '/v1/users/me');
+      expect(accountRequest.headers['Authorization'], 'Bearer $jsonWebToken');
+    });
+
+    for (final (scenario, respondFromAuth, expectedResult) in [
+      (
+        'auth rejecting the credentials with 401',
+        (RequestOptions request) async => ResponseBody.fromString('', 401),
+        SignInResult.invalidCredentials,
+      ),
+      (
+        'auth rejecting a malformed email with 400',
+        (RequestOptions request) async => ResponseBody.fromString('', 400),
+        SignInResult.invalidCredentials,
+      ),
+      (
+        'auth failing with 500',
+        (RequestOptions request) async => ResponseBody.fromString('', 500),
+        SignInResult.failed,
+      ),
+      (
+        'auth answering without set-auth-token',
+        (RequestOptions request) async =>
+            jsonResponse({'token': 'unsigned-session-token'}),
+        SignInResult.failed,
+      ),
+    ]) {
+      test(
+        'signInWithEmail with $scenario returns ${expectedResult.name} without a request to the API, stays signed out and logs a warning without email and password',
+        () async {
+          final requests = recordAuthenticationRequests(
+            container,
+            respondFromAuth: respondFromAuth,
+          );
+
+          final result = await signInWithEmail();
+
+          expect(result, expectedResult);
+          expect(requests.api.requests, isEmpty);
+          expect(container.read(signedInAccountProvider), isNull);
+          final log = container.read(talkerProvider).history.single;
+          expect(log.logLevel, LogLevel.warning);
+          expect(
+            log.message,
+            isNot(anyOf(contains(signInEmail), contains(signInPassword))),
+          );
+        },
+      );
+    }
   });
 }
