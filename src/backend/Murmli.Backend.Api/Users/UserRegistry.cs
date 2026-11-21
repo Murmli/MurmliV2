@@ -64,6 +64,16 @@ internal sealed partial class UserRegistry(
         context.DeletedUsers.Add(new DeletedUser { AuthUserId = authUserId, DeletedAt = now });
         await context.SaveChangesAsync(cancellationToken);
 
+        if (userId is { } existingUserId)
+        {
+            await context
+                .ShoppingLists.Where(list =>
+                    context.ShoppingListMembers.Any(member => member.ListId == list.Id && member.UserId == existingUserId)
+                    && context.ShoppingListMembers.All(member => member.ListId != list.Id || member.UserId == existingUserId)
+                )
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+
         await context.Users.Where(user => user.AuthUserId == authUserId).ExecuteDeleteAsync(cancellationToken);
 
         await context

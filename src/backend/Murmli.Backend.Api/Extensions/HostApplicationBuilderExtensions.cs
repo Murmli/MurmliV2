@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Murmli.Backend.Api.AuthService;
 using Murmli.Backend.Api.Products;
+using Murmli.Backend.Api.Shopping;
 using Murmli.Backend.Api.Users;
 using Murmli.Backend.Data.Extensions;
 
@@ -48,5 +49,6 @@ public static class HostApplicationBuilderExtensions
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<UserRegistry>();
         builder.Services.AddScoped<ProductSearch>();
+        builder.Services.AddScoped<ShoppingSync>();
     }
 }
