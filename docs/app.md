@@ -39,18 +39,17 @@ Launcher-Icons und Splash erzeugt [flutter_adaptive_studio](https://pub.dev/pack
 Neu erzeugen (in `src/app`, nach Änderungen an Config oder Quellen):
 
 ```sh
-fvm dart pub global activate flutter_adaptive_studio 0.28.15
-fvm dart pub global run flutter_adaptive_studio doctor
-fvm dart pub global run flutter_adaptive_studio generate
-fvm dart pub global run flutter_adaptive_studio generate --flavor local
-fvm dart pub global run flutter_adaptive_studio generate --flavor development
+fvm dart run flutter_adaptive_studio doctor
+fvm dart run flutter_adaptive_studio generate
+fvm dart run flutter_adaptive_studio generate --flavor local
+fvm dart run flutter_adaptive_studio generate --flavor development
 rm lib/fas_splash.g.dart ios/Runner.xcodeproj/project.pbxproj.bak
 ```
 
-- Version nur gezielt erhöhen und dann die Ausgabe prüfen, das Paket ändert sich schnell.
+- dev_dependency mit fester Version (ohne `^`): nur gezielt erhöhen und dann die Ausgabe prüfen, das Paket ändert sich schnell.
 - Ohne `--flavor` schreibt das Tool nach `src/main` bzw. `AppIcon`, ein Flavor-Lauf nur in seinen Overlay bzw. `AppIcon-<flavor>` samt `project.pbxproj`.
 - `lib/fas_splash.g.dart` (In-App-Splash, ungenutzt) entsteht bei jedem Lauf mit Splash, `project.pbxproj.bak` bei jedem Flavor-Lauf: beide löschen.
-- Optional `fvm dart pub global run flutter_adaptive_studio preview` für eine Vorschau der Masken, schreibt `flutter_adaptive_studio/preview/icon_preview.html`, danach den Ordner löschen.
+- Optional `fvm dart run flutter_adaptive_studio preview` für eine Vorschau der Masken, schreibt `flutter_adaptive_studio/preview/icon_preview.html`, danach den Ordner löschen.
 - Fallen Quellen oder Optionen weg, löscht das Tool nicht alles: vorher zurücksetzen (im Repo-Root `git restore --staged --worktree -- src/app/android src/app/ios` und `git clean -fd -- src/app/android src/app/ios`, löscht auch ungetrackte Nicht-Icon-Dateien dort).
 - `FileSystemException` mit errno 1224: Ein anderer Prozess (meist VS Code) hält eine erzeugte Datei offen, schließen und wiederholen.
 - Neuer Flavor: Eintrag unter `flavors` (mit `play_store: false` und `splash: null` unter `android` und `ios`) und `generate --flavor <flavor>`.
@@ -108,7 +107,7 @@ Ablauf: [authentication.md](authentication.md#anmeldung). `signedInAccountProvid
 | Entscheidung | Grund |
 | --- | --- |
 | Icons und Splash mit `flutter_adaptive_studio` statt `flutter_launcher_icons`, `icons_launcher` oder `flutter_native_splash` | SVG als Quelle mit Safe-Zone-Anpassung, ein 1024er-iOS-Icon samt iOS-18-Varianten, Flavor-Icons samt Xcode-Verdrahtung aus einer Datei. Verworfen (2026-11-21): `flutter_launcher_icons` (seit Juni 2025 kein Release), `icons_launcher` und `flutter_native_splash` (nur PNG). Risiko: junges Paket mit einem Maintainer. |
-| `flutter_adaptive_studio` global mit fester Version statt als dev_dependency | Zöge `image`, `xml`, `yaml` u. a. in die Auflösung der App, gebraucht nur beim Neuerzeugen. |
+| `flutter_adaptive_studio` als dev_dependency mit fester Version statt global installiert | Version steht in `pubspec.yaml` und `pubspec.lock` und kommt mit `pub get`, ohne globale Installation, die zudem andere Projekte überschriebe. Dafür lösen seine Abhängigkeiten (`image`, `xml`, `yaml` u. a.) mit denen der App auf. |
 | Flavor-Läufe mit `splash: null` und `play_store: false`, Basis mit `round: false` | Flavor-Läufe schrieben sonst den Splash redundant ins Overlay und das Play-Store-Icon nach `src/main` (zuletzt laufender Flavor gewinnt). `round: true` setzt `android:roundIcon` und schreibt dabei das ganze Manifest einzeilig neu, nötig nur für Android 7.1. |
 | Flavor per `--flavor` (`appFlavor`) statt `--dart-define` | Ein Schalter für native Konfiguration und Dart, vergessenes `--dart-define` fiele still auf den Standard. |
 | `local` über HTTP ohne Ausnahmen in App Transport Security oder Network Security Config | `dart:io` (dios Standard-Adapter) unterliegt keinem, die Engine setzt `may_insecurely_connect_to_all_domains` fest (Stand Flutter 3.50). Ausnahmen erst für nativen HTTP-Stack (WebView, `cupertino_http`, `cronet_http`), nur für `local`. |
