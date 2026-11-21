@@ -5,6 +5,18 @@ import 'simulated_device.dart';
 
 typedef CheckViolation = ({String check, List<String> details});
 
+/// The rows of the lists, members and items only in [expected] (-) or only in
+/// [actual] (+), or null if both match.
+String? rowDifferenceOf({
+  required DeviceTables expected,
+  required DeviceTables actual,
+  required ServerLedger ledger,
+  required List<SimulatedUser> users,
+}) => _differenceOf(
+  expected: _rowsOf(expected, ledger, users),
+  actual: _rowsOf(actual, ledger, users),
+);
+
 enum _ItemField {
   name(changeType: 'renameItem'),
   checked(changeType: 'setItemChecked');
@@ -54,9 +66,11 @@ class ConvergenceChecks {
 
   List<String> _convergence() => [
     for (final MapEntry(key: device, value: tables) in deviceTables.entries)
-      if (_differenceOf(
-            expected: _rowsOf(referenceTables[device.user]!),
-            actual: _rowsOf(tables),
+      if (rowDifferenceOf(
+            expected: referenceTables[device.user]!,
+            actual: tables,
+            ledger: ledger,
+            users: users,
           )
           case final difference?)
         'device ${device.name} differs from the reference of user '
@@ -181,54 +195,57 @@ class ConvergenceChecks {
     return value;
   }
 
-  List<String> _rowsOf(DeviceTables tables) => [
-    for (final list in tables.lists)
-      'list ${ledger.listLabel(list.id)} name=${list.name} '
-          'createdAt=${_instant(list.createdAt)} '
-          'updatedAt=${_instant(list.updatedAt)}',
-    for (final member in tables.members)
-      'member ${member.id} list=${ledger.listLabel(member.listId)} '
-          'user=${_userName(member.userId)} '
-          'createdAt=${_instant(member.createdAt)}',
-    for (final item in tables.items)
-      'item ${ledger.itemLabel(item.id)} list=${ledger.listLabel(item.listId)} '
-          'name=${item.name} quantity=${item.quantity} unit=${item.unit} '
-          'category=${item.category} checked=${item.checked} '
-          'createdAt=${_instant(item.createdAt)} '
-          'updatedAt=${_instant(item.updatedAt)}',
-  ];
-
   String _describePending(PendingCommand pending) =>
       switch (ledger.commands[pending.id]) {
         final command? => ledger.describe(command),
         null => '${pending.type} ${pending.argumentsJson}',
       };
 
-  String _userName(String userId) =>
-      users
-          .where((user) => user.id == userId)
-          .map((user) => user.name)
-          .firstOrNull ??
-      userId;
-
-  static String? _differenceOf({
-    required Iterable<String> expected,
-    required Iterable<String> actual,
-  }) {
-    final expectedRows = expected.toSet();
-    final actualRows = actual.toSet();
-    final difference = [
-      for (final row in expectedRows.difference(actualRows).toList()..sort())
-        '  - $row',
-      for (final row in actualRows.difference(expectedRows).toList()..sort())
-        '  + $row',
-    ];
-    return difference.isEmpty ? null : difference.join('\n');
-  }
-
-  static String _instant(DateTime dateTime) =>
-      dateTime.toUtc().toIso8601String();
-
   static CheckViolation? _violation(String check, List<String> details) =>
       details.isEmpty ? null : (check: check, details: details);
 }
+
+List<String> _rowsOf(
+  DeviceTables tables,
+  ServerLedger ledger,
+  List<SimulatedUser> users,
+) => [
+  for (final list in tables.lists)
+    'list ${ledger.listLabel(list.id)} name=${list.name} '
+        'createdAt=${_instant(list.createdAt)} '
+        'updatedAt=${_instant(list.updatedAt)}',
+  for (final member in tables.members)
+    'member ${member.id} list=${ledger.listLabel(member.listId)} '
+        'user=${_userName(member.userId, users)} '
+        'createdAt=${_instant(member.createdAt)}',
+  for (final item in tables.items)
+    'item ${ledger.itemLabel(item.id)} list=${ledger.listLabel(item.listId)} '
+        'name=${item.name} quantity=${item.quantity} unit=${item.unit} '
+        'category=${item.category} checked=${item.checked} '
+        'createdAt=${_instant(item.createdAt)} '
+        'updatedAt=${_instant(item.updatedAt)}',
+];
+
+String _userName(String userId, List<SimulatedUser> users) =>
+    users
+        .where((user) => user.id == userId)
+        .map((user) => user.name)
+        .firstOrNull ??
+    userId;
+
+String? _differenceOf({
+  required Iterable<String> expected,
+  required Iterable<String> actual,
+}) {
+  final expectedRows = expected.toSet();
+  final actualRows = actual.toSet();
+  final difference = [
+    for (final row in expectedRows.difference(actualRows).toList()..sort())
+      '  - $row',
+    for (final row in actualRows.difference(expectedRows).toList()..sort())
+      '  + $row',
+  ];
+  return difference.isEmpty ? null : difference.join('\n');
+}
+
+String _instant(DateTime dateTime) => dateTime.toUtc().toIso8601String();

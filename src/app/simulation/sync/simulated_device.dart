@@ -1,4 +1,5 @@
 import 'package:app/app/core/sync/app_database.dart';
+import 'package:app/app/core/sync/sync_command.dart';
 import 'package:app/app/core/sync/sync_round.dart';
 import 'package:app/app/features/shopping_list/shopping_list_repository.dart';
 import 'package:clock/clock.dart';
@@ -31,7 +32,8 @@ typedef DeviceTables = ({
 });
 
 typedef SyncAttempt = ({
-  String fault,
+  SyncFault fault,
+  bool isOffline,
   SyncRoundOutcome outcome,
   RecordedSyncResponse? response,
 });
@@ -45,10 +47,8 @@ class SimulatedDevice {
     required void Function(RecordedSyncResponse response) onSyncResponse,
   }) {
     _adapter = FaultInjectingHttpClientAdapter(
-      onSyncResponse: (response) {
-        _lastSyncResponse = response;
-        onSyncResponse(response);
-      },
+      onSyncRequest: () => _onSyncRequest(),
+      onSyncResponse: onSyncResponse,
     );
     _client = Dio(BaseOptions(baseUrl: configuration.apiUrl))
       ..httpClientAdapter = _adapter;
@@ -76,22 +76,44 @@ class SimulatedDevice {
   late final FaultInjectingHttpClientAdapter _adapter;
   late final Dio _client;
   late final SyncRound _round;
-  RecordedSyncResponse? _lastSyncResponse;
+  late Future<void> Function() _onSyncRequest;
 
   bool get isOffline => _adapter.isOffline;
 
   set isOffline(bool isOffline) => _adapter.isOffline = isOffline;
 
-  Future<SyncAttempt> sync(SyncFault fault) async {
-    final effectiveFault = isOffline ? 'offline' : fault.name;
-    _adapter.fault = fault;
-    _lastSyncResponse = null;
-    final outcome = await _round.run();
-    return (
-      fault: effectiveFault,
-      outcome: outcome,
-      response: _lastSyncResponse,
-    );
+  /// Starts one round per fault at the same time. [duringRound] runs once,
+  /// when the first sync request reaches the adapter, and every request waits
+  /// for it before it is sent.
+  Future<List<SyncAttempt>> sync(
+    List<SyncFault> faults, {
+    Future<void> Function()? duringRound,
+  }) async {
+    Future<void>? writesDuringRound;
+    _onSyncRequest = () async {
+      await (writesDuringRound ??= duringRound?.call());
+    };
+    _adapter.faults.addAll(faults);
+    final cancelTokens = [for (final _ in faults) CancelToken()];
+    final outcomes = await Future.wait([
+      for (final cancelToken in cancelTokens)
+        _round.run(cancelToken: cancelToken),
+    ]);
+    // The adapter turns an error of the writes into a failed round.
+    await writesDuringRound;
+    final exchanges = [
+      for (final cancelToken in cancelTokens)
+        _adapter.exchanges.remove(cancelToken)!,
+    ];
+    return [
+      for (final (index, (:fault, :response)) in exchanges.indexed)
+        (
+          fault: fault,
+          isOffline: isOffline,
+          outcome: outcomes[index],
+          response: response,
+        ),
+    ];
   }
 
   Future<DeviceTables> readTables() async => (
@@ -108,6 +130,17 @@ class SimulatedDevice {
       database.pendingCommands,
     )..orderBy([(command) => OrderingTerm.asc(command.sequence)])).get(),
   );
+
+  /// Re-applies the pending commands in sequence order, like the rebase at the
+  /// end of a sync round, and returns the tables before and after.
+  Future<({DeviceTables before, DeviceTables after})> replayPendingCommands() =>
+      database.transaction(() async {
+        final before = await readTables();
+        for (final pending in before.pendingCommands) {
+          await applySyncCommand(database, SyncCommand.fromPending(pending));
+        }
+        return (before: before, after: await readTables());
+      });
 
   Future<void> close() async {
     _client.close(force: true);

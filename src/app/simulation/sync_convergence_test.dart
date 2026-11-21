@@ -24,6 +24,12 @@ void main() {
     () => _runSeeds(configuration, SimulationMode.parallel),
     timeout: Timeout.none,
   );
+
+  test(
+    'sync of five devices with overlapping rounds of one device converges to the server state',
+    () => _runSeeds(configuration, SimulationMode.overlapping),
+    timeout: Timeout.none,
+  );
 }
 
 Future<void> _runSeeds(

@@ -75,22 +75,30 @@ class SimulationConfiguration {
     return value;
   }
 
+  static const _allowedFaults = [
+    SyncFault.requestLost,
+    SyncFault.responseLost,
+    SyncFault.serverUnavailable,
+    SyncFault.failedAfterProcessing,
+    SyncFault.truncatedResponse,
+  ];
+
   static List<SyncFault> _faults(String? names) {
     if (names == null) {
-      return [SyncFault.requestLost, SyncFault.responseLost];
+      return _allowedFaults;
     }
     return {
       for (final name in names.split(',').map((name) => name.trim()))
         if (name.isNotEmpty)
-          switch (name) {
-            'requestLost' => SyncFault.requestLost,
-            'responseLost' => SyncFault.responseLost,
-            _ => throw ArgumentError.value(
+          _allowedFaults.firstWhere(
+            (fault) => fault.name == name,
+            orElse: () => throw ArgumentError.value(
               names,
               'SYNC_SIMULATION_FAULTS',
-              'Allowed are requestLost and responseLost',
+              'Allowed are '
+                  '${_allowedFaults.map((fault) => fault.name).join(', ')}',
             ),
-          },
+          ),
     }.toList();
   }
 }

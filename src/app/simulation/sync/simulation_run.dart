@@ -13,7 +13,7 @@ import 'server_ledger.dart';
 import 'simulated_device.dart';
 import 'simulation_configuration.dart';
 
-enum SimulationMode { sequential, parallel }
+enum SimulationMode { sequential, parallel, overlapping }
 
 enum _Action {
   ensureList(3),
@@ -24,6 +24,8 @@ enum _Action {
   shareList(2),
   leaveList(1),
   sync(8),
+  syncWithWritesDuringRound(6),
+  overlappingSyncs(4),
   goOffline(1),
   goOnline(6),
   burst(4);
@@ -32,6 +34,12 @@ enum _Action {
 
   final int weight;
 }
+
+typedef _WritesDraw = ({
+  bool isChosen,
+  int count,
+  List<({double actionRoll, double targetRoll})> writes,
+});
 
 /// Every step draws the same amount of randomness regardless of the state, so
 /// a shorter run of the same seed replays a prefix of the longer schedule.
@@ -45,7 +53,16 @@ typedef _StepDraw = ({
   int burstSize,
   bool isBurstWithMembership,
   List<double> burstFaultRolls,
+  double secondFaultRoll,
+  _WritesDraw writes,
+  List<_WritesDraw> burstWrites,
 });
+
+class _CheckFailed implements Exception {
+  const _CheckFailed(this.violation);
+
+  final CheckViolation violation;
+}
 
 class SimulationRun {
   SimulationRun({
@@ -55,6 +72,18 @@ class SimulationRun {
   });
 
   static const _maximumFinishPasses = 5;
+  static const _localWrites = [
+    _Action.ensureList,
+    _Action.addItem,
+    _Action.renameItem,
+    _Action.toggleChecked,
+    _Action.deleteItem,
+  ];
+  static const _faultsThatFailTheRound = {
+    SyncFault.serverUnavailable,
+    SyncFault.failedAfterProcessing,
+    SyncFault.truncatedResponse,
+  };
   static final _startTime = DateTime.utc(2026, 6, 1, 12);
   static const _clockSkews = [
     Duration.zero,
@@ -72,10 +101,10 @@ class SimulationRun {
   final _discardedRounds = <String>[];
   final _devices = <SimulatedDevice>[];
   final _users = <SimulatedUser>[];
-  // Listed twice so that at least half of the rounds run without a fault.
+  // Listed once per fault (and at least once) so that at least half of the
+  // rounds run without a fault.
   late final _faultChoices = [
-    SyncFault.none,
-    SyncFault.none,
+    ...List.filled(max(configuration.faults.length, 1), SyncFault.none),
     ...configuration.faults,
   ];
   var _step = 0;
@@ -86,7 +115,7 @@ class SimulationRun {
     try {
       await _createUsersAndDevices(random);
       for (final device in _devices) {
-        _stepLog.add('step 0 ${await _sync(device, SyncFault.none)}');
+        _stepLog.add('step 0 ${await _sync(device, [SyncFault.none])}');
       }
       for (_step = 1; _step <= configuration.stepCount; _step++) {
         _stepLog.add('step $_step ${await _runStep(_drawStep(random))}');
@@ -112,6 +141,8 @@ class SimulationRun {
         discardedRounds: _discardedRounds,
       ).run(includesLastWriterWins: mode == SimulationMode.sequential);
       return violations.isEmpty ? null : _failure(violations);
+    } on _CheckFailed catch (failure) {
+      return _failure([failure.violation]);
     } on Object catch (error, stackTrace) {
       return _failure([
         (check: 'unexpected error', details: ['$error\n$stackTrace']),
@@ -185,71 +216,138 @@ class SimulationRun {
     burstSize: 2 + random.nextInt(_devices.length - 1),
     isBurstWithMembership: random.nextBool(),
     burstFaultRolls: List.generate(_devices.length, (_) => random.nextDouble()),
+    secondFaultRoll: random.nextDouble(),
+    writes: _drawWrites(random),
+    burstWrites: List.generate(_devices.length, (_) => _drawWrites(random)),
+  );
+
+  static _WritesDraw _drawWrites(Random random) => (
+    isChosen: random.nextInt(3) == 0,
+    count: 1 + random.nextInt(2),
+    writes: List.generate(
+      2,
+      (_) => (actionRoll: random.nextDouble(), targetRoll: random.nextDouble()),
+    ),
   );
 
   Future<String> _runStep(_StepDraw draw) async {
     final device = _devices[draw.deviceIndex];
-    final repository = device.repository;
     final tables = await device.readTables();
-    final lists = tables.lists;
-    final items = tables.items;
-    final enabledActions = [
-      for (final action in _Action.values)
-        if (switch (action) {
-          _Action.ensureList => lists.isEmpty,
-          _Action.addItem => lists.isNotEmpty,
-          _Action.renameItem ||
-          _Action.toggleChecked ||
-          _Action.deleteItem => items.isNotEmpty,
-          _Action.shareList ||
-          _Action.leaveList => !device.isOffline && lists.isNotEmpty,
-          _Action.goOffline => !device.isOffline,
-          _Action.goOnline => device.isOffline,
-          _Action.sync => true,
-          _Action.burst => mode == SimulationMode.parallel,
-        })
-          for (var count = 0; count < action.weight; count++) action,
-    ];
-    return switch (_pick(enabledActions, draw.actionRoll)) {
-      _Action.ensureList => _write(
-        device,
-        'ensureList',
-        () => repository.ensureList('list-s$_step'),
+    final action = _pick(
+      _weighted(
+        _Action.values.where((action) => _isEnabled(action, device, tables)),
       ),
-      _Action.addItem => _write(
+      draw.actionRoll,
+    );
+    final fault = _pick(_faultChoices, draw.variantRoll);
+    return switch (action) {
+      _Action.ensureList ||
+      _Action.addItem ||
+      _Action.renameItem ||
+      _Action.toggleChecked ||
+      _Action.deleteItem => _performWrite(
         device,
-        'addItem',
-        () => repository.addItem(_pick(lists, draw.targetRoll), 'item-s$_step'),
-      ),
-      _Action.renameItem => _write(
-        device,
-        'renameItem',
-        () => repository.renameItem(
-          _pick(items, draw.targetRoll),
-          'renamed-s$_step',
-        ),
-      ),
-      _Action.toggleChecked => _write(
-        device,
-        'toggleChecked',
-        () => repository.toggleChecked(_pick(items, draw.targetRoll)),
-      ),
-      _Action.deleteItem => _write(
-        device,
-        'deleteItem',
-        () => repository.deleteItem(_pick(items, draw.targetRoll)),
+        action,
+        tables,
+        draw.targetRoll,
+        's$_step',
       ),
       _Action.shareList => _share(
         device,
-        _pick(lists, draw.targetRoll),
+        _pick(tables.lists, draw.targetRoll),
         _pick(_otherUsersOf(device), draw.userRoll),
       ),
-      _Action.leaveList => _leave(device, _pick(lists, draw.targetRoll)),
-      _Action.sync => _sync(device, _pick(_faultChoices, draw.variantRoll)),
+      _Action.leaveList => _leave(device, _pick(tables.lists, draw.targetRoll)),
+      _Action.sync => _sync(device, [fault]),
+      _Action.syncWithWritesDuringRound => _sync(device, [
+        fault,
+      ], writes: draw.writes),
+      _Action.overlappingSyncs => _sync(device, [
+        fault,
+        _pick(_faultChoices, draw.secondFaultRoll),
+      ], writes: draw.writes.isChosen ? draw.writes : null),
       _Action.goOffline => _setOffline(device, isOffline: true),
       _Action.goOnline => _setOffline(device, isOffline: false),
       _Action.burst => _burst(draw),
     };
+  }
+
+  bool _isEnabled(
+    _Action action,
+    SimulatedDevice device,
+    DeviceTables tables,
+  ) => switch (action) {
+    _Action.ensureList => tables.lists.isEmpty,
+    _Action.addItem => tables.lists.isNotEmpty,
+    _Action.renameItem ||
+    _Action.toggleChecked ||
+    _Action.deleteItem => tables.items.isNotEmpty,
+    _Action.shareList ||
+    _Action.leaveList => !device.isOffline && tables.lists.isNotEmpty,
+    _Action.goOffline => !device.isOffline,
+    _Action.goOnline => device.isOffline,
+    _Action.sync || _Action.syncWithWritesDuringRound => true,
+    _Action.overlappingSyncs => mode == SimulationMode.overlapping,
+    _Action.burst => mode != SimulationMode.sequential,
+  };
+
+  Future<String> _performWrite(
+    SimulatedDevice device,
+    _Action action,
+    DeviceTables tables,
+    double targetRoll,
+    String nameSuffix,
+  ) {
+    final repository = device.repository;
+    return _write(
+      device,
+      action.name,
+      () => switch (action) {
+        _Action.ensureList => repository.ensureList('list-$nameSuffix'),
+        _Action.addItem => repository.addItem(
+          _pick(tables.lists, targetRoll),
+          'item-$nameSuffix',
+        ),
+        _Action.renameItem => repository.renameItem(
+          _pick(tables.items, targetRoll),
+          'renamed-$nameSuffix',
+        ),
+        _Action.toggleChecked => repository.toggleChecked(
+          _pick(tables.items, targetRoll),
+        ),
+        _Action.deleteItem => repository.deleteItem(
+          _pick(tables.items, targetRoll),
+        ),
+        _ => throw ArgumentError.value(action, 'action', 'Not a local write'),
+      },
+    );
+  }
+
+  Future<List<String>> _writeDuringRound(
+    SimulatedDevice device,
+    _WritesDraw draw,
+  ) async {
+    final descriptions = <String>[];
+    for (final (index, (:actionRoll, :targetRoll))
+        in draw.writes.take(draw.count).indexed) {
+      final tables = await device.readTables();
+      final action = _pick(
+        _weighted(
+          _localWrites.where((action) => _isEnabled(action, device, tables)),
+        ),
+        actionRoll,
+      );
+      descriptions.add(
+        await _performWrite(
+          device,
+          action,
+          tables,
+          targetRoll,
+          's$_step-${device.name}-w${index + 1}',
+        ),
+      );
+    }
+    return descriptions;
   }
 
   Future<String> _write(
@@ -307,14 +405,80 @@ class SimulationRun {
     }
   }
 
-  Future<String> _sync(SimulatedDevice device, SyncFault fault) async {
-    final attempt = await device.sync(fault);
-    if (attempt.outcome == SyncRoundOutcome.commandsDiscarded) {
-      _discardedRounds.add('device ${device.name} in step $_step');
+  /// Throws [_CheckFailed] if an outcome contradicts its fault or if the
+  /// pending commands are not visible afterwards.
+  Future<String> _sync(
+    SimulatedDevice device,
+    List<SyncFault> faults, {
+    _WritesDraw? writes,
+  }) async {
+    final writeDescriptions = <String>[];
+    final List<SyncAttempt> attempts;
+    try {
+      attempts = await device.sync(
+        faults,
+        duringRound: writes == null
+            ? null
+            : () async => writeDescriptions.addAll(
+                await _writeDuringRound(device, writes),
+              ),
+      );
+    } on Object catch (error, stackTrace) {
+      throw _CheckFailed((
+        check: 'round outcome',
+        details: [
+          'the sync of ${_labelOf(device)} in step $_step with the faults '
+              '${faults.map((fault) => fault.name).join(', ')} threw '
+              '$error\n$stackTrace',
+        ],
+      ));
     }
-    return '${_labelOf(device)} sync fault=${attempt.fault} '
-        'outcome=${attempt.outcome.name} '
-        '${_ledger.describeResponse(attempt.response)}';
+    final rounds = attempts.map(
+      (attempt) =>
+          'fault=${attempt.isOffline ? 'offline' : attempt.fault.name} '
+          'outcome=${attempt.outcome.name} '
+          '${_ledger.describeResponse(attempt.response)}',
+    );
+    final description =
+        '${_labelOf(device)} '
+        '${attempts.length == 1 ? 'sync' : 'overlapping syncs'} '
+        '${rounds.join(' || ')}'
+        '${writeDescriptions.isEmpty ? '' : '; written during the round: ${writeDescriptions.join(', ')}'}';
+    for (final attempt in attempts) {
+      if (attempt.outcome == SyncRoundOutcome.commandsDiscarded) {
+        _discardedRounds.add('device ${device.name} in step $_step');
+      }
+      if (!attempt.isOffline &&
+          _faultsThatFailTheRound.contains(attempt.fault) &&
+          attempt.outcome != SyncRoundOutcome.failed) {
+        throw _CheckFailed((
+          check: 'round outcome',
+          details: [
+            'in step $_step the round with the fault ${attempt.fault.name} '
+                'ended with ${attempt.outcome.name} instead of failed: '
+                '$description',
+          ],
+        ));
+      }
+    }
+    final replay = await device.replayPendingCommands();
+    if (rowDifferenceOf(
+          expected: replay.after,
+          actual: replay.before,
+          ledger: _ledger,
+          users: _users,
+        )
+        case final difference?) {
+      throw _CheckFailed((
+        check: 'check 7 (pending commands visible)',
+        details: [
+          'device ${device.name} in step $_step after: $description',
+          'its rows differ from a replay of its pending commands (- only '
+              'after the replay, + only before it):\n$difference',
+        ],
+      ));
+    }
+    return description;
   }
 
   Future<String> _setOffline(
@@ -326,18 +490,19 @@ class SimulationRun {
   }
 
   Future<String> _burst(_StepDraw draw) async {
-    final (syncDescriptions, membershipDescription) = await (
-      Future.wait([
-        for (final (position, deviceIndex)
-            in draw.burstOrder.take(draw.burstSize).indexed)
-          _sync(
-            _devices[deviceIndex],
-            _pick(_faultChoices, draw.burstFaultRolls[position]),
-          ),
-      ]),
+    final descriptions = await Future.wait<String?>([
+      for (final (position, deviceIndex)
+          in draw.burstOrder.take(draw.burstSize).indexed)
+        _sync(
+          _devices[deviceIndex],
+          [_pick(_faultChoices, draw.burstFaultRolls[position])],
+          writes: draw.burstWrites[position].isChosen
+              ? draw.burstWrites[position]
+              : null,
+        ),
       _burstMembership(draw),
-    ).wait;
-    return 'burst: ${[...syncDescriptions, ?membershipDescription].join(' | ')}';
+    ]);
+    return 'burst: ${descriptions.nonNulls.join(' | ')}';
   }
 
   Future<String?> _burstMembership(_StepDraw draw) async {
@@ -365,7 +530,7 @@ class SimulationRun {
       ];
       for (final device in _devices) {
         _stepLog.add(
-          'finish pass $pass ${await _sync(device, SyncFault.none)}',
+          'finish pass $pass ${await _sync(device, [SyncFault.none])}',
         );
       }
       final tablesAfter = [
@@ -392,7 +557,7 @@ class SimulationRun {
       Duration.zero,
     );
     try {
-      _stepLog.add('reference ${await _sync(reference, SyncFault.none)}');
+      _stepLog.add('reference ${await _sync(reference, [SyncFault.none])}');
       return await reference.readTables();
     } finally {
       await reference.close();
@@ -423,6 +588,11 @@ class SimulationRun {
       listEquals(first.members, second.members) &&
       listEquals(first.items, second.items) &&
       listEquals(first.pendingCommands, second.pendingCommands);
+
+  static List<_Action> _weighted(Iterable<_Action> actions) => [
+    for (final action in actions)
+      for (var count = 0; count < action.weight; count++) action,
+  ];
 
   static T _pick<T>(List<T> candidates, double roll) =>
       candidates[(roll * candidates.length).floor()];
