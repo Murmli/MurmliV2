@@ -213,13 +213,9 @@ class SyncEngine {
       for (final command in sentCommands) command.id: command.type,
     };
 
-    var isFullSnapshotNeeded = false;
     for (final result in results) {
       final status = result['status']! as String;
       if (status == 'rejected' || status == 'ignored') {
-        // The pull only contains rows changed since the token, it would not
-        // revert the optimistic local change of a discarded command.
-        isFullSnapshotNeeded = true;
         talker.info(
           'Sync command ${commandTypes[result['id']]} $status: '
           '${result['reason'] ?? 'no reason'}',
@@ -252,14 +248,8 @@ class SyncEngine {
         await applySyncCommand(database, SyncCommand.fromPending(command));
       }
 
-      await database.writeSyncToken(
-        isFullSnapshotNeeded ? null : body['token']! as String,
-      );
+      await database.writeSyncToken(body['token']! as String);
     });
-
-    if (isFullSnapshotNeeded) {
-      _isSyncRequestedAgain = true;
-    }
   }
 
   Future<List<PendingCommand>> _readPendingCommands() => (database.select(
