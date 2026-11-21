@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Murmli.Backend.Data.Identity;
 using Murmli.Backend.Data.Products;
+using Murmli.Backend.Data.Shopping;
 
 namespace Murmli.Backend.Data;
 
@@ -13,6 +14,12 @@ public class MurmliDbContext(DbContextOptions<MurmliDbContext> options) : DbCont
     public DbSet<User> Users => Set<User>();
 
     public DbSet<DeletedUser> DeletedUsers => Set<DeletedUser>();
+
+    public DbSet<ShoppingList> ShoppingLists => Set<ShoppingList>();
+
+    public DbSet<ShoppingListMember> ShoppingListMembers => Set<ShoppingListMember>();
+
+    public DbSet<ShoppingListItem> ShoppingListItems => Set<ShoppingListItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
