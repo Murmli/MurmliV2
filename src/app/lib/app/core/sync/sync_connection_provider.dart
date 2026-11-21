@@ -1,6 +1,6 @@
+import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../api/api_client_provider.dart';
 import '../authentication/signed_in_account_provider.dart';
 import '../flavor/app_endpoints_provider.dart';
 import '../logging/talker_provider.dart';
@@ -18,7 +18,8 @@ Future<void> syncConnection(Ref ref) async {
     }
     return;
   }
-  final syncEndpoint = ref.watch(appEndpointsProvider).sync;
+  final endpoints = ref.watch(appEndpointsProvider);
+  final syncEndpoint = endpoints.sync;
   if (syncEndpoint == null) {
     return;
   }
@@ -26,7 +27,9 @@ Future<void> syncConnection(Ref ref) async {
   await database.connect(
     connector: MurmliBackendConnector(
       syncEndpoint: syncEndpoint,
-      apiClient: ref.read(apiClientProvider),
+      // PowerSync retries failed uploads endlessly while offline, the error
+      // dialog of apiClientProvider would reappear for every attempt.
+      apiClient: Dio(BaseOptions(baseUrl: endpoints.api.toString())),
       fetchJsonWebToken: ref
           .read(signedInAccountProvider.notifier)
           .fetchJsonWebToken,
