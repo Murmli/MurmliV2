@@ -32,7 +32,7 @@ public sealed record SyncListMemberResponse(Guid Id, Guid UserId, DateTimeOffset
 
 public sealed record SyncItemResponse(
     Guid Id,
-    Guid ListId,
+    Guid? ListId,
     string Name,
     double? Quantity,
     string? Unit,

@@ -11,20 +11,24 @@ internal sealed class ShoppingSync(MurmliDbContext context, TimeProvider timePro
     public async Task<SyncResponse> SyncAsync(Guid userId, SyncRequest request, CancellationToken cancellationToken)
     {
         var results = new List<SyncCommandResult>();
+        var discardedTargets = new List<DiscardedTarget>();
         foreach (var command in request.Commands ?? [])
         {
-            results.Add(
-                await context.ExecuteInTransactionAsync(
-                    IsolationLevel.ReadCommitted,
-                    token => ProcessAsync(userId, command, token),
-                    cancellationToken
-                )
+            var result = await context.ExecuteInTransactionAsync(
+                IsolationLevel.ReadCommitted,
+                token => ProcessAsync(userId, command, token),
+                cancellationToken
             );
+            results.Add(result);
+            if (result.Status is "ignored" or "rejected" && TargetOf(command) is { } target)
+            {
+                discardedTargets.Add(target);
+            }
         }
 
         return await context.ExecuteInTransactionAsync(
             IsolationLevel.RepeatableRead,
-            token => PullAsync(userId, results, SyncToken.Decode(request.Token), token),
+            token => PullAsync(userId, results, discardedTargets, SyncToken.Decode(request.Token), token),
             cancellationToken
         );
     }
@@ -260,6 +264,7 @@ internal sealed class ShoppingSync(MurmliDbContext context, TimeProvider timePro
     private async Task<SyncResponse> PullAsync(
         Guid userId,
         IReadOnlyList<SyncCommandResult> results,
+        IReadOnlyList<DiscardedTarget> discardedTargets,
         Dictionary<Guid, long> knownVersions,
         CancellationToken cancellationToken
     )
@@ -292,27 +297,97 @@ internal sealed class ShoppingSync(MurmliDbContext context, TimeProvider timePro
                 ? listItems.Where(item => item.DeletedAt == null)
                 : listItems.Where(item => item.Version > knownVersion);
             items.AddRange((await listItems.ToListAsync(cancellationToken)).Select(ToResponse));
-            changedLists.Add(
-                new SyncListResponse(
-                    list.Id,
-                    list.Name,
-                    list.CreatedAt,
-                    list.UpdatedAt,
-                    isSnapshot,
-                    [.. membersByList[list.Id].Select(member => new SyncListMemberResponse(member.Id, member.UserId, member.CreatedAt))]
-                )
-            );
+            changedLists.Add(ToResponse(list, isSnapshot, membersByList));
         }
 
         var currentListIds = lists.Select(list => list.Id).ToHashSet();
+        var removedListIds = knownVersions.Keys.Where(listId => !currentListIds.Contains(listId)).ToHashSet();
+        await AddDiscardedTargetsAsync(discardedTargets, lists, membersByList, currentListIds, changedLists, items, removedListIds, cancellationToken);
         return new SyncResponse(
             results,
             SyncToken.Encode(lists.ToDictionary(list => list.Id, list => list.Version)),
             changedLists,
             items,
-            [.. knownVersions.Keys.Where(listId => !currentListIds.Contains(listId))]
+            [.. removedListIds]
         );
     }
+
+    private async Task AddDiscardedTargetsAsync(
+        IReadOnlyList<DiscardedTarget> discardedTargets,
+        List<ShoppingList> lists,
+        ILookup<Guid, ShoppingListMember> membersByList,
+        HashSet<Guid> currentListIds,
+        List<SyncListResponse> changedLists,
+        List<SyncItemResponse> items,
+        HashSet<Guid> removedListIds,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var target in discardedTargets.Where(target => target.ListId is not null).DistinctBy(target => (target.ListId, target.ItemId is null)))
+        {
+            var listId = target.ListId!.Value;
+            if (!currentListIds.Contains(listId))
+            {
+                removedListIds.Add(listId);
+            }
+            else if (target.ItemId is null && !changedLists.Any(changedList => changedList.Id == listId))
+            {
+                changedLists.Add(ToResponse(lists.Single(list => list.Id == listId), isSnapshot: false, membersByList));
+            }
+        }
+
+        var itemTargets = discardedTargets
+            .Where(target => target.ItemId is not null)
+            .DistinctBy(target => target.ItemId)
+            .Where(target => !items.Any(item => item.Id == target.ItemId))
+            .ToList();
+        var targetItemIds = itemTargets.Select(target => target.ItemId!.Value).ToList();
+        var existingItems = await context
+            .ShoppingListItems.AsNoTracking()
+            .Where(item => targetItemIds.Contains(item.Id))
+            .ToDictionaryAsync(item => item.Id, cancellationToken);
+        foreach (var target in itemTargets)
+        {
+            var itemId = target.ItemId!.Value;
+            if (!existingItems.TryGetValue(itemId, out var item))
+            {
+                items.Add(Tombstone(itemId, target.ListId));
+            }
+            else if (currentListIds.Contains(item.ListId))
+            {
+                items.Add(ToResponse(item));
+            }
+            else
+            {
+                removedListIds.Add(item.ListId);
+                items.Add(Tombstone(itemId, item.ListId));
+            }
+        }
+    }
+
+    private static DiscardedTarget? TargetOf(SyncCommand command) =>
+        (command.Type, ParseArguments(command.Arguments)) switch
+        {
+            ("createList" or "renameList", { ListId: { } listId }) => new DiscardedTarget(null, listId),
+            ("addItem" or "renameItem" or "setItemChecked" or "deleteItem", { ItemId: { } itemId } arguments) => new DiscardedTarget(
+                itemId,
+                arguments.ListId
+            ),
+            _ => null,
+        };
+
+    private static SyncListResponse ToResponse(ShoppingList list, bool isSnapshot, ILookup<Guid, ShoppingListMember> membersByList) =>
+        new(
+            list.Id,
+            list.Name,
+            list.CreatedAt,
+            list.UpdatedAt,
+            isSnapshot,
+            [.. membersByList[list.Id].Select(member => new SyncListMemberResponse(member.Id, member.UserId, member.CreatedAt))]
+        );
+
+    private static SyncItemResponse Tombstone(Guid itemId, Guid? listId) =>
+        new(itemId, listId, "", null, null, null, false, default, default, true);
 
     private static SyncItemResponse ToResponse(ShoppingListItem item) =>
         new(
@@ -353,4 +428,6 @@ internal sealed class ShoppingSync(MurmliDbContext context, TimeProvider timePro
 
         public SyncCommandResult Rejected(string reason) => SyncCommandResult.Rejected(CommandId, reason);
     }
+
+    private sealed record DiscardedTarget(Guid? ItemId, Guid? ListId);
 }
