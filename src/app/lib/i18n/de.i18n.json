@@ -74,6 +74,8 @@
     "syncUploading": "Änderungen werden hochgeladen",
     "syncOffline": "Offline",
     "syncUnavailable": "Synchronisierung nicht verfügbar",
+    "simulateOffline": "Kein Netzwerk simulieren",
+    "simulatedOfflineActive": "Netzwerksimulation aktiv",
     "actions": "Listenaktionen",
     "showAccountId": "Meine Konto-ID anzeigen",
     "accountIdTitle": "Deine Konto-ID",

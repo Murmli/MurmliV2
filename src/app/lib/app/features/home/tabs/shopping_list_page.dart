@@ -13,6 +13,7 @@ import '../../shopping_list/providers/shopping_list_repository_provider.dart';
 import '../../shopping_list/widgets/add_item_field.dart';
 import '../../shopping_list/widgets/shopping_list_actions_menu.dart';
 import '../../shopping_list/widgets/shopping_list_item_tile.dart';
+import '../../shopping_list/widgets/simulated_offline_button.dart';
 import '../../shopping_list/widgets/sync_status_icon.dart';
 
 @RoutePage()
@@ -59,6 +60,7 @@ class _ShoppingListContent extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SimulatedOfflineButton(),
               const SyncStatusIcon(),
               ShoppingListActionsMenu(list: list),
             ],

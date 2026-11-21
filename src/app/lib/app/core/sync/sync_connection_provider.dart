@@ -6,12 +6,14 @@ import '../flavor/app_endpoints_provider.dart';
 import '../logging/talker_provider.dart';
 import 'murmli_backend_connector.dart';
 import 'power_sync_database_provider.dart';
+import 'simulated_offline_provider.dart';
 
 part 'sync_connection_provider.g.dart';
 
 @Riverpod(keepAlive: true)
 Future<void> syncConnection(Ref ref) async {
-  if (ref.watch(signedInAccountProvider) == null) {
+  final isSimulatedOffline = ref.watch(simulatedOfflineProvider);
+  if (ref.watch(signedInAccountProvider) == null || isSimulatedOffline) {
     if (ref.read(powerSyncDatabaseProvider.exists)) {
       final database = await ref.read(powerSyncDatabaseProvider.future);
       await database.disconnect();
