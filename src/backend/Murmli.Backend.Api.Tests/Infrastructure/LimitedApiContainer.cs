@@ -33,6 +33,8 @@ internal sealed class LimitedApiContainer : IAsyncDisposable
 
     public Uri BaseAddress => new UriBuilder(Uri.UriSchemeHttp, api.Hostname, api.GetMappedPublicPort(ApiPort)).Uri;
 
+    public string DatabaseConnectionString => new NpgsqlConnectionStringBuilder(postgres.GetConnectionString()) { Database = "murmli" }.ConnectionString;
+
     public static async Task<LimitedApiContainer> StartAsync(
         double cpuCount = 0.25,
         long memoryBytes = 512L * 1024 * 1024,
