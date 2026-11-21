@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/api/api_client_provider.dart';
@@ -22,5 +23,6 @@ Future<ShoppingListRepository> shoppingListRepository(Ref ref) async {
         ?.requestSync(isDebounced: isDebounced),
     apiClient: apiClient,
     fetchJsonWebToken: fetchJsonWebToken,
+    clock: const Clock(),
   );
 }

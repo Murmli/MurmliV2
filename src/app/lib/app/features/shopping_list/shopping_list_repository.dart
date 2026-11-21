@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
@@ -11,12 +12,14 @@ class ShoppingListRepository {
     required this.requestSync,
     required this.apiClient,
     required this.fetchJsonWebToken,
+    required this.clock,
   });
 
   final AppDatabase database;
   final void Function({bool isDebounced}) requestSync;
   final Dio apiClient;
   final Future<String?> Function() fetchJsonWebToken;
+  final Clock clock;
 
   Stream<ShoppingList?> watchFirstList() =>
       _firstListQuery().watchSingleOrNull();
@@ -106,7 +109,7 @@ class ShoppingListRepository {
       id: const Uuid().v4(),
       type: type,
       arguments: arguments,
-      occurredAt: DateTime.now().toUtc(),
+      occurredAt: clock.now().toUtc(),
     );
     await applySyncCommand(database, command);
     await database.into(database.pendingCommands).insert(command.toPending());
