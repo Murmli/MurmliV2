@@ -1,30 +1,30 @@
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Murmli.Backend.Data;
 using Npgsql;
 
 namespace Murmli.Backend.Api.Shopping;
 
 internal sealed partial class ShoppingChangeListener(
-    IConfiguration configuration,
+    IServiceScopeFactory scopeFactory,
     SyncEventHub hub,
     TimeProvider timeProvider,
     ILogger<ShoppingChangeListener> logger
 ) : BackgroundService
 {
     private static readonly TimeSpan ReconnectDelay = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan ProbeInterval = TimeSpan.FromSeconds(30);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // The DbContext's connection string has the password stripped (Persist Security Info=false)
-        var connectionString = configuration.GetConnectionString("murmli")
-            ?? throw new InvalidOperationException("There is no connection string to listen for shopping changes.");
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await ListenAsync(connectionString, stoppingToken);
+                await ListenAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -45,10 +45,13 @@ internal sealed partial class ShoppingChangeListener(
         }
     }
 
-    private async Task ListenAsync(string connectionString, CancellationToken stoppingToken)
+    private async Task ListenAsync(CancellationToken stoppingToken)
     {
-        await using var connection = new NpgsqlConnection(connectionString);
-        await connection.OpenAsync(stoppingToken);
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<MurmliDbContext>().Database;
+        // The context's connection authenticates like every other database access, in Azure with the Entra token
+        await database.OpenConnectionAsync(stoppingToken);
+        var connection = (NpgsqlConnection)database.GetDbConnection();
         connection.Notification += (_, notification) => OnNotification(notification.Payload);
         await using (var command = new NpgsqlCommand($"LISTEN {ShoppingChangeNotification.Channel}", connection))
         {
@@ -59,7 +62,12 @@ internal sealed partial class ShoppingChangeListener(
         hub.PokeEveryone();
         while (true)
         {
-            await connection.WaitAsync(stoppingToken);
+            if (!await connection.WaitAsync(ProbeInterval, stoppingToken))
+            {
+                // A silently dropped connection only fails on use, waiting alone would never notice
+                await using var probe = new NpgsqlCommand("SELECT 1", connection);
+                await probe.ExecuteNonQueryAsync(stoppingToken);
+            }
         }
     }
 
