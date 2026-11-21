@@ -1,0 +1,43 @@
+flutter_adaptive_studio:
+  android:
+    icon:
+      adaptive:
+        foreground: assets/icons/murmli_icon_foreground.svg
+        background: "#f57f17"
+        monochrome: assets/icons/murmli_icon_foreground.svg
+        safe_zone: fit
+      round: false
+      play_store: true
+    splash:
+      background: "#f57f17"
+      background_dark: "#f57f17"
+      image: assets/icons/murmli_icon_foreground.svg
+  ios:
+    icon:
+      image: assets/icons/murmli_icon_foreground.svg
+      background: "#f57f17"
+      dark: assets/icons/murmli_icon_dark_production.svg
+      tinted: assets/icons/murmli_icon_foreground.svg
+  flavors:
+    local:
+      android:
+        icon:
+          play_store: false
+          adaptive:
+            background: "#e53935"
+        splash: null
+      ios:
+        icon:
+          background: "#e53935"
+          dark: assets/icons/murmli_icon_dark_local.svg
+    development:
+      android:
+        icon:
+          play_store: false
+          adaptive:
+            background: "#1e88e5"
+        splash: null
+      ios:
+        icon:
+          background: "#1e88e5"
+          dark: assets/icons/murmli_icon_dark_development.svg
