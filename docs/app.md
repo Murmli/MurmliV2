@@ -22,6 +22,38 @@ Flutter-App in `src/app`, Pfade relativ dazu. Siehe [apple.md](apple.md), [googl
 - Xcode-Scheme `Runner` hat keinen Flavor: `appFlavor` käme aus der zuletzt von der CLI geschriebenen, meist leeren `ios/Flutter/Generated.xcconfig` (`flavorProvider` wirft beim Start `StateError`).
 - Nur Swift Package Manager. CocoaPods-Plugins bräuchten im Podfile die Zuordnung jeder Flavor-Configuration (`'Debug-local' => :debug`, `'Profile-local' => :release`, `'Release-local' => :release`).
 
+## Icons und Splash
+
+Launcher-Icons und Splash erzeugt [flutter_adaptive_studio](https://pub.dev/packages/flutter_adaptive_studio) aus `flutter_adaptive_studio.yaml`. Die erzeugten Dateien unter `android/` und `ios/` sind committet und werden nie von Hand geändert.
+
+| Flavor | Icon-Hintergrund | Android | iOS |
+| --- | --- | --- | --- |
+| `production` | `#f57f17` | `src/main/res` (Rückfall für alle Flavors) | `AppIcon` (auch `Debug`, `Release`, `Profile`) |
+| `development` | `#1e88e5` | `src/development/res` | `AppIcon-development` |
+| `local` | `#e53935` | `src/local/res` | `AppIcon-local` |
+
+- Quellen in `assets/icons/`: `murmli_icon_foreground.svg` (weißer Hamster mit echten Löchern, transparent) für Vordergrund, Monochrom (Android 13), iOS hell und getönt sowie Splash, `murmli_icon_dark_<flavor>.svg` für iOS 18 dunkel. Beide aus `murmli_icon.vectorcraft` (VectorCraft) exportiert, SVG ohne `<style>` (verwirft das Tool still).
+- Jeder `<path>` der Quellen bleibt unter 32.767 Zeichen (derzeit Hut, Hutband, Körper samt Löchern): Längere `pathData` ersetzt aapt2 still durch `STRING_TOO_LARGE`, Android zeigt dann für Icon und Splash sein Standard-Icon (Raster mit Android-Kopf). Prüfen per `aapt2 dump xmltree --file res/drawable/ic_launcher_foreground.xml <apk>`.
+- Splash: Orange mit weißem Hamster auf Android und iOS, für alle Flavors gleich (Flavor-Einträge mit `splash: null` unter `android` und `ios`).
+
+Neu erzeugen (in `src/app`, nach Änderungen an Config oder Quellen):
+
+```sh
+fvm dart run flutter_adaptive_studio doctor
+fvm dart run flutter_adaptive_studio generate
+fvm dart run flutter_adaptive_studio generate --flavor local
+fvm dart run flutter_adaptive_studio generate --flavor development
+rm lib/fas_splash.g.dart ios/Runner.xcodeproj/project.pbxproj.bak
+```
+
+- dev_dependency mit fester Version (ohne `^`): nur gezielt erhöhen und dann die Ausgabe prüfen, das Paket ändert sich schnell.
+- Ohne `--flavor` schreibt das Tool nach `src/main` bzw. `AppIcon`, ein Flavor-Lauf nur in seinen Overlay bzw. `AppIcon-<flavor>` samt `project.pbxproj`.
+- `lib/fas_splash.g.dart` (In-App-Splash, ungenutzt) entsteht bei jedem Lauf mit Splash, `project.pbxproj.bak` bei jedem Flavor-Lauf: beide löschen.
+- Optional `fvm dart run flutter_adaptive_studio preview` für eine Vorschau der Masken, schreibt `flutter_adaptive_studio/preview/icon_preview.html`, danach den Ordner löschen.
+- Fallen Quellen oder Optionen weg, löscht das Tool nicht alles: vorher zurücksetzen (im Repo-Root `git restore --staged --worktree -- src/app/android src/app/ios` und `git clean -fd -- src/app/android src/app/ios`, löscht auch ungetrackte Nicht-Icon-Dateien dort).
+- `FileSystemException` mit errno 1224: Ein anderer Prozess (meist VS Code) hält eine erzeugte Datei offen, schließen und wiederholen.
+- Neuer Flavor: Eintrag unter `flavors` (mit `play_store: false` und `splash: null` unter `android` und `ios`) und `generate --flavor <flavor>`.
+
 ## API-Zugriff
 
 - `GET /v1/users/me` (erster Aufruf, bei der [Anmeldung](#anmeldung)) setzt das JWT selbst. Entschieden, nicht gebaut: Interceptor für alle Requests mit [#54](https://github.com/Murmli/MurmliV2/issues/54), dann entfällt der Punkt.
@@ -74,6 +106,9 @@ Ablauf: [authentication.md](authentication.md#anmeldung). `signedInAccountProvid
 
 | Entscheidung | Grund |
 | --- | --- |
+| Icons und Splash mit `flutter_adaptive_studio` statt `flutter_launcher_icons`, `icons_launcher` oder `flutter_native_splash` | SVG als Quelle mit Safe-Zone-Anpassung, ein 1024er-iOS-Icon samt iOS-18-Varianten, Flavor-Icons samt Xcode-Verdrahtung aus einer Datei. Verworfen (2026-11-21): `flutter_launcher_icons` (seit Juni 2025 kein Release), `icons_launcher` und `flutter_native_splash` (nur PNG). Risiko: junges Paket mit einem Maintainer. |
+| `flutter_adaptive_studio` als dev_dependency mit fester Version statt global installiert | Version steht in `pubspec.yaml` und `pubspec.lock` und kommt mit `pub get`, ohne globale Installation, die zudem andere Projekte überschriebe. Dafür lösen seine Abhängigkeiten (`image`, `xml`, `yaml` u. a.) mit denen der App auf. |
+| Flavor-Läufe mit `splash: null` und `play_store: false`, Basis mit `round: false` | Flavor-Läufe schrieben sonst den Splash redundant ins Overlay und das Play-Store-Icon nach `src/main` (zuletzt laufender Flavor gewinnt). `round: true` setzt `android:roundIcon` und schreibt dabei das ganze Manifest einzeilig neu, nötig nur für Android 7.1. |
 | Flavor per `--flavor` (`appFlavor`) statt `--dart-define` | Ein Schalter für native Konfiguration und Dart, vergessenes `--dart-define` fiele still auf den Standard. |
 | `local` über HTTP ohne Ausnahmen in App Transport Security oder Network Security Config | `dart:io` (dios Standard-Adapter) unterliegt keinem, die Engine setzt `may_insecurely_connect_to_all_domains` fest (Stand Flutter 3.50). Ausnahmen erst für nativen HTTP-Stack (WebView, `cupertino_http`, `cronet_http`), nur für `local`. |
 | `local` über HTTP statt HTTPS | Verworfen (2026-11-17): bräuchte Aspires Entwicklerzertifikat (experimentelle API) in `auth` und API und Vertrauen in jedem Simulator und Emulator (`dart:io` ignoriert auf Android Nutzer-CAs) und deckte `10.0.2.2` nicht ab. |
