@@ -20,7 +20,8 @@ internal sealed class ShoppingSync(MurmliDbContext context, TimeProvider timePro
                 cancellationToken
             );
             results.Add(result);
-            if (result.Status is "ignored" or "rejected" && TargetOf(command) is { } target)
+            // The original verdict of a duplicate is unknown, the command may have been discarded
+            if (result.Status is "ignored" or "rejected" or "duplicate" && TargetOf(command) is { } target)
             {
                 discardedTargets.Add(target);
             }
