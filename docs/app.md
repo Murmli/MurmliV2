@@ -33,6 +33,7 @@ Launcher-Icons und Splash erzeugt [flutter_adaptive_studio](https://pub.dev/pack
 | `local` | `#e53935` | `src/local/res` | `AppIcon-local` |
 
 - Quellen in `assets/icons/`: `murmli_icon_foreground.svg` (weißer Hamster mit echten Löchern, transparent) für Vordergrund, Monochrom (Android 13), iOS hell und getönt sowie Splash, `murmli_icon_dark_<flavor>.svg` für iOS 18 dunkel. Beide aus `murmli_icon.vectorcraft` (VectorCraft) exportiert, SVG ohne `<style>` (verwirft das Tool still).
+- Jeder `<path>` der Quellen bleibt unter 32.767 Zeichen (derzeit Hut, Hutband, Körper samt Löchern): Längere `pathData` ersetzt aapt2 still durch `STRING_TOO_LARGE`, Android zeigt dann für Icon und Splash sein Standard-Icon (Raster mit Android-Kopf). Prüfen per `aapt2 dump xmltree --file res/drawable/ic_launcher_foreground.xml <apk>`.
 - Splash: Orange mit weißem Hamster auf Android und iOS, für alle Flavors gleich (Flavor-Einträge mit `splash: null` unter `android` und `ios`).
 
 Neu erzeugen (in `src/app`, nach Änderungen an Config oder Quellen):
