@@ -215,6 +215,196 @@ namespace Murmli.Backend.Data.Migrations
 
                     b.ToTable("product_import_runs", "products");
                 });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Shopping.ProcessedCommand", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_processed_commands");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_processed_commands_user_id");
+
+                    b.ToTable("processed_commands", "shopping");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Shopping.ShoppingList", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset>("NameChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("name_changed_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("Version")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_lists");
+
+                    b.ToTable("lists", "shopping");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Shopping.ShoppingListItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .HasColumnType("text")
+                        .HasColumnName("category");
+
+                    b.Property<bool>("Checked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("checked");
+
+                    b.Property<DateTimeOffset>("CheckedChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_changed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("ListId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("list_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset>("NameChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("name_changed_at");
+
+                    b.Property<double?>("Quantity")
+                        .HasColumnType("double precision")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("Unit")
+                        .HasColumnType("text")
+                        .HasColumnName("unit");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_items");
+
+                    b.HasIndex("ListId", "Version")
+                        .HasDatabaseName("ix_items_list_id_version");
+
+                    b.ToTable("items", "shopping");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Shopping.ShoppingListMember", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("ListId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("list_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_list_members");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_list_members_user_id");
+
+                    b.HasIndex("ListId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_list_members_list_id_user_id");
+
+                    b.ToTable("list_members", "shopping");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Shopping.ProcessedCommand", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_processed_commands_users_user_id");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Shopping.ShoppingListItem", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Shopping.ShoppingList", null)
+                        .WithMany()
+                        .HasForeignKey("ListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_items_lists_list_id");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Shopping.ShoppingListMember", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Shopping.ShoppingList", null)
+                        .WithMany()
+                        .HasForeignKey("ListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_list_members_lists_list_id");
+
+                    b.HasOne("Murmli.Backend.Data.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_list_members_users_user_id");
+                });
 #pragma warning restore 612, 618
         }
     }
