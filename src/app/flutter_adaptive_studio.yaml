@@ -18,6 +18,10 @@ flutter_adaptive_studio:
       background: "#f57f17"
       dark: assets/icons/murmli_icon_dark_production.svg
       tinted: assets/icons/murmli_icon_foreground.svg
+    splash:
+      background: "#f57f17"
+      background_dark: "#f57f17"
+      image: assets/icons/murmli_icon_foreground.svg
   flavors:
     local:
       android:
@@ -30,6 +34,7 @@ flutter_adaptive_studio:
         icon:
           background: "#e53935"
           dark: assets/icons/murmli_icon_dark_local.svg
+        splash: null
     development:
       android:
         icon:
@@ -41,3 +46,4 @@ flutter_adaptive_studio:
         icon:
           background: "#1e88e5"
           dark: assets/icons/murmli_icon_dark_development.svg
+        splash: null
