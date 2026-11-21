@@ -1,7 +1,9 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Murmli.Backend.Api.AuthService;
 using Murmli.Backend.Api.Extensions;
+using Murmli.Backend.Api.Shopping;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Identity;
 using Npgsql;
@@ -64,6 +66,11 @@ internal sealed partial class UserRegistry(
         context.DeletedUsers.Add(new DeletedUser { AuthUserId = authUserId, DeletedAt = now });
         await context.SaveChangesAsync(cancellationToken);
 
+        if (userId is { } existingUserId)
+        {
+            await LeaveShoppingListsAsync(existingUserId, cancellationToken);
+        }
+
         await context.Users.Where(user => user.AuthUserId == authUserId).ExecuteDeleteAsync(cancellationToken);
 
         await context
@@ -78,6 +85,45 @@ internal sealed partial class UserRegistry(
         LogUserDeleted(userId);
         return true;
     }
+
+    private Task<bool> LeaveShoppingListsAsync(Guid userId, CancellationToken cancellationToken) =>
+        context.ExecuteInTransactionAsync(
+            IsolationLevel.ReadCommitted,
+            async token =>
+            {
+                var listIds = await context
+                    .ShoppingListMembers.Where(member => member.UserId == userId)
+                    .Select(member => member.ListId)
+                    .OrderBy(listId => listId)
+                    .ToListAsync(token);
+                foreach (var listId in listIds)
+                {
+                    if (await context.LockListAsync(listId, token) is not { } list)
+                    {
+                        continue;
+                    }
+
+                    var remainingMemberIds = (await context.GetMemberIdsAsync(listId, token)).Where(memberId => memberId != userId).ToList();
+                    if (remainingMemberIds.Count == 0)
+                    {
+                        context.ShoppingLists.Remove(list);
+                    }
+                    else
+                    {
+                        await context
+                            .ShoppingListMembers.Where(member => member.ListId == listId && member.UserId == userId)
+                            .ExecuteDeleteAsync(token);
+                        list.Version++;
+                        await context.NotifyAsync(remainingMemberIds, token);
+                    }
+
+                    await context.SaveChangesAsync(token);
+                }
+
+                return true;
+            },
+            cancellationToken
+        );
 
     private Task<User?> FindAsync(string authUserId, CancellationToken cancellationToken) =>
         context.Users.SingleOrDefaultAsync(user => user.AuthUserId == authUserId, cancellationToken);
