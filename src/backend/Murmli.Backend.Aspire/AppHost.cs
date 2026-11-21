@@ -4,6 +4,7 @@ using Murmli.Backend.Aspire.Auth;
 using Murmli.Backend.Aspire.ContainerAppEnvironment;
 using Murmli.Backend.Aspire.Database;
 using Murmli.Backend.Aspire.Identity;
+using Murmli.Backend.Aspire.PowerSync;
 using Murmli.Backend.Aspire.ProductImport;
 
 var builder = DistributedApplication.CreateBuilder(args);
@@ -17,5 +18,6 @@ var authServiceKey = builder.AddAuthServiceKey();
 var auth = builder.AddAuth(database, identity, applicationInsights, betterAuthSecret, authServiceKey);
 builder.AddApi(database, identity, applicationInsights, auth, authServiceKey);
 builder.AddProductImport(database, identity, applicationInsights);
+builder.AddPowerSync(database, auth);
 
 builder.Build().Run();

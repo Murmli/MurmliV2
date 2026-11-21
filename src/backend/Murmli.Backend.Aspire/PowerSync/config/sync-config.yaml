@@ -1,0 +1,11 @@
+config:
+  edition: 3
+streams:
+  shopping:
+    auto_subscribe: true
+    with:
+      member_lists: SELECT list_members.list_id FROM shopping.list_members INNER JOIN identity.users ON list_members.user_id = users.id WHERE users.auth_user_id = auth.user_id()
+    queries:
+      - SELECT * FROM shopping.lists WHERE id IN member_lists
+      - SELECT * FROM shopping.items WHERE list_id IN member_lists
+      - SELECT * FROM shopping.list_members WHERE list_id IN member_lists
