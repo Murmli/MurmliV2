@@ -1,15 +1,13 @@
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Murmli.Backend.Data;
 using Npgsql;
 
 namespace Murmli.Backend.Api.Shopping;
 
 internal sealed partial class ShoppingChangeListener(
-    IServiceScopeFactory scopeFactory,
+    IConfiguration configuration,
     SyncEventHub hub,
     TimeProvider timeProvider,
     ILogger<ShoppingChangeListener> logger
@@ -19,7 +17,9 @@ internal sealed partial class ShoppingChangeListener(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var connectionString = FindConnectionString();
+        // The DbContext's connection string has the password stripped (Persist Security Info=false)
+        var connectionString = configuration.GetConnectionString("murmli")
+            ?? throw new InvalidOperationException("There is no connection string to listen for shopping changes.");
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -76,12 +76,5 @@ internal sealed partial class ShoppingChangeListener(
         {
             LogInvalidNotification(exception);
         }
-    }
-
-    private string FindConnectionString()
-    {
-        using var scope = scopeFactory.CreateScope();
-        return scope.ServiceProvider.GetRequiredService<MurmliDbContext>().Database.GetConnectionString()
-            ?? throw new InvalidOperationException("The database context has no connection string to listen for shopping changes.");
     }
 }
