@@ -166,7 +166,10 @@ class SyncEngine {
         sentCommands: sentCommands,
       );
       _failedSyncCount = 0;
-      _updateStatus(isSyncing: false, isOffline: false);
+      _updateStatus(
+        isSyncing: false,
+        isOffline: cancelToken.isCancelled ? null : false,
+      );
       return true;
     } on DioException catch (error) {
       if (CancelToken.isCancel(error)) {
