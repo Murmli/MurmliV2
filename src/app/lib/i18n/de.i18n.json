@@ -110,6 +110,15 @@
       "send": "Fehlerberichte senden",
       "description": "Meldet Abstürze und Fehler, damit wir sie beheben können."
     },
+    "account": {
+      "section": "Konto",
+      "signOut": "Abmelden",
+      "deleteAccount": "Konto löschen",
+      "deleteTitle": "Konto löschen?",
+      "deleteMessage": "Dein Konto und alle deine Daten werden gelöscht. Mit anderen geteilte Listen bleiben bei ihnen. Das lässt sich nicht rückgängig machen.",
+      "deleteConfirm": "Löschen",
+      "cancel": "Abbrechen"
+    },
     "about": {
       "section": "Über Murmli",
       "version": "Version",

@@ -110,6 +110,15 @@
       "send": "Send error reports",
       "description": "Reports crashes and errors so we can fix them."
     },
+    "account": {
+      "section": "Account",
+      "signOut": "Sign out",
+      "deleteAccount": "Delete account",
+      "deleteTitle": "Delete account?",
+      "deleteMessage": "Your account and all your data will be deleted. Lists shared with others stay with them. This cannot be undone.",
+      "deleteConfirm": "Delete",
+      "cancel": "Cancel"
+    },
     "about": {
       "section": "About Murmli",
       "version": "Version",
