@@ -95,6 +95,7 @@ dev_dependencies:
 
   # Crash Reporting
   sentry_dart_plugin: ^3.5.0
+  flutter_adaptive_studio: 0.28.15
 
 flutter:
   default-flavor: development
