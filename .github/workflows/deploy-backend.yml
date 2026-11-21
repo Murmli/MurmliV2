@@ -58,9 +58,9 @@ jobs:
           Parameters__auth_service_key: ${{ secrets.AUTH_SERVICE_KEY }}
         run: |
           # Re-runs and slower CI runs of older commits must not overwrite a newer deploy.
-          main_head=$(git ls-remote origin refs/heads/main | cut -f1)
-          if [ "$main_head" != "$GITHUB_SHA" ]; then
-            echo "::notice::Skipped, main has moved on to $main_head."
+          ref_head=$(git ls-remote origin "$GITHUB_REF" | cut -f1)
+          if [ "$ref_head" != "$GITHUB_SHA" ]; then
+            echo "::notice::Skipped, $GITHUB_REF_NAME has moved on to $ref_head."
             exit 0
           fi
           apphost=src/backend/Murmli.Backend.Aspire/Murmli.Backend.Aspire.csproj
