@@ -98,6 +98,13 @@ class _ShoppingListContent extends ConsumerWidget {
                               (repository) => repository.toggleChecked(item),
                             ),
                       ),
+                      onRename: (name) => unawaited(
+                        ref
+                            .read(shoppingListRepositoryProvider.future)
+                            .then(
+                              (repository) => repository.renameItem(item, name),
+                            ),
+                      ),
                       onDelete: () => unawaited(
                         ref
                             .read(shoppingListRepositoryProvider.future)

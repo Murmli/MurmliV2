@@ -71,6 +71,21 @@ class ShoppingListRepository {
     );
   }
 
+  Future<void> renameItem(ShoppingListItem item, String name) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty || trimmedName == item.name) {
+      return;
+    }
+    await (database.update(
+      database.shoppingListItems,
+    )..where((row) => row.id.equals(item.id))).write(
+      ShoppingListItemsCompanion(
+        name: Value(trimmedName),
+        updatedAt: Value(_now()),
+      ),
+    );
+  }
+
   Future<void> deleteItem(ShoppingListItem item) async {
     await (database.delete(
       database.shoppingListItems,

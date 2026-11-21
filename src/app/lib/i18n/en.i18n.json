@@ -90,6 +90,8 @@
     "leaveTitle": "Leave list?",
     "leaveMessage": "The list disappears from your device. Other members keep it.",
     "leaveConfirm": "Leave",
+    "editItemTitle": "Edit item",
+    "save": "Save",
     "cancel": "Cancel",
     "close": "Close"
   },

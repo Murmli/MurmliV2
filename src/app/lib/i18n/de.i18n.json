@@ -90,6 +90,8 @@
     "leaveTitle": "Liste verlassen?",
     "leaveMessage": "Die Liste verschwindet von deinem Gerät. Andere Mitglieder behalten sie.",
     "leaveConfirm": "Verlassen",
+    "editItemTitle": "Artikel bearbeiten",
+    "save": "Speichern",
     "cancel": "Abbrechen",
     "close": "Schließen"
   },
