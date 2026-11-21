@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'flavor.dart';
 
 class AppEndpoints {
-  const AppEndpoints._({required this.api, required this.auth});
+  const AppEndpoints._({required this.api, required this.auth, this.sync});
 
   factory AppEndpoints.of(Flavor flavor, TargetPlatform platform) {
     // The Android emulator reaches the host's loopback only via 10.0.2.2.
@@ -12,6 +12,7 @@ class AppEndpoints {
       Flavor.local => AppEndpoints._(
         api: Uri(scheme: 'http', host: host, port: 5020),
         auth: Uri(scheme: 'http', host: host, port: 5021),
+        sync: Uri(scheme: 'http', host: host, port: 5022),
       ),
       Flavor.development => AppEndpoints._(
         api: Uri.https(
@@ -29,4 +30,5 @@ class AppEndpoints {
 
   final Uri api;
   final Uri auth;
+  final Uri? sync;
 }

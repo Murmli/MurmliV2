@@ -11,6 +11,7 @@ import '../api/api_client_provider.dart';
 import '../flavor/flavor.dart';
 import '../flavor/flavor_provider.dart';
 import '../logging/talker_provider.dart';
+import '../sync/power_sync_database_provider.dart';
 import 'account.dart';
 import 'auth_client_provider.dart';
 
@@ -35,8 +36,54 @@ class SignedInAccount extends _$SignedInAccount {
         ),
       );
 
+  String? _sessionToken;
+
   @override
   Account? build() => null;
+
+  Future<String?> fetchJsonWebToken() async {
+    final sessionToken = _sessionToken;
+    return sessionToken == null ? null : _fetchJsonWebToken(sessionToken);
+  }
+
+  Future<void> signOut() async {
+    final sessionToken = _sessionToken;
+    await _clearLocalData();
+    if (sessionToken != null) {
+      try {
+        await ref
+            .read(authClientProvider)
+            .post<void>(
+              '/api/auth/sign-out',
+              options: _authorizedBy(sessionToken),
+            );
+      } on DioException catch (error) {
+        ref
+            .read(talkerProvider)
+            .warning('Sign-out at auth failed: ${_httpOutcome(error)}');
+      }
+    }
+    _sessionToken = null;
+    state = null;
+  }
+
+  Future<void> deleteAccount() async {
+    final jsonWebToken = await fetchJsonWebToken();
+    if (jsonWebToken == null) {
+      throw StateError('Cannot delete the account while signed out.');
+    }
+    await ref
+        .read(apiClientProvider)
+        .delete<void>('/v1/users/me', options: _authorizedBy(jsonWebToken));
+    await _clearLocalData();
+    _sessionToken = null;
+    state = null;
+  }
+
+  Future<void> _clearLocalData() async {
+    final database = await ref.read(powerSyncDatabaseProvider.future);
+    await database.disconnectAndClear();
+  }
 
   Future<SignInResult> signInWithApple() async {
     final rawNonce = generateNonce();
@@ -169,6 +216,7 @@ class SignedInAccount extends _$SignedInAccount {
             options: _authorizedBy(jsonWebToken),
           );
       if (response.data case {'id': final String id}) {
+        _sessionToken = sessionToken;
         state = Account(id: id);
         return SignInResult.signedIn;
       }
