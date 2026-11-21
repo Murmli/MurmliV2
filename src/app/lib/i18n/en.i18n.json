@@ -64,6 +64,33 @@
       }
     }
   },
+  "shoppingList": {
+    "defaultName": "Shopping list",
+    "noList": "Your shopping list appears once Murmli has synced.",
+    "empty": "Nothing on the list yet.",
+    "addItemHint": "Add an item",
+    "addItem": "Add",
+    "syncConnected": "Synced",
+    "syncUploading": "Uploading changes",
+    "syncOffline": "Offline",
+    "syncUnavailable": "Sync unavailable",
+    "actions": "List actions",
+    "showAccountId": "Show my account ID",
+    "accountIdTitle": "Your account ID",
+    "accountIdCopy": "Copy",
+    "accountIdCopied": "Account ID copied",
+    "share": "Share list",
+    "shareTitle": "Share list",
+    "shareUserId": "Account ID of the other person",
+    "shareSubmit": "Share",
+    "shared": "List shared",
+    "leave": "Leave list",
+    "leaveTitle": "Leave list?",
+    "leaveMessage": "The list disappears from your device. Other members keep it.",
+    "leaveConfirm": "Leave",
+    "cancel": "Cancel",
+    "close": "Close"
+  },
   "settings": {
     "title": "Settings",
     "language": {
