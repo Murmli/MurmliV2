@@ -10,6 +10,7 @@ import '../logging/talker_provider.dart';
 import 'app_database_provider.dart';
 import 'simulated_offline_provider.dart';
 import 'sync_engine.dart';
+import 'sync_round.dart';
 
 part 'sync_engine_provider.g.dart';
 
@@ -22,17 +23,25 @@ Future<SyncEngine?> syncEngine(Ref ref) async {
   if (!ref.mounted) {
     return null;
   }
+  // The engine retries endlessly while offline, the error dialog of
+  // apiClientProvider would reappear for every attempt.
+  final client = Dio(
+    BaseOptions(baseUrl: ref.watch(appEndpointsProvider).api.toString()),
+  );
+  final fetchJsonWebToken = ref
+      .watch(signedInAccountProvider.notifier)
+      .fetchJsonWebToken;
+  final talker = ref.watch(talkerProvider);
   final engine = SyncEngine(
-    database: database,
-    // The engine retries endlessly while offline, the error dialog of
-    // apiClientProvider would reappear for every attempt.
-    client: Dio(
-      BaseOptions(baseUrl: ref.watch(appEndpointsProvider).api.toString()),
+    round: SyncRound(
+      database: database,
+      client: client,
+      fetchJsonWebToken: fetchJsonWebToken,
+      talker: talker,
     ),
-    fetchJsonWebToken: ref
-        .watch(signedInAccountProvider.notifier)
-        .fetchJsonWebToken,
-    talker: ref.watch(talkerProvider),
+    client: client,
+    fetchJsonWebToken: fetchJsonWebToken,
+    talker: talker,
   );
   ref
     ..onDispose(engine.dispose)
