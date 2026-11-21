@@ -33,7 +33,7 @@ Launcher-Icons und Splash erzeugt [flutter_adaptive_studio](https://pub.dev/pack
 | `local` | `#e53935` | `src/local/res` | `AppIcon-local` |
 
 - Quellen in `assets/icons/`: `murmli_icon_foreground.svg` (weißer Hamster mit echten Löchern, transparent) für Vordergrund, Monochrom (Android 13), iOS hell und getönt sowie Splash, `murmli_icon_dark_<flavor>.svg` für iOS 18 dunkel. Beide aus `murmli_icon.vectorcraft` (VectorCraft) exportiert, SVG ohne `<style>` (verwirft das Tool still).
-- Splash: Orange mit weißem Hamster, für alle Flavors gleich. Nur Android ist konfiguriert, iOS behält Flutters `LaunchScreen.storyboard`.
+- Splash: Orange mit weißem Hamster auf Android und iOS, für alle Flavors gleich (Flavor-Einträge mit `splash: null` unter `android` und `ios`).
 
 Neu erzeugen (in `src/app`, nach Änderungen an Config oder Quellen):
 
@@ -52,7 +52,7 @@ rm lib/fas_splash.g.dart ios/Runner.xcodeproj/project.pbxproj.bak
 - Optional `fvm dart pub global run flutter_adaptive_studio preview` für eine Vorschau der Masken, schreibt `flutter_adaptive_studio/preview/icon_preview.html`, danach den Ordner löschen.
 - Fallen Quellen oder Optionen weg, löscht das Tool nicht alles: vorher zurücksetzen (im Repo-Root `git restore --staged --worktree -- src/app/android src/app/ios` und `git clean -fd -- src/app/android src/app/ios`, löscht auch ungetrackte Nicht-Icon-Dateien dort).
 - `FileSystemException` mit errno 1224: Ein anderer Prozess (meist VS Code) hält eine erzeugte Datei offen, schließen und wiederholen.
-- Neuer Flavor: Eintrag unter `flavors` (mit `play_store: false` und `splash: null`) und `generate --flavor <flavor>`.
+- Neuer Flavor: Eintrag unter `flavors` (mit `play_store: false` und `splash: null` unter `android` und `ios`) und `generate --flavor <flavor>`.
 
 ## API-Zugriff
 
