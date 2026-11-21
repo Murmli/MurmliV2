@@ -7,3 +7,6 @@ targets:
           fallback_strategy: base_locale
           input_directory: lib/i18n
           output_directory: lib/i18n
+      drift_dev:
+        options:
+          store_date_time_values_as_text: true
