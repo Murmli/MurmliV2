@@ -22,13 +22,17 @@ Ohne `UserId` bleiben:
 - Kind-Spans (Npgsql, HttpClient), sie hängen über die Trace-ID am Request.
 - Logs vor der Middleware (Authentifizierung, die Abfrage der Konto-Id selbst samt `DatabaseUnavailable`, wenn sie an einer Störung der Datenbank scheitert).
 
+### Abgleich
+
+`Murmli.Backend.Sync` loggt `SyncCommandFailed` (3002, Error mit Exception; `DeviceId`, `CommandId`, `DataType`, `CommandKind`), wenn ein einzelnes Kommando scheitert, und `SyncDatabaseUnavailable` (3003, Warning mit Exception; `Phase`: `bootstrap`, `commands` oder `changes`), wenn eine Störung der Datenbank die Anfrage mit 503 beendet. Beide tragen `UserId` aus dem Scope der `UserTelemetryMiddleware`. Inhalte von Datensätzen, Tokens und den Body loggt der Kern nie, `DataType` und `CommandKind` nur, wenn der Server sie kennt.
+
 ## Export
 
 OTLP nur mit `OTEL_EXPORTER_OTLP_ENDPOINT` (setzt Aspire im Run-Mode), Azure Monitor nur mit `APPLICATIONINSIGHTS_CONNECTION_STRING` (nur in Azure, über `WithTelemetry(applicationInsights)`). Ohne beides wird aufgezeichnet, aber nicht exportiert.
 
 ## Sensible Daten
 
-`Telemetry:RecordSensitiveData` (Standard aus) schaltet LLM-Inhalte (`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`) und SQL-Parameterwerte in den EF-Core-Command-Logs (`EnableSensitiveDataLogging`) ein. An ist er nur lokal und in Azure Dev, wo es nur Testdaten gibt (`appsettings.Development.json` und `appsettings.azure-dev.json` des AppHost).
+`Telemetry:RecordSensitiveData` (Standard aus) schaltet LLM-Inhalte (`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`) und SQL-Parameterwerte in den EF-Core-Command-Logs (`EnableSensitiveDataLogging`) ein. An ist er nur lokal und in Azure Dev, wo es nur Testdaten gibt (`appsettings.Development.json` und `appsettings.azure-dev.json` des AppHost). Ausnahme für Dev ([#138](https://github.com/Murmli/MurmliV2/issues/138)): Der Sync-Kern schreibt Datensätze über EF Core, mit dem Schalter tragen die EF-Core-Command-Logs deshalb auch Inhalte abgeglichener Datensätze als SQL-Parameterwerte, in Azure Dev bis in Application Insights. Eigener Code loggt nie Inhalte. Ohne den Schalter (Standard und jede andere Umgebung) loggt EF Core keine Parameterwerte, und Npgsql-Spans tragen nur das SQL mit Platzhaltern.
 
 ## `auth`
 

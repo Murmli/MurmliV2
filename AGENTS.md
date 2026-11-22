@@ -382,7 +382,7 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 Hintergrund und Entscheidungen: [docs/database.md](docs/database.md)
 
 - Den Context nur per `builder.AddMurmliDbContext()` registrieren.
-- Datenzugriff mit EF Core, eigenes SQL nur, wo EF Core es nicht kann.
+- Datenzugriff mit EF Core, eigenes SQL nur, wo EF Core es nicht kann. Ausnahme: Der Sync-Kern nutzt eigenes SQL (`ExecuteSql`, `FromSql`) nur für feste Anweisungen auf `sync.*` und `identity.users`: den Claim (`ON CONFLICT DO NOTHING`), die Zeilensperren der Bereiche (`FOR NO KEY UPDATE`), das Anlegen des persönlichen Bereichs und `lock_timeout` ([docs/database.md](docs/database.md#abgleich)). Für die künstlichen Datentypen der Tests ersetzt `ApiHost` per `ConfigureDbContext` nur den `IModelCustomizer` und legt ihre Tabellen im Schema `synctest` per handgeschriebenem DDL an, nie per Migration.
 - In `OnConfiguring` keine Optionen ändern (auch kein `EFCore.NamingConventions`), snake_case explizit in den `IEntityTypeConfiguration`-Klassen setzen.
 - Pro Fachbereich ein Schema mit kleingeschriebenem Namen per `ToTable(name, schema)`, `__EFMigrationsHistory` und Extensions in `public` lassen. In Raw SQL Tabellen immer mit Schema nennen (`products.products`).
 - Das Schema `better-auth` gehört Better Auth: nur `auth` migriert es, EF Core und die API greifen nie darauf zu.
@@ -409,7 +409,7 @@ Hintergrund und Entscheidungen: [docs/authentication.md](docs/authentication.md)
 - Jeder Endpunkt ist nur mit Anmeldung erreichbar (Default- und Fallback-Policy). Ausnahmen per `AllowAnonymous()` nur für `/health`, das OpenAPI-Dokument und für Endpunkte, deren Issue ausdrücklich verlangt, dass sie anonym erreichbar sind, nie aus eigenem Ermessen.
 - Die App spricht mit Better Auth nur zum Anmelden, Abmelden und Holen bzw. Erneuern des JWT, alles andere läuft über die API.
 - Die API greift nie auf die Tabellen von Better Auth zu (kein EF-Mapping, kein SQL), sie nutzt immer die HTTP-API von `auth`.
-- Nutzerdaten hängen an `identity.users.id`, nie an der Better-Auth-ID. Jede neue Art von Nutzerdaten gehört in die Löschung: in Postgres per Fremdschlüssel mit `ON DELETE CASCADE` auf `identity.users`, außerhalb von Postgres ausdrücklich in `UserRegistry.DeleteAsync` vor dem Aufruf von `auth`. Ausgenommen ist Telemetrie mit der eigenen Id, sie läuft mit ihrer Aufbewahrungsfrist aus.
+- Nutzerdaten hängen an `identity.users.id`, nie an der Better-Auth-ID. Jede neue Art von Nutzerdaten gehört in die Löschung: in Postgres per Fremdschlüssel mit `ON DELETE CASCADE` auf `identity.users`, abgeglichene Datensätze über ihren Bereich (`sync.scopes.owner_account_id`), außerhalb von Postgres ausdrücklich in `UserRegistry.DeleteAsync` vor dem Aufruf von `auth`. Ausgenommen ist Telemetrie mit der eigenen Id, sie läuft mit ihrer Aufbewahrungsfrist aus.
 - `sub`, E-Mail und Token nie selbst loggen und nie in Span-Attribute schreiben. Den Nutzer kennzeichnet in der Telemetrie nur die eigene Id, immer unter `UserId` (`LogProperties.UserId`), nie unter `enduser.id`.
 - `BETTER_AUTH_SECRET` kommt nur über den Secret-Parameter `better-auth-secret` und wird nie geändert, Rotation nur über `BETTER_AUTH_SECRETS`.
 - `session.expiresIn` in `src/auth/src/authentication/auth.ts` bleibt 30 Tage, die App verlässt sich darauf (Hinweis beim Abmelden ohne Verbindung).
@@ -446,6 +446,22 @@ Hintergrund und Entscheidungen: [docs/product-import.md](docs/product-import.md)
 - Nach dem Start in der Logzeile `Starting the product import run … with the product limit 100` das Limit prüfen, fehlt es, die Ressource sofort stoppen.
 - In Tests den Export als Inline-Fixture über einen `HttpMessageHandler`-Stub liefern.
 - Nährwerte nur aus `value` lesen, nie aus `value_computed`, und nur bei `preparation` `as_sold`.
+
+## Abgleich
+
+Hintergrund und Entscheidungen: [docs/sync.md](docs/sync.md)
+
+- Abgeglichene Tabellen (`sync.scopes`, `sync.tombstones`, `sync.processed_commands` und jede Tabelle eines Datentyps) ändert nur `Murmli.Backend.Sync` (`SyncProcessor`, `SyncAccountLifecycle`). Einzige Ausnahme: per `ON DELETE CASCADE` ganze Bereiche löschen sowie die `sync.processed_commands` eines Kontos über `identity.users` (Kontolöschung). Kein `SaveChanges`, kein `ExecuteUpdate`/`ExecuteDelete`, kein eigenes SQL und keine Löschweitergabe zwischen Datensätzen daran vorbei. Tests legen abgeglichene Daten nur über `/v1/sync` an. Ausnahme nur in `DatabaseAdministration`: als Buchhaltung die Untergrenze eines Bereichs (`sync.scopes.tombstone_floor`).
+- `sync.database_identity` ändert nur ein Mensch nach dem Einspielen einer Sicherung sowie die Tests (`DatabaseAdministration`).
+- Jede Änderung an einem Datensatz eines Datentyps oder an seiner Löschmarkierung erhöht die Version ihres Bereichs unter dessen Zeilensperre in derselben Transaktion.
+- Sperren immer erst auf den persönlichen Bereich, dann auf genau einen weiteren Bereich. Vorgänge über mehrere Bereiche je Bereich in einer eigenen Transaktion. Was den neuesten Stand braucht, liest eine eigene Anweisung nach der Sperre.
+- Eigene Transaktionen nur als Einheit der Execution Strategy, je Kommando eine, schreibend in READ COMMITTED, der Lesepfad in REPEATABLE READ.
+- Einheiten des Kerns lesen ohne Tracking (`AsTracking()` nur für den gesperrten Bereich und den Zieldatensatz), leeren den Change Tracker zu Beginn jedes Versuchs und laufen mit `AutoSavepointsEnabled = false`. Datenbank-Exceptions fangen sie nie, ohne sie weiterzuwerfen: Ohne Savepoints rollt `CommitAsync` nach einem gescheiterten `SaveChanges` sonst still alles zurück.
+- Eigener Code loggt nie Inhalte abgeglichener Datensätze und schreibt sie nie in Span-Attribute oder Metrik-Tags. SQL-Parameterwerte erscheinen nur unter `Telemetry:RecordSensitiveData` (Dev-Ausnahme aus [#138](https://github.com/Murmli/MurmliV2/issues/138)).
+- Zeiten des Abgleichs nur aus dem injizierten `TimeProvider`, auf Millisekunden gekürzt, nie `now()` oder `DateTime.UtcNow`. Zeitgrenzen des Betriebs (Budget, Frist) laufen in Echtzeit.
+- Jede Tabelle eines Datentyps hat `id`, `scope_id` mit Fremdschlüssel `ON DELETE CASCADE` auf `sync.scopes`, `version` mit Index `(scope_id, version)` und je Feldgruppe `<gruppe>_changed_at`. Ihre Entität erbt von `SyncRecord`, das selbst nie gemappt wird (kein `Entity<SyncRecord>()`, kein `DbSet`, keine Navigation dieses Typs). Einen Datentyp nur nach [docs/sync.md](docs/sync.md#datentyp-anbinden) anbinden.
+- Gespeicherte Gründe, Ursachen und Arten als Text lesen, nie mit `Get`.
+- Regeln zur Schreibberechtigung ([Murmli/BackOffice#17](https://github.com/Murmli/BackOffice/issues/17)) und Messwerte (Lasttests, Simulation, Kapazität, [Murmli/BackOffice#18](https://github.com/Murmli/BackOffice/issues/18)) gehören ins BackOffice, nie in dieses Repo, auch nicht in Kommentare oder Testausgaben.
 
 ## App
 

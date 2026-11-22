@@ -2,8 +2,6 @@
 
 Vertrag zwischen App und API für den Abgleich ([#122](https://github.com/Murmli/MurmliV2/issues/122)), Aufbau und Begriffe in [#121](https://github.com/Murmli/MurmliV2/issues/121). Ein einziger Endpunkt nimmt die wartenden Kommandos eines Geräts an und liefert in derselben Antwort, was sich seit dessen Token geändert hat; ein neuer Datentyp braucht keinen neuen Endpunkt. Der Server entscheidet: Das Gerät wendet eigene Änderungen sofort an, Konfliktregeln gibt es nur am Server. Er liefert den aktuellen Stand geänderter Datensätze statt Änderungsfolgen, ein vollständiger Stand repariert jede Abweichung. Jede Anfrage darf beliebig oft wiederholt werden, ohne dass etwas doppelt wirkt, und kein Kommando hält die Warteschlange auf Dauer auf.
 
-Entschieden, noch nicht gebaut: alles in diesem Dokument. Entfällt, sobald kein Teil mehr einen eigenen Vermerk dieser Art trägt; jeder Vermerk nennt, wann er entfällt.
-
 Entschieden, noch nicht gebaut: das Verhalten der App, das dieses Dokument beschreibt, soweit kein eigener Vermerk ein anderes Issue nennt. Entfällt, sobald der Sync-Kern der App aus [#124](https://github.com/Murmli/MurmliV2/issues/124) gebaut ist.
 
 | Begriff | Im Vertrag | Bedeutung |
@@ -20,9 +18,50 @@ Entschieden, noch nicht gebaut: das Verhalten der App, das dieses Dokument besch
 | Mitgliedseintrag | Eintrag in `members` | Person in einem geteilten Bereich mit Mitglieds-ID, Name, Rolle und Zustand |
 | Hinweis | – | Meldung auf dem Gerät über ein abgelehntes oder aussortiertes Kommando oder einen entfernten Bereich |
 
-## Vertrag
+## Aufbau
 
-Entschieden, noch nicht gebaut: die Seite des Servers in diesem Kapitel samt der Prüfung der Untergrenze, soweit kein eigener Vermerk ein anderes Issue nennt. Entfällt, sobald der Sync-Kern aus [#123](https://github.com/Murmli/MurmliV2/issues/123) gebaut ist.
+### Kern
+
+Der Kern ist die Bibliothek `Murmli.Backend.Sync` (ohne ASP.NET Core). Er kennt keine Datentypen: Er verwaltet Bereiche, verarbeitete Kommandos, Löschmarkierungen und die Kennung der Datenbank, wendet Kommandos an und liefert Änderungen. Den Endpunkt `POST /v1/sync` stellt die API (`Murmli.Backend.Api/Sync`, [api.md](api.md#abgleich)), Abhängigkeiten laufen `Telemetry ← Data ← Sync ← Api ← Api.Host`. Öffentlich ist nur, was die API braucht: die Typen von Anfrage und Antwort (`Protocol`), `SyncProcessor` mit `SyncCaller` und `SyncOutcome`, der Vertrag der Datentypen (`DataTypes`), `SyncOptions` samt `SyncDataTypeOptions` sowie `AddSync()` und `AddSyncDataType<T>()`; alles andere ist intern. Die Entitäten der Kerntabellen und die Basisklasse `SyncRecord` liegen in `Murmli.Backend.Data/Sync`, ohne `DbSet` am `MurmliDbContext`; der Kern liest und schreibt sie über `context.Set<T>()`.
+
+### Tragende Regel
+
+Abgeglichene Tabellen ändert nur der Kern. Jede Änderung an einem Datensatz oder seiner Löschmarkierung erhöht die Version ihres Bereichs unter dessen Zeilensperre in derselben Transaktion; was am Kern vorbei schreibt (eigener Code, direktes SQL, Löschweitergabe zwischen Datensätzen), erzeugt Änderungen, die kein Gerät je sieht. Einzige Ausnahme ist das Löschen ganzer Bereiche, etwa mit dem Konto (Geräte erkennen den fehlenden Bereich über ihr Token), sowie der verarbeiteten Kommandos eines Kontos per `ON DELETE CASCADE` von `identity.users`.
+
+### Verarbeitung einer Anfrage
+
+1. Token lesen; ein unlesbares Token ist kein Fehler.
+2. Heads: Eine Anweisung liest den persönlichen Bereich (Version, Epoche, Untergrenze) samt Kennung der Datenbank. Fehlt der Bereich, legt der Kern ihn in einer eigenen Transaktion an (`INSERT … ON CONFLICT DO NOTHING` auf dem eindeutigen Index je Konto, so entsteht er auch bei gleichzeitigen ersten Abgleichen genau einmal) und liest die Heads erneut.
+3. Ohne Kommandos und mit unverändertem Stand antwortet er mit demselben Token, ohne weitere Anweisung.
+4. Jedes Kommando läuft in einer eigenen Transaktion (READ COMMITTED): Die Kommando-ID wird als erste Anweisung für das Konto eingetragen, dann sperrt der Kern den Bereich (`FOR NO KEY UPDATE`), prüft, wendet die Konfliktregeln an, erhöht bei einer übernommenen Änderung die Version des Bereichs um eins und schreibt Datensatz bzw. Löschmarkierung und Ergebnis zusammen.
+5. Danach liest er in einer Transaktion mit REPEATABLE READ: Heads, gezählte Löschmarkierungen, Datensätze je Bereich und Datentyp, mitgelieferter Stand, neues Token.
+
+Warum kein Abruf etwas verpasst: Jede Änderung erhöht die Version unter der Sperre ihres Bereichs, und Postgres macht einen Commit sichtbar, bevor es dessen Sperren freigibt. Wer Version 17 sieht, sieht alle Änderungen bis 17. Ein Abruf „geändert seit Zeitpunkt X“ könnte dagegen Änderungen dauerhaft übersehen, weil Transaktionen nicht in der Reihenfolge ihrer Zeitstempel festgeschrieben werden. Transaktionen, Sperren und eigenes SQL im Einzelnen: [database.md](database.md#abgleich).
+
+### Datentypen
+
+Ein Datentyp ist eine Klasse, die von `SyncDataType<TRecord>` erbt (`Murmli.Backend.Sync.DataTypes`); `TRecord` ist seine Entität und erbt von `SyncRecord` (`Id`, `ScopeId`, `Version`). In `Define` nennt er:
+
+- Namen und Art des Bereichs (`Named`) und die Höchstzahl an Datensätzen je Bereich (`MaxRecordsPerScope`, Pflicht),
+- seine Felder über Ausdrücke auf die Eigenschaften der Entität (`note => note.Title`): `Field` für ein Feld, das seine eigene Gruppe bildet, `Group` für Felder mit gemeinsamem Zeitpunkt der letzten Änderung, `ServerField` für Felder, die nur der Server setzt (mit `isSentToDevices: false` nie an Geräte),
+- mit `RequiredOnCreate()` die Pflichtfelder bei `create`,
+- die Wertart je Feld aus `SyncFieldTypes`: `Text`, `NullableKey`, `Decimal`, `Boolean`.
+
+`Evaluate` kann ein Kommando ablehnen (`SyncRuleDecision.Reject`) oder ignorieren (`SyncRuleDecision.Ignore`); es läuft, nachdem die gewonnenen Gruppen am Datensatz stehen. Registriert wird ein Datentyp mit `services.AddSyncDataType<T>()`. Beim Start prüft der Kern jede Registrierung, auch gegen das EF-Modell (Entität und Eigenschaften gemappt, gleiche Nullbarkeit, Zeitpunkte nicht nullbar), und bricht den Start bei einem Fehler ab, nie erst eine Anfrage.
+
+### Datentyp anbinden
+
+1. Entität in `Murmli.Backend.Data/<Bereich>/`, abgeleitet von `SyncRecord`, ohne `required`-Member (der Kern legt Datensätze mit `new()` an), mit einer `IEntityTypeConfiguration`: `ToTable(name, schema)`, `id` mit `ValueGeneratedNever()`, `scope_id` mit Fremdschlüssel `ON DELETE CASCADE` auf `sync.scopes`, `version` mit Index `(scope_id, version)`, je Feldgruppe `<gruppe>_changed_at`, Spalten in snake_case wie die Feldnamen im Vertrag. Kein `DbSet`. Migration erzeugen ([AGENTS.md](../AGENTS.md#datenbank)).
+2. Datentyp-Klasse im Ordner des Bereichs in `Murmli.Backend.Api`, intern, mit `Define` und bei Bedarf `Evaluate`; `AddSyncDataType<T>()` in `AddApi()`.
+3. Felder, Gruppen und Grenzen in diesem Dokument beschreiben, wie bei der [Einkaufsliste](#einkaufsliste).
+4. Ein Test, der jedes Feld über `/v1/sync` anlegt und zurückliest.
+5. Die Seite der App nach [#124](https://github.com/Murmli/MurmliV2/issues/124).
+
+Kern und Endpunkt ändern sich dafür nicht.
+
+Entschieden, noch nicht gebaut: Datentypen in geteilten Bereichen; bis dahin nimmt die Prüfung beim Start nur die Art `personal` an. Entfällt, sobald Bereiche, Besitzer und Mitgliedseinträge aus [#128](https://github.com/Murmli/MurmliV2/issues/128) gebaut sind.
+
+## Vertrag
 
 ### Kennungen
 
@@ -77,6 +116,8 @@ Body:
 
 Unbekannte Felder im Rahmen der Anfrage ignoriert der Server.
 
+Entschieden, noch nicht gebaut: die Auswertung von `pendingCommandCount` und `oldestPendingCommandAgeSeconds` in der Telemetrie; bis dahin nimmt der Server sie nur an. Entfällt, sobald die Telemetrie des Abgleichs aus [#138](https://github.com/Murmli/MurmliV2/issues/138) gebaut ist.
+
 Kommando:
 
 | Feld | Typ | Regel |
@@ -108,6 +149,10 @@ Regeln für `fields`:
 | Zeitpunkt | ganze Zahl | Unix-Millisekunden im Wertebereich von `time` |
 
 `null` nur, wo der Datentyp es erlaubt. Jeder Verstoß, ein unbekannter oder doppelter Feldname, eine unvollständige Gruppe, ein leeres `setFields`, `fields` bei `delete` oder ein fehlendes Pflichtfeld bei `create` macht nur dieses Kommando `invalid`.
+
+Entschieden, noch nicht gebaut: Felder, die nur beim Anlegen gelten, und Muster für Texte. Entfällt, sobald die Einkaufsliste aus [#141](https://github.com/Murmli/MurmliV2/issues/141) gebaut ist.
+
+Entschieden, noch nicht gebaut: die Wertart Zeitpunkt. Entfällt, sobald Bereiche, Besitzer und Mitgliedseinträge aus [#128](https://github.com/Murmli/MurmliV2/issues/128) gebaut sind.
 
 ```http
 POST /v1/sync HTTP/1.1
@@ -301,6 +346,8 @@ Hat die Anfrage keine Kommandos und nennt ihr lesbares Token mit der aktuellen K
 | über der Version im Token liegen mehr Löschmarkierungen der Datentypen aus `dataTypes` als die Schwelle: die Summe der Höchstzahlen an Datensätzen je Bereich über die Datentypen der Art | `false` |
 | ein `delete` des Wurzel-Datensatzes dieses Bereichs in dieser Anfrage wurde nicht angewendet | `false` |
 
+Entschieden, noch nicht gebaut: der vollständige Stand nach einem nicht angewendeten `delete` eines Wurzel-Datensatzes (letzte Zeile der Tabelle und Regel 2 unter [Mitgelieferter Stand](#mitgelieferter-stand)). Entfällt, sobald Bereiche, Besitzer und Mitgliedseinträge aus [#128](https://github.com/Murmli/MurmliV2/issues/128) gebaut sind.
+
 Sonst gibt eine Version im Token unter der des Servers einen Block mit allem darüber: geänderte Datensätze, Löschungen und bei geteilten Bereichen `members`. Bei gleicher Version gibt es keinen Block, außer der mitgelieferte Stand verlangt einen. Der Server schickt nur Datensätze und Löschungen der Datentypen aus `dataTypes`.
 
 - Mit `coversAllScopes: true` trägt die Antwort jeden sichtbaren Bereich mit vollständigem Stand, auch den leeren persönlichen, und das Gerät entfernt jeden lokalen Bereich, den sie nicht enthält. Ohne diese Regel bliebe ein Bereich für immer auf dem Gerät, den das Konto verloren hat, während das Gerät gerade kein Token schickte.
@@ -326,7 +373,7 @@ Der Server sucht nur im genannten Bereich, eine fremde Bereichs-ID gelangt so ni
 
 `removedScopes` nennt jeden Bereich, den das Token nennt oder auf den ein Kommando der Anfrage mit lesbarem Ziel zielte (bei `alreadyProcessed` das gespeicherte), und den das Konto nach der Verarbeitung nicht sieht. So verschwindet auch eine Liste, die ein anderes Gerät desselben Kontos gelöscht hat, bevor dieses Gerät sie je im Token hatte. `removedByOwnAccount` ist `true`, wenn ein Gerät des Kontos den Wurzel-Datensatz des Bereichs gelöscht hat; Verlassen kommt mit [#129](https://github.com/Murmli/MurmliV2/issues/129) dazu. Das Gerät löscht den Bereich mit Datensätzen, Mitgliedern und wartenden Kommandos und legt einen Hinweis ab, außer bei `removedByOwnAccount: true`.
 
-Entschieden, noch nicht gebaut: entfernte Bereiche mit `removedByOwnAccount`. Entfällt, sobald Bereiche, Besitzer und Mitgliedseinträge aus [#128](https://github.com/Murmli/MurmliV2/issues/128) gebaut sind.
+Entschieden, noch nicht gebaut: `removedByOwnAccount: true`; bis dahin ist es immer `false`. Entfällt, sobald Bereiche, Besitzer und Mitgliedseinträge aus [#128](https://github.com/Murmli/MurmliV2/issues/128) gebaut sind.
 
 ### Kompression
 
@@ -350,6 +397,8 @@ Ein einzelnes Kommando lässt nie die ganze Anfrage scheitern. In den Fällen de
 | `Content-Type` ist kein JSON, weder `application/json` noch ein `+json`-Typ | 415 aus dem Routing, ohne Body | – | – | später wiederholen, mit wachsendem Abstand |
 | Anmeldung abgelaufen oder ungültig | 401 aus der Anmeldung, ohne `type` | – | `WWW-Authenticate` | Token der Anmeldung erneuern und wiederholen; lehnt `auth` das ab, weil die Sitzung beendet ist, greift die Abmeldung ([#54](https://github.com/Murmli/MurmliV2/issues/54)); ist `auth` nicht erreichbar, wie die letzte Zeile |
 | alles andere: sonstige Statuscodes, Zeitüberschreitung, kein Netz, unlesbare oder abgeschnittene Antwort | – | – | – | später wiederholen, mit wachsendem Abstand, nichts verwerfen |
+
+Ist `token` oder ein Eintrag in `dataTypes` kein gültiger Unicode-Text (etwa ein einzelnes Surrogate als Escape `\ud800`) oder enthält der Name eines Felds im Rahmen ein einzelnes Surrogate als Escape, zählt das als Rahmen mit falschem Typ und ergibt 400 `invalid-request`; den Wert eines unbekannten Felds liest der Server nicht. Unlesbar im Sinn von [Token](#token) ist nur ein lesbarer String mit ungültigem Inhalt.
 
 Nach Anmeldung und Abruf des Kontos prüft der Server in dieser Reihenfolge: Konto (410), fehlender `Content-Type` (415), Geräte-ID (400), Anfragen je Gerät und Konto (429), Größe des Bodys (413), JSON und Rahmen (400), Zahl der Kommandos (413), Kommandos je Konto (429). Die ersten vier Prüfungen laufen, bevor er den Body liest. Einen vorhandenen `Content-Type`, der kein JSON ist, beantwortet schon das Routing mit 415, vor allen diesen Prüfungen.
 
@@ -411,8 +460,6 @@ Geschlossene Mengen kennt das Gerät samt ihrer reservierten Werte von Anfang an
 
 ## Konfliktregeln
 
-Entschieden, noch nicht gebaut: die Regeln dieses Kapitels, soweit kein eigener Vermerk ein anderes Issue nennt. Entfällt, sobald der Sync-Kern aus [#123](https://github.com/Murmli/MurmliV2/issues/123) gebaut ist.
-
 - **Je Feld gewinnt die spätere Zeit.** Der Server merkt sich je Feldgruppe den Zeitpunkt der letzten übernommenen Änderung und übernimmt eine Gruppe, wenn `time` mindestens so groß ist. Bei gleicher Zeit gewinnt also das später verarbeitete Kommando, so zählt bei zwei schnellen Aktionen desselben Geräts die zweite. Gruppen gewinnen einzeln: Ändert ein Gerät die Menge und ein anderes die Kategorie, bleiben beide. Ist mindestens eine Gruppe übernommen, ist das Ergebnis `applied` und diese Gruppen tragen danach `time`; sonst `ignored` mit `lostToNewer`.
 - **Löschen gewinnt immer**, ohne Blick auf die Zeit. Ein gelöschter Datensatz kommt nicht wieder, auch nicht mit derselben ID: Jedes spätere Kommando an ihn in seinem Bereich ist `ignored` mit `targetDeleted`.
 - **`create` auf eine vorhandene ID** im selben Bereich wirkt wie `setFields` mit allen gesendeten Gruppen; Felder, die nur beim Anlegen gelten, und die Angaben des Servers zum Anlegen (etwa `createdAt`) bleiben. Liegt die ID lebend oder gelöscht in einem anderen Bereich: `noAccess`.
@@ -447,6 +494,8 @@ Entschieden, noch nicht gebaut: geteilte Bereiche mit Wurzel-Datensatz, Besitzer
 Entschieden, noch nicht gebaut: der Abbruch mit 410, während das Konto gelöscht wird (Schritt 2). Entfällt, sobald die Kontolöschung mit abgeglichenen Daten aus [#130](https://github.com/Murmli/MurmliV2/issues/130) gebaut ist.
 
 Entschieden, noch nicht gebaut: der Server als Schreiber (Schritt 14). Entfällt, sobald er mit der Einkaufsliste aus [#141](https://github.com/Murmli/MurmliV2/issues/141) gebaut ist.
+
+Entschieden, noch nicht gebaut: Felder des Servers, die der Server in Schritt 16 setzt (etwa `createdAt`, `changedBy` und `changedAt`), und Felder, die nur beim Anlegen gelten, beides auch in der Regel zu `create` auf eine vorhandene ID. Entfällt, sobald Bereiche, Besitzer und Mitgliedseinträge aus [#128](https://github.com/Murmli/MurmliV2/issues/128) und die Einkaufsliste aus [#141](https://github.com/Murmli/MurmliV2/issues/141) gebaut sind.
 
 ## Einkaufsliste
 
@@ -517,8 +566,6 @@ Entschieden, noch nicht gebaut: die Einkaufsliste in der App. Entfällt, sobald 
 - Die Grenze je Gerät gilt je Konto und Gerät, eine geratene Geräte-ID bremst kein anderes Konto. Erneut gesendete, schon verarbeitete Kommandos zählen mit. Die Zähler gelten je Instanz der API.
 - Bei Kommandos je Konto kann `Retry-After` bis zu einer Minute zu kurz sein: Ein Gerät, das genau wartet, bekommt dann noch einmal 429 mit `Retry-After` von einer Minute, behandelt sie wie die erste und verliert nichts.
 
-Entschieden, noch nicht gebaut: Größe des Bodys, Kommandos je Anfrage, Feldwerte, Datensätze je Bereich, Löschungen in einem Delta und Zeit für Kommandos. Entfällt, sobald der Sync-Kern aus [#123](https://github.com/Murmli/MurmliV2/issues/123) gebaut ist.
-
 Entschieden, noch nicht gebaut: eigene Bereiche je Konto. Entfällt, sobald Bereiche, Besitzer und Mitgliedseinträge aus [#128](https://github.com/Murmli/MurmliV2/issues/128) gebaut sind.
 
 Entschieden, noch nicht gebaut: die Werte der Einkaufsliste (Name eines Artikels, Artikel je Liste, eigene Listen). Entfällt, sobald die Einkaufsliste aus [#141](https://github.com/Murmli/MurmliV2/issues/141) gebaut ist.
@@ -578,6 +625,29 @@ Entschieden, noch nicht gebaut: `src/sync-cases/` mit den Fällen des Kerns und 
 
 Entschieden, noch nicht gebaut: der Leser in der Simulation der App. Entfällt, sobald die Simulation aus [#136](https://github.com/Murmli/MurmliV2/issues/136) gebaut ist.
 
+## Testumgebung
+
+Die Tests des Backends laufen gegen ein echtes Postgres (Testcontainers) und `ApiHost` mit derselben Pipeline wie die API. Damit der Kern nichts über die Einkaufsliste weiß, laufen künstliche Datentypen mit, die es nur im Testcode gibt (`Murmli.Backend.Api.Tests/Infrastructure/TestDataTypes/`); ihre Tabellen liegen im Schema `synctest` und entstehen per handgeschriebenem DDL, nie per Migration ([database.md](database.md#abgleich)). Dieselben Datentypen sind für die Simulation der App ([#136](https://github.com/Murmli/MurmliV2/issues/136)) vorgesehen.
+
+`testNote` liegt im persönlichen Bereich (`personal`), höchstens 50 je Bereich (`Sync:DataTypes:testNote:MaxRecordsPerScope`):
+
+| Feld | Rolle | Wert |
+| --- | --- | --- |
+| `title` | eigene Gruppe, Pflicht bei `create` | Text, 0 bis 100 UTF-16-Einheiten |
+| `color` | Gruppe `style` mit `weight` | `red`, `green`, `blue` oder `null` |
+| `weight` | Gruppe `style` mit `color` | Zahl über 0 bis 100 mit höchstens 1 Nachkommastelle, oder `null` |
+| `pinned` | Feld des Servers, an Geräte | `true` oder `false`, beim Anlegen `false`; ändern darf es nur der Server als Schreiber ([#141](https://github.com/Murmli/MurmliV2/issues/141)), bis dahin bleibt es `false` |
+
+Regeln von `testNote`, ausgelöst über `title`:
+
+| `title` | Ergebnis |
+| --- | --- |
+| `rule-reject` | `rejected` mit `invalid` |
+| `rule-ignore` | `ignored` mit `lostToNewer` |
+| `rule-fail` | `failed`, die Regel wirft eine Exception |
+
+Entschieden, noch nicht gebaut: `testBoard` als Wurzel geteilter Bereiche der Art `testBoard` und `testCard` darin. Entfällt, sobald Bereiche, Besitzer und Mitgliedseinträge aus [#128](https://github.com/Murmli/MurmliV2/issues/128) gebaut sind.
+
 ## Entscheidungen
 
 | Entscheidung | Grund |
@@ -590,3 +660,10 @@ Entschieden, noch nicht gebaut: der Leser in der Simulation der App. Entfällt, 
 | gzip nur für vollständige Stände, gesetzt von der Antwort selbst | Unabhängig von der Umgebung, ohne Wirkung auf den Live-Kanal. Deltas bleiben unkomprimiert, denn BREACH braucht vom Angreifer gesteuerten Text und viele beobachtbare Antworten desselben Opfers; vollständige Stände der Bereiche eines anderen Kontos kann ein Mitglied nicht beliebig auslösen. Verworfen: die Middleware zur Antwortkompression von ASP.NET Core (ihre HTTPS-Prüfung kippt zwischen lokalem HTTP und den weitergereichten Headern in Azure, sie träfe den Ereignisstrom des Live-Kanals und bevorzugt zstd und br). |
 | Kein Header für die App-Version, nur der Problemtyp `app-version-unsupported` reserviert | Wie die App ihre Version nennt und welche Versionen gelten, entscheidet [#69](https://github.com/Murmli/MurmliV2/issues/69). Verworfen: Header und Mindestversionen schon jetzt. |
 | `settings.maxRequestBytes` bindet das Gerät, die 413 ist nur ein Sicherheitsnetz | Eine 413 mit `Connection: close` kann bei dio als abgebrochene Verbindung ankommen. Verworfen: übergroße Bodys am Server bis zu einer zweiten, harten Grenze zu Ende lesen (eine Grenze mehr, darüber scheitert es trotzdem). |
+| Kern als eigenes Projekt `Murmli.Backend.Sync` in der Solution | Die künstlichen Datentypen der Tests erfüllen den Vertrag der Datentypen aus Testcode, ohne dass Sichtbarkeit für Tests erweitert wird, und die API nutzt ihn über die Grenze ihrer Assembly. Kein eigenes Paket und keine eigene Version ([#121](https://github.com/Murmli/MurmliV2/issues/121): „Keine eigene Bibliothek“ heißt kein eigenes Release). Verworfen: Ordner in der API (Vertrag intern), Prüfung nur über HTTP. |
+| Datentypen per Definition mit Ausdrücken (`note => note.Title`) | Spalten stehen nur in der EF-Konfiguration, Typen und Gruppen prüft der Compiler bzw. der Start. Verworfen: Attribute an Entitäten (lägen in Data, das den Kern nicht kennt; Argumente nur Konstanten; `[MaxLength]` änderte die Spaltentypen der Migrationen), Feldgruppen als Complex Types (`item.Name.Value` in jeder Abfrage). |
+| Eine Transaktion je Kommando, Claim zuerst | Was vor einer Störung übernommen wurde, bleibt übernommen; ein gleichzeitiges Duplikat wartet auf den Schlüssel und findet danach das Original. Verworfen: eine Transaktion um die ganze Anfrage (ein Retry wiederholte festgeschriebene Kommandos), Claim am Ende. |
+| Unklarer Commit: Wiederholung über den Claim | `verifySucceeded` liefert immer `false`, die Wiederholung findet die festgeschriebene Kommando-ID und antwortet mit dem gespeicherten Ergebnis. Verworfen: eine Prüfabfrage mit dem berechneten Ergebnis (nicht testbar, falsch, wenn ein Duplikat dieselbe ID inzwischen festgeschrieben hat). |
+| Lesen in einem Schnappschuss mit REPEATABLE READ | Die Versionen im Token passen zu den gelieferten Änderungen. Verworfen: Abfragen in READ COMMITTED. |
+| Abruf ohne Änderungen mit einer Anweisung | Häufigster Fall ([#123](https://github.com/Murmli/MurmliV2/issues/123)): Abruf des Kontos plus eine Anweisung für Heads und Kennung der Datenbank. |
+| Persönlicher Bereich erst beim ersten Abgleich | Konten von vor dem Abgleich und aus einer überlappenden alten Revision bekommen ihn ohne Migration. Verworfen: Anlegen in `GET /v1/users/me` (die Anmeldung hinge am Abgleich), in der Transaktion der Kontoanlage, per Backfill-Migration. |

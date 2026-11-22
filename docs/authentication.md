@@ -53,13 +53,14 @@ Was die App anbietet: [app.md](app.md#anmeldung).
 
 - `identity.users` trägt nur zufällige eigene Id, `auth_user_id` (gleich `sub`, unique) und Anlagezeitpunkt, Name und E-Mail kennt nur Better Auth. Nutzerdaten hängen an der eigenen Id, ein Providerwechsel berührt so nur die Zuordnung.
 - `GET /v1/users/me` legt beim ersten Aufruf das Konto an, außer ein Löschvermerk (`identity.deleted_users`) verhindert es (dann 401).
+- Den persönlichen Bereich des Abgleichs legt der Server beim ersten Abgleich des Kontos an, nicht mit dem Konto; Geräte erfahren ihn nur über den Abgleich ([sync.md](sync.md#bereiche-und-mitglieder)). `POST /v1/sync` legt nie ein Konto an, ohne Konto antwortet er mit 410 `account-gone`.
 
 ## Konto löschen
 
 `DELETE /v1/users/me` antwortet 204, wenn alles gelöscht ist. Die Schritte laufen ohne gemeinsame Transaktion, jeder ist wiederholbar: Scheitert einer, kann sich der Nutzer weiter anmelden und erneut löschen, auch mit demselben Token.
 
 1. Löschvermerk (Better-Auth-ID, Zeitpunkt) schreiben.
-2. Konto in `identity.users` löschen, Nutzerdaten folgen per `ON DELETE CASCADE`.
+2. Konto in `identity.users` löschen, Nutzerdaten folgen per `ON DELETE CASCADE`, die abgeglichenen Daten über ihren Bereich (`sync.scopes`) und die verarbeiteten Kommandos (`sync.processed_commands`).
 3. Vermerke älter als 24 Stunden löschen (weit über die rund 20 Minuten JWT-Gültigkeit).
 4. Nutzer in `auth` löschen (`POST /service/delete-user`, Timeout 10 s, ID im Body, damit sie nicht in Logs der HttpClientFactory und im HttpClient-Span landet). Kein 2xx, Timeout oder Verbindungsfehler ergeben 502, geloggt nur Statuscode bzw. Exception (`AuthUserDeletionFailed`), nie der Antwort-Body. `auth` antwortet auch für unbekannte IDs 204.
 
