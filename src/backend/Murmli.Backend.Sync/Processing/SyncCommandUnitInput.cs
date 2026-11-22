@@ -8,5 +8,6 @@ internal sealed record SyncCommandUnitInput(
     SyncCommandClaim Claim,
     DateTimeOffset Now,
     SyncCommand? Command,
-    SyncRejectionReason? PreCheckRejection
+    SyncRejectionReason? PreCheckRejection,
+    SyncScopeSeed? ScopeSeed
 );

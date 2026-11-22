@@ -86,6 +86,55 @@ public class SyncEndpointsLimitTests(PostgresFixture postgres) : IClassFixture<P
     }
 
     [Fact]
+    public async Task Sync_RootCreateAtOwnedScopeLimit_RejectedLimitExceededAndReportedRemoved()
+    {
+        await using var api = await StartApiAsync("Sync:DataTypes:testBoard:MaxOwnedScopesPerAccount", "2");
+        var device = await SyncTestDevice.SignInAsync(api);
+        var now = api.TimeProvider.GetUtcNow();
+        Guid[] boardIds = [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()];
+
+        var response = await device.SyncAllAsync([.. boardIds.Select(boardId => device.CreateBoard(boardId, now, "board"))]);
+        var ownedScopeCountAtLimit = await SharedScopeQueries.CountOwnedScopesAsync(api, device.AccountId, TestBoardType.ScopeKindName);
+        var afterDelete = await device.SyncAllAsync(device.DeleteBoard(boardIds[0], now), device.CreateBoard(boardIds[2], now, "board"));
+
+        Assert.Equal(
+            new (string, string?)[] { ("applied", null), ("applied", null), ("rejected", "limitExceeded") },
+            response.Results.Select(result => (result.Status, result.Reason))
+        );
+        Assert.Equal(2, ownedScopeCountAtLimit);
+        Assert.Equal(new[] { "applied", "applied" }, afterDelete.Results.Select(result => result.Status));
+        Assert.Equal(2, await SharedScopeQueries.CountOwnedScopesAsync(api, device.AccountId, TestBoardType.ScopeKindName));
+    }
+
+    [Fact]
+    public async Task Sync_ConcurrentScopeCreationsAtLimit_DoNotExceedLimit()
+    {
+        var connectionString = postgres.CreateDatabaseConnectionString();
+        await using var api = await ApiHost.StartAsync(
+            connectionString,
+            new Dictionary<string, string?> { ["Sync:DataTypes:testBoard:MaxOwnedScopesPerAccount"] = "3" },
+            testDataTypes: true
+        );
+        var authUserId = SyncTestDevice.CreateAuthUserId();
+        var devices = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => SyncTestDevice.SignInAsync(api, authUserId)));
+        var now = api.TimeProvider.GetUtcNow();
+        var administration = new DatabaseAdministration(connectionString);
+        Task<SyncResponse>[] creates;
+        await using (await administration.LockScopesTableAsync())
+        {
+            creates = [.. devices.Select(device => device.SyncAllAsync(device.CreateBoard(Guid.NewGuid(), now, "board")))];
+            await administration.WaitForLockWaitersAsync(devices.Length);
+        }
+
+        var responses = await Task.WhenAll(creates);
+
+        var results = responses.Select(response => Assert.Single(response.Results)).ToArray();
+        Assert.Equal(3, results.Count(result => result.Status == "applied"));
+        Assert.Equal(7, results.Count(result => result is { Status: "rejected", Reason: "limitExceeded" }));
+        Assert.Equal(3, await SharedScopeQueries.CountOwnedScopesAsync(api, devices[0].AccountId, TestBoardType.ScopeKindName));
+    }
+
+    [Fact]
     public async Task Sync_CommandPhaseBudgetExceeded_ReturnsResultsForProcessedPrefix()
     {
         await using var api = await StartApiAsync("Sync:CommandPhaseBudget", "00:00:00");

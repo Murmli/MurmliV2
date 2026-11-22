@@ -19,6 +19,8 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
     private string? AccountForeignKeyName =>
         context.Model.FindEntityType(typeof(ProcessedSyncCommand))!.GetForeignKeys().Single().GetConstraintName();
 
+    private string? ScopePrimaryKeyName => context.Model.FindEntityType(typeof(SyncScope))!.FindPrimaryKey()!.GetName();
+
     public async Task<SyncCommandOutcome> RunAsync(SyncCommandUnitInput input, CancellationToken cancellationToken = default)
     {
         try
@@ -48,7 +50,14 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
         CreateOutcome(claim, SyncResultStatus.Rejected, reason.Key, null);
 
     private static SyncCommandOutcome CreateOutcome(SyncCommandClaim claim, SyncResultStatus status, string? reason, string? cause) =>
-        new(claim.CommandId, status, reason, cause, null, new SyncCommandTarget(claim.ScopeId, claim.DataType, claim.RecordId));
+        new(
+            claim.CommandId,
+            status,
+            reason,
+            cause,
+            null,
+            SyncCommandTarget.FromCommand(claim.ScopeId, claim.DataType, claim.RecordId, claim.Kind)
+        );
 
     private static SyncCommandOutcome? GetRuleOutcome(SyncCommandClaim claim, SyncRuleDecision decision) =>
         decision switch
@@ -98,7 +107,7 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
         }
 
         var command = input.Command!;
-        var (outcome, isNew) = await ApplyAsync(input.AccountId, command, input.Now, cancellationToken);
+        var (outcome, isNew) = await ApplyAsync(input, cancellationToken);
         if (outcome.Status != SyncResultStatus.Applied)
         {
             context.ChangeTracker.Clear();
@@ -112,7 +121,10 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
         catch (DbUpdateException exception)
             when (isNew
                 && exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } postgresException
-                && postgresException.ConstraintName == command.DataType.GetPrimaryKeyName(context))
+                && (
+                    postgresException.ConstraintName == command.DataType.GetPrimaryKeyName(context)
+                    || postgresException.ConstraintName == ScopePrimaryKeyName
+                ))
         {
             throw new SyncCreateRaceException(exception);
         }
@@ -159,6 +171,7 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
                 command.Status,
                 command.Reason,
                 command.Cause,
+                command.Kind,
                 command.ScopeId,
                 command.DataType,
                 command.RecordId,
@@ -171,18 +184,21 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
             null,
             null,
             new SyncStoredResult(status.Key, stored.Reason, stored.Cause),
-            new SyncCommandTarget(stored.ScopeId, stored.DataType, stored.RecordId)
+            SyncCommandTarget.FromCommand(stored.ScopeId, stored.DataType, stored.RecordId, stored.Kind)
         );
     }
 
-    private async Task<(SyncCommandOutcome Outcome, bool IsNew)> ApplyAsync(
-        Guid accountId,
-        SyncCommand command,
-        DateTimeOffset now,
-        CancellationToken cancellationToken
-    )
+    private async Task<(SyncCommandOutcome Outcome, bool IsNew)> ApplyAsync(SyncCommandUnitInput input, CancellationToken cancellationToken)
     {
+        var command = input.Command!;
         var claim = command.Claim;
+        var dataType = command.DataType;
+        var isRootCreate = dataType.IsScopeRoot && command.Kind == SyncCommandKind.Create;
+        if (isRootCreate && await LockPersonalScopeAsync(input.AccountId, cancellationToken) is null)
+        {
+            throw new SyncAccountGoneException();
+        }
+
         var scope = (
             await context
                 .Set<SyncScope>()
@@ -190,17 +206,60 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
                 .AsTracking()
                 .ToListAsync(cancellationToken)
         ).SingleOrDefault();
-        if (scope is null || scope.Kind != SyncScope.PersonalKind || scope.OwnerAccountId != accountId)
+        if (scope is null)
         {
-            return (Rejected(claim, SyncRejectionReason.NoAccess), false);
+            return isRootCreate ? await CreateScopeAsync(input, cancellationToken) : (Rejected(claim, SyncRejectionReason.NoAccess), false);
         }
 
-        if (command.DataType.ScopeKind != scope.Kind)
+        SyncMemberRole? memberRole = null;
+        Guid? actingMemberId = null;
+        if (scope.Kind == SyncScope.PersonalKind)
+        {
+            if (scope.OwnerAccountId != input.AccountId)
+            {
+                return (Rejected(claim, SyncRejectionReason.NoAccess), false);
+            }
+        }
+        else
+        {
+            var entry = await context
+                .Set<SyncMemberEntry>()
+                .Where(memberEntry => memberEntry.ScopeId == scope.Id && memberEntry.AccountId == input.AccountId)
+                .Select(memberEntry => new
+                {
+                    memberEntry.Id,
+                    memberEntry.Role,
+                    memberEntry.State,
+                })
+                .SingleOrDefaultAsync(cancellationToken);
+            if (entry is null || entry.State != SyncMemberState.Active)
+            {
+                return (Rejected(claim, SyncRejectionReason.NoAccess), false);
+            }
+
+            memberRole = new SyncMemberRole(entry.Role);
+            actingMemberId = entry.Id;
+        }
+
+        if (dataType.ScopeKind != scope.Kind)
         {
             return (Rejected(claim, SyncRejectionReason.Invalid), false);
         }
 
-        var record = await command.DataType.FindTrackedAsync(context, claim.RecordId, cancellationToken);
+        var isRootDelete = dataType.IsScopeRoot && command.Kind == SyncCommandKind.Delete;
+        if (memberRole is { } role && !role.Satisfies(isRootDelete ? SyncMemberRole.Owner : dataType.MinimumRole(command.Kind)))
+        {
+            return (Rejected(claim, SyncRejectionReason.NoAccess), false);
+        }
+
+        if (isRootDelete)
+        {
+            // One statement: a tracked member entry would make EF Core delete it before the scope and fail on the person references
+            await context.Set<SyncScope>().Where(target => target.Id == scope.Id).ExecuteDeleteAsync(cancellationToken);
+            return (Applied(claim), false);
+        }
+
+        var record = await dataType.FindTrackedAsync(context, claim.RecordId, cancellationToken);
         if (record is not null && record.ScopeId != claim.ScopeId)
         {
             return (Rejected(claim, SyncRejectionReason.NoAccess), false);
@@ -224,21 +283,21 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
                 return (Ignored(claim, SyncIgnoreCause.TargetDeleted), false);
             }
 
-            if (await command.DataType.CountInScopeAsync(context, claim.ScopeId, cancellationToken) >= registry.GetMaximumRecordsPerScope(command.DataType))
+            if (await dataType.CountInScopeAsync(context, claim.ScopeId, cancellationToken) >= registry.GetMaximumRecordsPerScope(dataType))
             {
                 return (Rejected(claim, SyncRejectionReason.LimitExceeded), false);
             }
 
-            record = command.DataType.CreateRecord(claim.RecordId, claim.ScopeId);
+            record = dataType.CreateRecord(claim.RecordId, claim.ScopeId);
             isNew = true;
         }
 
-        if (command.Kind != SyncCommandKind.Delete && !command.DataType.ApplyChanges(record, command.Changes!, claim.Time, isNew))
+        if (command.Kind != SyncCommandKind.Delete && !dataType.ApplyChanges(record, command.Changes!, claim.Time, isNew))
         {
             return (Ignored(claim, SyncIgnoreCause.LostToNewer), false);
         }
 
-        if (GetRuleOutcome(claim, command.DataType.EvaluateRules(record, actingMemberId: null)) is { } ruleOutcome)
+        if (GetRuleOutcome(claim, dataType.EvaluateRules(record, actingMemberId)) is { } ruleOutcome)
         {
             return (ruleOutcome, false);
         }
@@ -255,12 +314,13 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
                     RecordId = claim.RecordId,
                     ScopeId = claim.ScopeId,
                     Version = version,
-                    DeletedAt = now,
+                    DeletedAt = input.Now,
                 }
             );
             return (Applied(claim), false);
         }
 
+        dataType.ApplyFills(record, isNew, claim.Time, actingMemberId);
         record.Version = version;
         if (isNew)
         {
@@ -268,6 +328,65 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
         }
 
         return (Applied(claim), isNew);
+    }
+
+    private async Task<SyncScope?> LockPersonalScopeAsync(Guid accountId, CancellationToken cancellationToken) =>
+        (
+            await context
+                .Set<SyncScope>()
+                .FromSql($"SELECT * FROM sync.scopes WHERE owner_account_id = {accountId} AND kind = 'personal' FOR NO KEY UPDATE")
+                .ToListAsync(cancellationToken)
+        ).SingleOrDefault();
+
+    private async Task<(SyncCommandOutcome Outcome, bool IsNew)> CreateScopeAsync(SyncCommandUnitInput input, CancellationToken cancellationToken)
+    {
+        var command = input.Command!;
+        var claim = command.Claim;
+        var dataType = command.DataType;
+        var ownedScopeCount = await context
+            .Set<SyncScope>()
+            .CountAsync(scope => scope.OwnerAccountId == input.AccountId && scope.Kind == dataType.ScopeKind, cancellationToken);
+        if (ownedScopeCount >= registry.GetMaxOwnedScopesPerAccount(dataType))
+        {
+            return (Rejected(claim, SyncRejectionReason.LimitExceeded), false);
+        }
+
+        var seed = input.ScopeSeed!;
+        var record = dataType.CreateRecord(claim.RecordId, claim.ScopeId);
+        dataType.ApplyChanges(record, command.Changes!, claim.Time, isNew: true);
+        if (GetRuleOutcome(claim, dataType.EvaluateRules(record, seed.OwnerMemberId)) is { } ruleOutcome)
+        {
+            return (ruleOutcome, false);
+        }
+
+        dataType.ApplyFills(record, isNew: true, claim.Time, seed.OwnerMemberId);
+        record.Version = 1;
+        context.Add(
+            new SyncScope
+            {
+                Id = claim.ScopeId,
+                Kind = dataType.ScopeKind,
+                OwnerAccountId = input.AccountId,
+                Version = 1,
+                Epoch = seed.Epoch,
+                TombstoneFloor = 0,
+                CreatedAt = input.Now,
+            }
+        );
+        context.Add(
+            new SyncMemberEntry
+            {
+                Id = seed.OwnerMemberId,
+                ScopeId = claim.ScopeId,
+                AccountId = input.AccountId,
+                Name = "",
+                Role = SyncMemberRole.Owner.Key,
+                State = SyncMemberState.Active,
+                CreatedAt = input.Now,
+            }
+        );
+        context.Add(record);
+        return (Applied(claim), true);
     }
 
     private void StoreResult(ProcessedSyncCommand processedCommand, SyncCommandOutcome outcome)

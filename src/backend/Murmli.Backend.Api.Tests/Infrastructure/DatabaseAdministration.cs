@@ -25,6 +25,43 @@ internal sealed class DatabaseAdministration(string connectionString)
     public Task RaiseTombstoneFloorAsync(Guid scopeId, long floor) =>
         UpdateSingleRowAsync("UPDATE sync.scopes SET tombstone_floor = @floor WHERE id = @target", ("floor", floor), ("target", scopeId));
 
+    public async Task<Guid> InsertMemberEntryAsync(
+        Guid scopeId,
+        Guid accountId,
+        DateTimeOffset createdAt,
+        string role = "member",
+        string state = "active"
+    )
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var memberId = Guid.NewGuid();
+        await using var connection = new NpgsqlConnection(connectionStringBuilder.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await ExecuteSingleRowAsync(
+            connection,
+            transaction,
+            "UPDATE sync.scopes SET version = version + 1 WHERE id = @scope",
+            ("scope", scopeId)
+        );
+        await ExecuteSingleRowAsync(
+            connection,
+            transaction,
+            """
+            INSERT INTO sync.member_entries (id, scope_id, account_id, name, role, state, created_at)
+            VALUES (@id, @scope, @account, '', @role, @state, @createdAt)
+            """,
+            ("id", memberId),
+            ("scope", scopeId),
+            ("account", accountId),
+            ("role", role),
+            ("state", state),
+            ("createdAt", createdAt)
+        );
+        await transaction.CommitAsync(cancellationToken);
+        return memberId;
+    }
+
     public Task<HeldTransaction> LockScopeRowAsync(Guid scopeId) =>
         HoldAsync("SELECT id FROM sync.scopes WHERE id = @target FOR UPDATE", scopeId);
 
@@ -59,18 +96,27 @@ internal sealed class DatabaseAdministration(string connectionString)
         }
     }
 
-    private async Task UpdateSingleRowAsync(string sql, params (string Name, object Value)[] parameters)
+    private static async Task ExecuteSingleRowAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        string sql,
+        params (string Name, object Value)[] parameters
+    )
     {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new NpgsqlConnection(connectionStringBuilder.ConnectionString);
-        await connection.OpenAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
         foreach (var (name, value) in parameters)
         {
             command.Parameters.AddWithValue(name, value);
         }
 
-        Assert.Equal(1, await command.ExecuteNonQueryAsync(cancellationToken));
+        Assert.Equal(1, await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+    }
+
+    private async Task UpdateSingleRowAsync(string sql, params (string Name, object Value)[] parameters)
+    {
+        await using var connection = new NpgsqlConnection(connectionStringBuilder.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await ExecuteSingleRowAsync(connection, transaction: null, sql, parameters);
     }
 
     private async Task<HeldTransaction> HoldAsync(string sql, Guid? target)

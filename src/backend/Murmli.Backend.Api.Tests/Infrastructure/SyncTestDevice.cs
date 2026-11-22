@@ -17,6 +17,8 @@ internal sealed class SyncTestDevice
 
     private const string ResponseContentType = "application/json; charset=utf-8";
 
+    public static readonly string[] AllDataTypes = [TestNoteType.DataTypeName, TestBoardType.DataTypeName, TestCardType.DataTypeName];
+
     private static readonly JsonSerializerOptions ResponseSerializerOptions = new(JsonSerializerOptions.Strict)
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -102,6 +104,8 @@ internal sealed class SyncTestDevice
 
     public Task<SyncResponse> SyncAsync(params JsonObject[] commands) => SyncAsync([TestNoteType.DataTypeName], commands);
 
+    public Task<SyncResponse> SyncAllAsync(params JsonObject[] commands) => SyncAsync(AllDataTypes, commands);
+
     public async Task<SyncResponse> SyncAsync(IReadOnlyList<string> dataTypes, IReadOnlyList<JsonObject> commands)
     {
         using var response = await SendAsync(JsonContent.Create(CreateBody(dataTypes, commands)), DeviceId.ToString());
@@ -166,31 +170,41 @@ internal sealed class SyncTestDevice
             fields["weight"] = weight;
         }
 
-        return CreateCommand("create", noteId, time, scopeId, fields);
+        return CreateCommand("create", TestNoteType.DataTypeName, scopeId ?? PersonalScopeId, noteId, time, fields);
     }
 
     public JsonObject SetNoteFields(Guid noteId, DateTimeOffset time, JsonObject fields, Guid? scopeId = null) =>
-        CreateCommand("setFields", noteId, time, scopeId, fields.DeepClone().AsObject());
+        CreateCommand("setFields", TestNoteType.DataTypeName, scopeId ?? PersonalScopeId, noteId, time, fields.DeepClone().AsObject());
 
     public JsonObject DeleteNote(Guid noteId, DateTimeOffset time, Guid? scopeId = null) =>
-        CreateCommand("delete", noteId, time, scopeId, fields: null);
+        CreateCommand("delete", TestNoteType.DataTypeName, scopeId ?? PersonalScopeId, noteId, time, fields: null);
 
-    private JsonObject CreateBody(IReadOnlyList<string> dataTypes, IReadOnlyList<JsonObject> commands) =>
-        new()
-        {
-            ["token"] = Token,
-            ["dataTypes"] = new JsonArray([.. dataTypes.Select(dataType => JsonValue.Create(dataType))]),
-            ["commands"] = new JsonArray([.. commands.Select(command => command.DeepClone())]),
-        };
+    public JsonObject CreateBoard(Guid boardId, DateTimeOffset time, string title) =>
+        CreateCommand("create", TestBoardType.DataTypeName, boardId, boardId, time, new JsonObject { ["title"] = title });
 
-    private JsonObject CreateCommand(string kind, Guid recordId, DateTimeOffset time, Guid? scopeId, JsonObject? fields)
+    public JsonObject SetBoardTitle(Guid boardId, DateTimeOffset time, string title) =>
+        CreateCommand("setFields", TestBoardType.DataTypeName, boardId, boardId, time, new JsonObject { ["title"] = title });
+
+    public JsonObject DeleteBoard(Guid boardId, DateTimeOffset time) =>
+        CreateCommand("delete", TestBoardType.DataTypeName, boardId, boardId, time, fields: null);
+
+    public JsonObject CreateCard(Guid boardId, Guid cardId, DateTimeOffset time, string text) =>
+        CreateCommand("create", TestCardType.DataTypeName, boardId, cardId, time, new JsonObject { ["text"] = text });
+
+    public JsonObject SetCardFields(Guid boardId, Guid cardId, DateTimeOffset time, JsonObject fields) =>
+        CreateCommand("setFields", TestCardType.DataTypeName, boardId, cardId, time, fields.DeepClone().AsObject());
+
+    public JsonObject DeleteCard(Guid boardId, Guid cardId, DateTimeOffset time) =>
+        CreateCommand("delete", TestCardType.DataTypeName, boardId, cardId, time, fields: null);
+
+    public JsonObject CreateCommand(string kind, string dataType, Guid scopeId, Guid recordId, DateTimeOffset time, JsonObject? fields)
     {
         var command = new JsonObject
         {
             ["id"] = Guid.NewGuid(),
             ["kind"] = kind,
-            ["scopeId"] = scopeId ?? PersonalScopeId,
-            ["dataType"] = TestNoteType.DataTypeName,
+            ["scopeId"] = scopeId,
+            ["dataType"] = dataType,
             ["recordId"] = recordId,
             ["time"] = time.ToUnixTimeMilliseconds(),
         };
@@ -201,6 +215,14 @@ internal sealed class SyncTestDevice
 
         return command;
     }
+
+    private JsonObject CreateBody(IReadOnlyList<string> dataTypes, IReadOnlyList<JsonObject> commands) =>
+        new()
+        {
+            ["token"] = Token,
+            ["dataTypes"] = new JsonArray([.. dataTypes.Select(dataType => JsonValue.Create(dataType))]),
+            ["commands"] = new JsonArray([.. commands.Select(command => command.DeepClone())]),
+        };
 
     private async Task<SyncResponse> ReadAsync(HttpResponseMessage response)
     {
