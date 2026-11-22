@@ -215,6 +215,202 @@ namespace Murmli.Backend.Data.Migrations
 
                     b.ToTable("product_import_runs", "products");
                 });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.DatabaseIdentity", b =>
+                {
+                    b.Property<bool>("Singleton")
+                        .HasColumnType("boolean")
+                        .HasColumnName("singleton");
+
+                    b.Property<Guid>("Value")
+                        .HasColumnType("uuid")
+                        .HasColumnName("value");
+
+                    b.HasKey("Singleton")
+                        .HasName("pk_database_identity");
+
+                    b.ToTable("database_identity", "sync", t =>
+                        {
+                            t.HasCheckConstraint("ck_database_identity_singleton", "singleton");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Singleton = true,
+                            Value = new Guid("3643d4ef-a971-42c0-be19-cc2c3180dc55")
+                        });
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.ProcessedSyncCommand", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<Guid>("CommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("command_id");
+
+                    b.Property<string>("Cause")
+                        .HasColumnType("text")
+                        .HasColumnName("cause");
+
+                    b.Property<string>("DataType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("data_type");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTimeOffset>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("RecordId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("record_id");
+
+                    b.Property<DateTimeOffset>("RetainFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retain_from");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_id");
+
+                    b.Property<string>("Status")
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.HasKey("AccountId", "CommandId")
+                        .HasName("pk_processed_commands");
+
+                    b.HasIndex("RetainFrom")
+                        .HasDatabaseName("ix_processed_commands_retain_from");
+
+                    b.HasIndex("AccountId", "ScopeId")
+                        .HasDatabaseName("ix_processed_commands_root_deletes")
+                        .HasFilter("kind = 'delete' AND status = 'applied' AND record_id = scope_id");
+
+                    b.ToTable("processed_commands", "sync");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncScope", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("Epoch")
+                        .HasColumnType("integer")
+                        .HasColumnName("epoch");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("OwnerAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_account_id");
+
+                    b.Property<long>("TombstoneFloor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("tombstone_floor");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_scopes");
+
+                    b.HasIndex("OwnerAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_scopes_owner_account_id_personal")
+                        .HasFilter("kind = 'personal'");
+
+                    b.HasIndex("OwnerAccountId", "Kind")
+                        .HasDatabaseName("ix_scopes_owner_account_id_kind");
+
+                    b.ToTable("scopes", "sync");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncTombstone", b =>
+                {
+                    b.Property<string>("DataType")
+                        .HasColumnType("text")
+                        .HasColumnName("data_type");
+
+                    b.Property<Guid>("RecordId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("record_id");
+
+                    b.Property<DateTimeOffset>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_id");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("DataType", "RecordId")
+                        .HasName("pk_tombstones");
+
+                    b.HasIndex("DeletedAt")
+                        .HasDatabaseName("ix_tombstones_deleted_at");
+
+                    b.HasIndex("ScopeId", "Version")
+                        .HasDatabaseName("ix_tombstones_scope_id_version");
+
+                    b.ToTable("tombstones", "sync");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.ProcessedSyncCommand", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_processed_commands_users_account_id");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncScope", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_scopes_users_owner_account_id");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncTombstone", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Sync.SyncScope", null)
+                        .WithMany()
+                        .HasForeignKey("ScopeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_tombstones_scopes_scope_id");
+                });
 #pragma warning restore 612, 618
         }
     }
