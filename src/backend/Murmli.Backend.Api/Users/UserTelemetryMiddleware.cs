@@ -38,6 +38,7 @@ internal sealed partial class UserTelemetryMiddleware(
             return;
         }
 
+        context.Features.Set(new AccountFeature(existingUserId));
         context.Features.Get<IHttpActivityFeature>()?.Activity.SetTag(LogProperties.UserId, existingUserId.ToString());
         using (logger.BeginScope(new Dictionary<string, object> { [LogProperties.UserId] = existingUserId }))
         {

@@ -63,6 +63,29 @@ public class WebApplicationExtensionsTests(PostgresFixture postgres) : IClassFix
         Assert.All(pathNames, pathName => Assert.StartsWith("/v1/", pathName));
     }
 
+    [Fact]
+    public async Task UseApi_OpenApiEnabled_DescribesSyncEndpoint()
+    {
+        await using var api = await ApiHost.StartAsync(connectionString, OpenApiEnabled);
+
+        using var document = await ReadDocumentAsync(api);
+
+        var sync = document.RootElement.GetProperty("paths").GetProperty("/v1/sync").GetProperty("post");
+        Assert.Contains("docs/sync.md", sync.GetProperty("description").GetString());
+        Assert.Contains(
+            sync.GetProperty("parameters").EnumerateArray(),
+            parameter => parameter.GetProperty("in").GetString() == "header" && parameter.GetProperty("name").GetString() == "Murmli-Device-Id"
+        );
+        Assert.True(sync.GetProperty("requestBody").GetProperty("content").TryGetProperty("application/json", out _));
+        Assert.Equal(
+            new[] { "200", "400", "410", "413", "415", "503" },
+            sync.GetProperty("responses").EnumerateObject().Select(response => response.Name).Order(StringComparer.Ordinal)
+        );
+        var schemas = document.RootElement.GetProperty("components").GetProperty("schemas");
+        Assert.True(schemas.TryGetProperty("SyncRequest", out _));
+        Assert.True(schemas.TryGetProperty("SyncResponse", out _));
+    }
+
     [Theory]
     [InlineData("GET")]
     [InlineData("DELETE")]
