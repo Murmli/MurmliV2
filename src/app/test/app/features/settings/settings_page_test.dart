@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -124,6 +126,33 @@ void main() {
           ) as RecordingCrashReporter).calls.last,
           'user none',
         );
+        expect(find.byType(OnboardingPage), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'tapping sign out again while the sign-out request is pending shows a progress indicator and sends no second request',
+      (tester) async {
+        final container = await openSettings(tester);
+        final pendingSignOut = Completer<ResponseBody>();
+        final requests = recordAuthenticationRequests(
+          container,
+          respondFromAuth: (_) => pendingSignOut.future,
+        );
+        final row = find.text(translations.account.signOut);
+        await tester.scrollUntilVisible(row, 100);
+        await tester.ensureVisible(row);
+        await tester.pump();
+
+        await tester.tap(row);
+        await tester.pump();
+        await tester.tap(row);
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(requests.auth.requests, hasLength(1));
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        pendingSignOut.complete(jsonResponse({'success': true}));
+        await tester.pumpAndSettle();
         expect(find.byType(OnboardingPage), findsOneWidget);
       },
     );
