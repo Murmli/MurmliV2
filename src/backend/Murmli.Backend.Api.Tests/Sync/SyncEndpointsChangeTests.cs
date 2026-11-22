@@ -207,10 +207,10 @@ public class SyncEndpointsChangeTests(SyncApiFixture fixture) : IClassFixture<Sy
                 await administration.RaiseTombstoneFloorAsync(personalScope.ScopeId, 1);
                 break;
             case "changedByOtherDevice":
-                await ChangeOnOtherDeviceAsync(device.CreateNote(otherNoteId, now, "b"), device.DeleteNote(noteId, now));
+                await device.ApplyOnOtherDeviceAsync(device.CreateNote(otherNoteId, now, "b"), device.DeleteNote(noteId, now));
                 break;
             case "tombstoneFloorAtTokenVersion":
-                await ChangeOnOtherDeviceAsync(device.CreateNote(otherNoteId, now, "b"));
+                await device.ApplyOnOtherDeviceAsync(device.CreateNote(otherNoteId, now, "b"));
                 await administration.RaiseTombstoneFloorAsync(personalScope.ScopeId, 1);
                 break;
         }
@@ -258,12 +258,6 @@ public class SyncEndpointsChangeTests(SyncApiFixture fixture) : IClassFixture<Sy
         Assert.Equal(expected.DeletedIds, response.Scopes.SelectMany(block => block.DeletedRecords).Select(deletion => deletion.Id));
         Assert.Equal(expected.RemovedScopeIds.Select(scopeId => new SyncRemovedScope(scopeId, false)), response.RemovedScopes);
         Assert.Equal(await ReadCurrentTokenAsync(device.PersonalScopeId), response.Token);
-
-        async Task ChangeOnOtherDeviceAsync(params JsonObject[] commands)
-        {
-            var changed = await device.OtherDevice().SyncAsync(commands);
-            Assert.All(changed.Results, result => Assert.Equal("applied", result.Status));
-        }
     }
 
     [Fact]

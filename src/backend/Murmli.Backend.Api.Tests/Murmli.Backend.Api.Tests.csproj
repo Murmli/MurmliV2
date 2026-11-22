@@ -27,4 +27,8 @@
         <Using Include="Xunit" />
     </ItemGroup>
 
+    <ItemGroup>
+        <RuntimeHostConfigurationOption Include="System.IO.Compression.UseStrictValidation" Value="true" />
+    </ItemGroup>
+
 </Project>

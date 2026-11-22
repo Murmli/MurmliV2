@@ -4,7 +4,7 @@ public abstract record SyncOutcome
 {
     private SyncOutcome() { }
 
-    public sealed record Completed(ReadOnlyMemory<byte> Body) : SyncOutcome;
+    public sealed record Completed(ReadOnlyMemory<byte> Body, SyncResponseEncoding Encoding) : SyncOutcome;
 
     public sealed record AccountGone : SyncOutcome;
 

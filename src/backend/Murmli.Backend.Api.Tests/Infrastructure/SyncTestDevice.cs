@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -60,16 +61,33 @@ internal sealed class SyncTestDevice
 
     public static SyncTestDevice WithoutAccount(ApiHost api) => new(api, CreateAuthUserId(), Guid.Empty, personalScopeId: null);
 
-    public static async Task<SyncResponse> ReadResponseAsync(HttpResponseMessage response)
+    public static async Task<SyncResponse> ReadResponseAsync(HttpResponseMessage response, bool compressed = false) =>
+        DeserializeResponse(await ReadBodyAsync(response, compressed));
+
+    public static async Task<string> ReadBodyAsync(HttpResponseMessage response, bool compressed)
     {
-        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
         var contentType = response.Content.Headers.ContentType?.ToString();
         Assert.True(
             response.StatusCode == HttpStatusCode.OK && contentType == ResponseContentType,
-            $"The sync answered {(int)response.StatusCode} with the Content-Type {contentType}: {body}"
+            $"The sync answered {(int)response.StatusCode} with the Content-Type {contentType}: {Encoding.UTF8.GetString(bytes)}"
         );
-        return Assert.IsType<SyncResponse>(JsonSerializer.Deserialize<SyncResponse>(body, ResponseSerializerOptions));
+        Assert.Contains("Accept-Encoding", response.Headers.Vary);
+        if (!compressed)
+        {
+            Assert.Empty(response.Content.Headers.ContentEncoding);
+            return Encoding.UTF8.GetString(bytes);
+        }
+
+        Assert.Equal(new[] { "gzip" }, response.Content.Headers.ContentEncoding);
+        await using var decompression = new GZipStream(new MemoryStream(bytes), CompressionMode.Decompress);
+        using var reader = new StreamReader(decompression, Encoding.UTF8);
+        return await reader.ReadToEndAsync(cancellationToken);
     }
+
+    public static SyncResponse DeserializeResponse(string body) =>
+        Assert.IsType<SyncResponse>(JsonSerializer.Deserialize<SyncResponse>(body, ResponseSerializerOptions));
 
     public static async Task<JsonElement> AssertProblemAsync(HttpResponseMessage response, HttpStatusCode statusCode, string problemType)
     {
@@ -90,6 +108,12 @@ internal sealed class SyncTestDevice
         return await ReadAsync(response);
     }
 
+    public async Task ApplyOnOtherDeviceAsync(params JsonObject[] commands)
+    {
+        var response = await OtherDevice().SyncAsync(commands);
+        Assert.All(response.Results, result => Assert.Equal("applied", result.Status));
+    }
+
     public async Task<SyncResponse> SyncRawAsync(string commandsJson)
     {
         var body = $$"""{"token":{{JsonSerializer.Serialize(Token)}},"dataTypes":["{{TestNoteType.DataTypeName}}"],"commands":{{commandsJson}}}""";
@@ -97,7 +121,12 @@ internal sealed class SyncTestDevice
         return await ReadAsync(response);
     }
 
-    public async Task<HttpResponseMessage> SendAsync(HttpContent? content, string? deviceIdHeader, string? traceParent = null)
+    public async Task<HttpResponseMessage> SendAsync(
+        HttpContent? content,
+        string? deviceIdHeader,
+        string? traceParent = null,
+        string? acceptEncoding = null
+    )
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/sync") { Content = content };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", TestTokens.Create(AuthUserId));
@@ -109,6 +138,11 @@ internal sealed class SyncTestDevice
         if (traceParent is not null)
         {
             request.Headers.Add("traceparent", traceParent);
+        }
+
+        if (acceptEncoding is not null)
+        {
+            request.Headers.TryAddWithoutValidation("Accept-Encoding", acceptEncoding);
         }
 
         return await api.HttpClient.SendAsync(request, TestContext.Current.CancellationToken);

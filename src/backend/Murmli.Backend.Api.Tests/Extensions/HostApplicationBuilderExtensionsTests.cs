@@ -67,14 +67,7 @@ public class HostApplicationBuilderExtensionsTests(PostgresFixture postgres) : I
     [Fact]
     public async Task AddApi_SyncFieldNullabilityDiffersFromModel_FailsOptionsValidation()
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
-        builder.Configuration.AddInMemoryCollection(
-            new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:murmli"] = "Host=localhost;Database=murmli;Username=postgres;Password=postgres",
-            }
-        );
-        builder.AddApi();
+        var builder = CreateApiBuilder();
         builder.Services.ConfigureDbContext<MurmliDbContext>(options =>
             options.ReplaceService<IModelCustomizer, SyncTestModelCustomizer>()
         );
@@ -87,6 +80,32 @@ public class HostApplicationBuilderExtensionsTests(PostgresFixture postgres) : I
 
         Assert.Contains("brokenNote", exception.Message);
         Assert.Contains("title", exception.Message);
+    }
+
+    [Fact]
+    public async Task AddApi_FullStateCompressionLevelUndefined_FailsOptionsValidation()
+    {
+        await using var application = CreateApiBuilder(new Dictionary<string, string?> { ["Sync:FullStateCompressionLevel"] = "5" }).Build();
+
+        var exception = Assert.Throws<OptionsValidationException>(() =>
+            application.Services.GetRequiredService<IOptions<SyncOptions>>().Value
+        );
+
+        Assert.Contains(nameof(SyncOptions.FullStateCompressionLevel), exception.Message);
+    }
+
+    private static WebApplicationBuilder CreateApiBuilder(IReadOnlyDictionary<string, string?>? configuration = null)
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
+        builder.Configuration.AddInMemoryCollection(
+            new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:murmli"] = "Host=localhost;Database=murmli;Username=postgres;Password=postgres",
+            }
+        );
+        builder.Configuration.AddInMemoryCollection(configuration);
+        builder.AddApi();
+        return builder;
     }
 
     private static async Task<HttpResponseMessage> SendAsync(ApiHost api, string path, string token)

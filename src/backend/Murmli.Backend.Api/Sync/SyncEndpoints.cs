@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.Net.Http.Headers;
 using Murmli.Backend.Api.Database;
 using Murmli.Backend.Api.Problems;
 using Murmli.Backend.Api.Users;
@@ -84,7 +85,12 @@ internal static class SyncEndpoints
         SyncOutcome outcome;
         try
         {
-            outcome = await processor.ProcessAsync(new SyncCaller(account.AccountId, device), request, deadline.Token);
+            outcome = await processor.ProcessAsync(
+                new SyncCaller(account.AccountId, device),
+                request,
+                GetAcceptedEncoding(httpContext.Request),
+                deadline.Token
+            );
         }
         catch (OperationCanceledException) when (deadline.IsCancellationRequested && !httpContext.RequestAborted.IsCancellationRequested)
         {
@@ -93,12 +99,20 @@ internal static class SyncEndpoints
 
         return outcome switch
         {
-            SyncOutcome.Completed completed => new SyncResponseResult(completed.Body),
+            SyncOutcome.Completed completed => new SyncResponseResult(completed.Body, completed.Encoding),
             SyncOutcome.AccountGone => Problem(StatusCodes.Status410Gone, ProblemTypes.AccountGone),
             SyncOutcome.DatabaseUnavailable => new ServiceUnavailableProblem(databaseOptions.Value.UnavailableRetryAfter),
             _ => throw new UnreachableException(),
         };
     }
+
+    // "*" does not count as gzip, and an unreadable header means no compression (docs/sync.md "Kompression")
+    private static SyncResponseEncoding GetAcceptedEncoding(HttpRequest request) =>
+        StringWithQualityHeaderValue.TryParseStrictList(request.Headers.AcceptEncoding, out var codings)
+        && codings.FirstOrDefault(coding => coding.Value.Equals("gzip", StringComparison.OrdinalIgnoreCase)) is { } gzip
+        && gzip.Quality.GetValueOrDefault(1) > 0
+            ? SyncResponseEncoding.Gzip
+            : SyncResponseEncoding.Identity;
 
     private static ProblemHttpResult Problem(int statusCode, string type) => TypedResults.Problem(statusCode: statusCode, type: type);
 

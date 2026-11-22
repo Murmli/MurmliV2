@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text.Json;
 using Murmli.Backend.Data.Sync;
 using Murmli.Backend.Sync.Configuration;
@@ -5,9 +6,27 @@ using Murmli.Backend.Sync.Protocol;
 
 namespace Murmli.Backend.Sync.Processing;
 
-internal sealed class SyncResponseWriter(MemoryStream stream, SyncOptions options) : IDisposable
+internal sealed class SyncResponseWriter : IDisposable
 {
-    public Utf8JsonWriter Json { get; } = new(stream);
+    private readonly MemoryStream stream;
+
+    private readonly SyncOptions options;
+
+    private readonly SyncResponseEncoding encoding;
+
+    private readonly GZipStream? compression;
+
+    public SyncResponseWriter(MemoryStream stream, SyncOptions options, SyncResponseEncoding encoding)
+    {
+        this.stream = stream;
+        this.options = options;
+        this.encoding = encoding;
+        compression =
+            encoding == SyncResponseEncoding.Gzip ? new GZipStream(stream, options.FullStateCompressionLevel, leaveOpen: true) : null;
+        Json = new Utf8JsonWriter(compression ?? (Stream)stream);
+    }
+
+    public Utf8JsonWriter Json { get; }
 
     public void WriteStart(IReadOnlyList<SyncCommandOutcome> outcomes)
     {
@@ -51,9 +70,14 @@ internal sealed class SyncResponseWriter(MemoryStream stream, SyncOptions option
         Json.WriteStartArray("members");
         Json.WriteEndArray();
         Json.WriteEndObject();
+        // With gzip the writer holds at most one uncompressed block; without gzip, a flush per block would let the response buffer grow to twice the body
+        if (compression is not null)
+        {
+            Json.Flush();
+        }
     }
 
-    public ReadOnlyMemory<byte> WriteEnd(
+    public SyncOutcome.Completed WriteEnd(
         IReadOnlyList<Guid> removedScopeIds,
         bool coversAllScopes,
         IReadOnlyList<SyncScopeHead> heads,
@@ -84,11 +108,16 @@ internal sealed class SyncResponseWriter(MemoryStream stream, SyncOptions option
         Json.WriteNumber("maxRequestBytes", options.MaxRequestBytes);
         Json.WriteEndObject();
         Json.WriteEndObject();
-        Json.Flush();
-        return new ReadOnlyMemory<byte>(stream.GetBuffer(), 0, (int)stream.Length);
+        Dispose();
+        return new SyncOutcome.Completed(new ReadOnlyMemory<byte>(stream.GetBuffer(), 0, (int)stream.Length), encoding);
     }
 
-    public void Dispose() => Json.Dispose();
+    // The writer first: its disposal flushes into the gzip stream, whose disposal then writes the gzip trailer
+    public void Dispose()
+    {
+        Json.Dispose();
+        compression?.Dispose();
+    }
 
     private void WriteResult(SyncCommandOutcome outcome)
     {

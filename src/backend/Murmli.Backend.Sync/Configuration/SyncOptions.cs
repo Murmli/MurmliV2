@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.IO.Compression;
 
 namespace Murmli.Backend.Sync.Configuration;
 
@@ -29,6 +30,9 @@ public sealed class SyncOptions
 
     [Range(typeof(TimeSpan), "00:00:00.001", "00:00:30")]
     public TimeSpan LockTimeout { get; set; } = TimeSpan.FromSeconds(5);
+
+    [EnumDataType(typeof(CompressionLevel))]
+    public CompressionLevel FullStateCompressionLevel { get; set; } = CompressionLevel.Fastest;
 
     public Dictionary<string, SyncDataTypeOptions> DataTypes { get; set; } = [];
 }

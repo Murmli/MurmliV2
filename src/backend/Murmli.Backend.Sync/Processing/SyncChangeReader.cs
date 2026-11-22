@@ -43,6 +43,7 @@ internal sealed class SyncChangeReader(
         SyncToken? token,
         IReadOnlyList<SyncDataType> listed,
         IReadOnlyList<SyncCommandOutcome> outcomes,
+        SyncResponseEncoding acceptedEncoding,
         CancellationToken cancellationToken = default
     )
     {
@@ -50,7 +51,8 @@ internal sealed class SyncChangeReader(
         return context
             .Database.CreateExecutionStrategy()
             .ExecuteAsync(
-                attemptCancellationToken => ReadSnapshotAsync(accountId, token, listed, outcomes, stream, attemptCancellationToken),
+                attemptCancellationToken =>
+                    ReadSnapshotAsync(accountId, token, listed, outcomes, acceptedEncoding, stream, attemptCancellationToken),
                 cancellationToken
             );
     }
@@ -129,13 +131,13 @@ internal sealed class SyncChangeReader(
         SyncToken? token,
         IReadOnlyList<SyncDataType> listed,
         IReadOnlyList<SyncCommandOutcome> outcomes,
+        SyncResponseEncoding acceptedEncoding,
         MemoryStream stream,
         CancellationToken cancellationToken
     )
     {
         context.PrepareSyncUnitAttempt();
         stream.SetLength(0);
-        using var response = new SyncResponseWriter(stream, options.Value);
         await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var heads = await ReadHeadsAsync(accountId, cancellationToken);
         if (heads.Count == 0)
@@ -175,15 +177,22 @@ internal sealed class SyncChangeReader(
 
         var removedScopeIds = GetRemovedScopeIds(token?.Scopes ?? [], outcomes, knownVersions);
 
+        // Deltas stay uncompressed against BREACH (docs/sync.md "Kompression")
+        using var response = new SyncResponseWriter(
+            stream,
+            options.Value,
+            acceptedEncoding == SyncResponseEncoding.Gzip && knownVersions.ContainsValue(null) ? SyncResponseEncoding.Gzip : SyncResponseEncoding.Identity
+        );
+
         response.WriteStart(outcomes);
         foreach (var head in heads)
         {
             await WriteScopeAsync(response, head, knownVersions[head.Id], includedTargets[head.Id], listed, listedNames, cancellationToken);
         }
 
-        var body = response.WriteEnd(removedScopeIds, coversAllScopes, heads, timeProvider.GetUtcNowInMilliseconds());
+        var completed = response.WriteEnd(removedScopeIds, coversAllScopes, heads, timeProvider.GetUtcNowInMilliseconds());
         await transaction.CommitAsync(cancellationToken);
-        return new SyncOutcome.Completed(body);
+        return completed;
     }
 
     private async Task<bool> HasTooManyDeletionsAsync(

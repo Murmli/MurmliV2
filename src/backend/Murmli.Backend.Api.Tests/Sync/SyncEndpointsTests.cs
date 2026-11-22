@@ -25,7 +25,6 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
         using var response = await SendBodyAsync(device, device.CreateBody());
 
         var syncResponse = await SyncTestDevice.ReadResponseAsync(response);
-        Assert.Contains("Accept-Encoding", response.Headers.Vary);
         Assert.Empty(syncResponse.Results);
         var block = Assert.Single(syncResponse.Scopes);
         Assert.Equal(SyncScope.PersonalKind, block.Kind);
@@ -101,6 +100,173 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
         Assert.Equal(token, poll.Token);
         Assert.Empty(poll.Scopes);
         Assert.Equal(token, otherDeviceResponse.Token);
+    }
+
+    [Fact]
+    public async Task Sync_FullStateWithGzipAccepted_ReturnsGzipOfSameJson()
+    {
+        var device = await SyncTestDevice.SignInAsync(fixture.Api);
+        var now = fixture.Api.TimeProvider.GetUtcNow();
+        var plainNoteId = Guid.NewGuid();
+        var redNoteId = Guid.NewGuid();
+        var created = await device.SyncAsync(
+            device.CreateNote(plainNoteId, now, "plain"),
+            device.CreateNote(redNoteId, now, "red", "red", 2m)
+        );
+        Assert.Equal(new[] { "applied", "applied" }, created.Results.Select(result => result.Status));
+        var plainReader = device.OtherDevice();
+        var gzipReader = device.OtherDevice();
+
+        using var identityResponse = await SendBodyAsync(plainReader, plainReader.CreateBody());
+        using var gzipResponse = await SendBodyAsync(gzipReader, gzipReader.CreateBody(), "gzip");
+
+        Assert.Equal(4, await ReadGzipExtraFlagsAsync(gzipResponse));
+        var identityBody = await SyncTestDevice.ReadBodyAsync(identityResponse, compressed: false);
+        var compressedBody = await SyncTestDevice.ReadBodyAsync(gzipResponse, compressed: true);
+        Assert.Equal(identityBody, compressedBody);
+        var syncResponse = SyncTestDevice.DeserializeResponse(compressedBody);
+        Assert.True(syncResponse.CoversAllScopes);
+        var block = Assert.Single(syncResponse.Scopes);
+        Assert.True(block.FullState);
+        Assert.Equal(
+            new[] { plainNoteId, redNoteId }.OrderBy(noteId => noteId.ToString(), StringComparer.Ordinal),
+            block.Records.Select(record => record.Id)
+        );
+    }
+
+    [Fact]
+    public async Task Sync_FullStateCompressionLevelSmallestSize_CompressesWithThatLevel()
+    {
+        await using var api = await ApiHost.StartAsync(
+            fixture.CreateDatabaseConnectionString(),
+            new Dictionary<string, string?> { ["Sync:FullStateCompressionLevel"] = "SmallestSize" },
+            testDataTypes: true
+        );
+        var device = await SyncTestDevice.SignInAsync(api, firstSync: false);
+
+        using var response = await SendBodyAsync(device, device.CreateBody(), "gzip");
+
+        Assert.Equal(2, await ReadGzipExtraFlagsAsync(response));
+        await SyncTestDevice.ReadResponseAsync(response, compressed: true);
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("gzip", true)]
+    [InlineData("GZip", true)]
+    [InlineData("deflate, gzip", true)]
+    [InlineData("br;q=1.0, gzip;q=0.5", true)]
+    [InlineData("gzip ; Q=0.5", true)]
+    [InlineData("gzip;q=0.001", true)]
+    [InlineData("gzip, gzip;q=0", true)]
+    [InlineData("gzip;q=0", false)]
+    [InlineData("gzip;q=0.000", false)]
+    [InlineData("gzip;q=0, gzip", false)]
+    [InlineData("identity", false)]
+    [InlineData("identity;q=0", false)]
+    [InlineData("deflate, br", false)]
+    [InlineData("*", false)]
+    [InlineData("x-gzip", false)]
+    [InlineData("gzip;q=2", false)]
+    [InlineData("gzip, br;q=bogus", false)]
+    [InlineData("gzip;level=9", false)]
+    [InlineData(",", false)]
+    [InlineData("identity;q=1, gzip;q=0.1", true)]
+    public async Task Sync_AcceptEncodingHeader_CompressesFullStateExactlyWhenGzipIsAccepted(string? acceptEncoding, bool compressed)
+    {
+        var device = await SyncTestDevice.SignInAsync(fixture.Api, firstSync: false);
+
+        using var response = await SendBodyAsync(device, device.CreateBody(), acceptEncoding);
+
+        var syncResponse = await SyncTestDevice.ReadResponseAsync(response, compressed);
+        Assert.True(Assert.Single(syncResponse.Scopes).FullState);
+    }
+
+    [Theory]
+    [InlineData("noToken", true, 1)]
+    [InlineData("noTokenWithCommand", true, 1)]
+    [InlineData("tokenWithoutPersonalScope", true, 1)]
+    [InlineData("tooManyDeletions", true, 1)]
+    [InlineData("delta", false, 1)]
+    [InlineData("includedStateOnly", false, 1)]
+    [InlineData("removedScopeOnly", false, 0)]
+    [InlineData("unchanged", false, 0)]
+    public async Task Sync_GzipAccepted_CompressesExactlyWhenABlockHasFullState(string scenario, bool compressed, int blockCount)
+    {
+        var device = await SyncTestDevice.SignInAsync(fixture.Api);
+        var now = fixture.Api.TimeProvider.GetUtcNow();
+        var noteId = Guid.NewGuid();
+        await device.SyncAsync(device.CreateNote(noteId, now.AddSeconds(-10), "original"));
+        var tokenlessDevice = device.OtherDevice();
+        var newNoteId = Guid.NewGuid();
+        var otherNoteId = Guid.NewGuid();
+        var foreignScopeId = Guid.NewGuid();
+        var create = device.CreateNote(newNoteId, now, "new");
+        var olderChange = device.SetNoteFields(noteId, now.AddSeconds(-20), SyncTestCommands.TitleFields("older"));
+        var foreignCreate = device.CreateNote(Guid.NewGuid(), now, "foreign", scopeId: foreignScopeId);
+        switch (scenario)
+        {
+            case "tokenWithoutPersonalScope":
+                device.Token = SyncTokenFormat.Encode(SyncTokenFormat.Decode(device.Token!).DatabaseIdentity, [(foreignScopeId, 0, 0L)]);
+                break;
+            case "tooManyDeletions":
+                await device.ApplyOnOtherDeviceAsync([
+                    .. Enumerable
+                        .Range(0, 51)
+                        .Select(_ => Guid.NewGuid())
+                        .SelectMany(deletedId => new[] { device.CreateNote(deletedId, now, "gone"), device.DeleteNote(deletedId, now) }),
+                ]);
+                break;
+            case "delta":
+                await device.ApplyOnOtherDeviceAsync(device.CreateNote(otherNoteId, now, "other"));
+                break;
+        }
+
+        (SyncTestDevice Sender, JsonObject Body, SyncCommandResult[] Results, bool CoversAllScopes, Guid[] RecordIds, Guid[] RemovedScopeIds) expected =
+            scenario switch
+            {
+                "noToken" => (tokenlessDevice, tokenlessDevice.CreateBody(), [], true, [noteId], []),
+                "noTokenWithCommand" => (
+                    tokenlessDevice,
+                    tokenlessDevice.CreateBody(create),
+                    [new(SyncTestCommands.GetId(create), "applied")],
+                    true,
+                    [.. new[] { noteId, newNoteId }.OrderBy(recordId => recordId.ToString(), StringComparer.Ordinal)],
+                    []
+                ),
+                "tokenWithoutPersonalScope" => (device, device.CreateBody(), [], false, [noteId], [foreignScopeId]),
+                "tooManyDeletions" => (device, device.CreateBody(), [], false, [noteId], []),
+                "delta" => (device, device.CreateBody(), [], false, [otherNoteId], []),
+                "includedStateOnly" => (
+                    device,
+                    device.CreateBody(olderChange),
+                    [new(SyncTestCommands.GetId(olderChange), "ignored", Cause: "lostToNewer")],
+                    false,
+                    [noteId],
+                    []
+                ),
+                "removedScopeOnly" => (
+                    device,
+                    device.CreateBody(foreignCreate),
+                    [new(SyncTestCommands.GetId(foreignCreate), "rejected", "noAccess")],
+                    false,
+                    [],
+                    [foreignScopeId]
+                ),
+                "unchanged" => (device, device.CreateBody(), [], false, [], []),
+                _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null),
+            };
+
+        using var response = await SendBodyAsync(expected.Sender, expected.Body, "gzip");
+
+        var syncResponse = await SyncTestDevice.ReadResponseAsync(response, compressed);
+        Assert.Equal(blockCount, syncResponse.Scopes.Count);
+        Assert.Equal(compressed, syncResponse.Scopes.Any(block => block.FullState));
+        Assert.Equal(expected.Results, syncResponse.Results);
+        Assert.Equal(expected.CoversAllScopes, syncResponse.CoversAllScopes);
+        Assert.Equal(expected.RecordIds, syncResponse.Scopes.SelectMany(block => block.Records).Select(record => record.Id));
+        Assert.Empty(syncResponse.Scopes.SelectMany(block => block.DeletedRecords));
+        Assert.Equal(expected.RemovedScopeIds.Select(scopeId => new SyncRemovedScope(scopeId, false)), syncResponse.RemovedScopes);
     }
 
     [Fact]
@@ -353,8 +519,12 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
         );
     }
 
-    private static Task<HttpResponseMessage> SendBodyAsync(SyncTestDevice device, JsonObject body) =>
-        device.SendAsync(JsonContent.Create(body), device.DeviceId.ToString());
+    private static Task<HttpResponseMessage> SendBodyAsync(SyncTestDevice device, JsonObject body, string? acceptEncoding = null) =>
+        device.SendAsync(JsonContent.Create(body), device.DeviceId.ToString(), acceptEncoding: acceptEncoding);
 
     private static ByteArrayContent CreateContentWithoutType(JsonObject body) => new(Encoding.UTF8.GetBytes(body.ToJsonString()));
+
+    // XFL of the gzip header (RFC 1952), set from the compression level: 4 for Fastest, 2 for SmallestSize
+    private static async Task<byte> ReadGzipExtraFlagsAsync(HttpResponseMessage response) =>
+        (await response.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken))[8];
 }

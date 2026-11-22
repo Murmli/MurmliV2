@@ -57,7 +57,12 @@ public sealed partial class SyncProcessor
         this.logger = logger;
     }
 
-    public async Task<SyncOutcome> ProcessAsync(SyncCaller caller, SyncRequest request, CancellationToken cancellationToken = default)
+    public async Task<SyncOutcome> ProcessAsync(
+        SyncCaller caller,
+        SyncRequest request,
+        SyncResponseEncoding acceptedEncoding,
+        CancellationToken cancellationToken = default
+    )
     {
         var listed = registry.GetListed(request.DataTypes);
         var token = SyncTokenCodec.TryDecode(request.Token, out var decoded) ? decoded : null;
@@ -83,15 +88,15 @@ public sealed partial class SyncProcessor
 
             if (request.Commands.Count == 0 && token is not null && changeReader.IsUnchanged(token, heads))
             {
-                using var response = new SyncResponseWriter(new MemoryStream(), options);
+                using var response = new SyncResponseWriter(new MemoryStream(), options, SyncResponseEncoding.Identity);
                 response.WriteStart([]);
-                return new SyncOutcome.Completed(response.WriteEnd([], false, heads, timeProvider.GetUtcNowInMilliseconds()));
+                return response.WriteEnd([], false, heads, timeProvider.GetUtcNowInMilliseconds());
             }
 
             phase = CommandsPhase;
             var outcomes = await ProcessCommandsAsync(caller, request.Commands, listed, cancellationToken);
             phase = ChangesPhase;
-            return await changeReader.ReadAsync(caller.AccountId, token, listed, outcomes, cancellationToken);
+            return await changeReader.ReadAsync(caller.AccountId, token, listed, outcomes, acceptedEncoding, cancellationToken);
         }
         catch (Exception exception) when (exception.IsDatabaseDisturbance())
         {
