@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
@@ -11,12 +13,21 @@ import '../api/api_client_provider.dart';
 import '../flavor/flavor.dart';
 import '../flavor/flavor_provider.dart';
 import '../logging/talker_provider.dart';
+import '../storage/preference_keys.dart';
+import '../storage/shared_preferences_provider.dart';
 import '../time/clock_provider.dart';
 import 'access_token.dart';
 import 'account.dart';
 import 'auth_client_provider.dart';
 
 part 'signed_in_account_provider.g.dart';
+
+const _secureStorage = FlutterSecureStorage(
+  iOptions: IOSOptions(
+    accessibility: KeychainAccessibility.first_unlock_this_device,
+  ),
+);
+const _sessionKey = 'session';
 
 enum SignInResult {
   signedIn,
@@ -43,6 +54,49 @@ class SignedInAccount extends _$SignedInAccount {
 
   @override
   Account? build() => null;
+
+  Future<void> restore() async {
+    final String? storedSession;
+    try {
+      await _clearSecureStorageAfterReinstall();
+      storedSession = await _secureStorage.read(key: _sessionKey);
+    } on PlatformException catch (error) {
+      _logStorageFailure('restore', error);
+      return;
+    }
+    if (storedSession == null) {
+      return;
+    }
+    final session = _sessionOf(storedSession);
+    if (session == null) {
+      ref
+          .read(talkerProvider)
+          .warning('Stored session is unreadable, staying signed out');
+      await _deleteStoredSession();
+      return;
+    }
+    _sessionToken = session.sessionToken;
+    state = Account(id: session.accountId);
+    unawaited(_checkRestoredSession());
+  }
+
+  Future<void> _clearSecureStorageAfterReinstall() async {
+    final preferences = ref.read(sharedPreferencesProvider);
+    if (preferences.getBool(PreferenceKeys.installed) != null) {
+      return;
+    }
+    // The iOS Keychain keeps its entries when the app is uninstalled.
+    await _secureStorage.deleteAll();
+    await preferences.setBool(PreferenceKeys.installed, true);
+  }
+
+  Future<void> _checkRestoredSession() async {
+    try {
+      await accessToken();
+    } on DioException {
+      // accessToken logged the failure, the session stays until auth rejects it.
+    }
+  }
 
   Future<SignInResult> signInWithApple() async {
     final rawNonce = generateNonce();
@@ -213,7 +267,7 @@ class SignedInAccount extends _$SignedInAccount {
     } on DioException catch (error) {
       if (error.response?.statusCode == 401) {
         if (_sessionToken == sessionToken) {
-          _endSession();
+          await _endSession();
         }
         return null;
       }
@@ -238,11 +292,20 @@ class SignedInAccount extends _$SignedInAccount {
     return accessToken;
   }
 
-  void _endSession() {
+  Future<void> _endSession() async {
     _sessionToken = null;
     _accessToken = null;
     _renewal = null;
     state = null;
+    await _deleteStoredSession();
+  }
+
+  Future<void> _deleteStoredSession() async {
+    try {
+      await _secureStorage.delete(key: _sessionKey);
+    } on PlatformException catch (error) {
+      _logStorageFailure('delete', error);
+    }
   }
 
   Future<SignInResult> _completeSignIn(String sessionToken) async {
@@ -256,7 +319,7 @@ class SignedInAccount extends _$SignedInAccount {
         return SignInResult.failed;
       }
     } on DioException catch (error) {
-      _endSession();
+      await _endSession();
       _logFailure(step, _renewalOutcome(error));
       return SignInResult.failed;
     }
@@ -265,16 +328,36 @@ class SignedInAccount extends _$SignedInAccount {
           .read(apiClientProvider)
           .get<Map<String, Object?>>('/v1/users/me');
       if (response.data case {'id': final String id}) {
-        state = Account(id: id);
-        return SignInResult.signedIn;
+        return await _storeSession(sessionToken: sessionToken, accountId: id);
       }
-      _endSession();
+      await _endSession();
       _logFailure('account request', 'no account id');
       return SignInResult.failed;
     } on DioException {
-      _endSession();
+      await _endSession();
       return SignInResult.apiRequestFailed;
     }
+  }
+
+  Future<SignInResult> _storeSession({
+    required String sessionToken,
+    required String accountId,
+  }) async {
+    try {
+      await _secureStorage.write(
+        key: _sessionKey,
+        value: jsonEncode({
+          'sessionToken': sessionToken,
+          'accountId': accountId,
+        }),
+      );
+    } on PlatformException catch (error) {
+      await _endSession();
+      _logFailure('session storage', error.code);
+      return SignInResult.failed;
+    }
+    state = Account(id: accountId);
+    return SignInResult.signedIn;
   }
 
   Options _authorizedBy(String token) =>
@@ -282,6 +365,25 @@ class SignedInAccount extends _$SignedInAccount {
 
   void _logFailure(String step, String reason) =>
       ref.read(talkerProvider).warning('Sign-in failed at $step: $reason');
+
+  void _logStorageFailure(String operation, PlatformException error) => ref
+      .read(talkerProvider)
+      .warning('Secure storage $operation failed: ${error.code}');
+}
+
+({String sessionToken, String accountId})? _sessionOf(String storedSession) {
+  try {
+    return switch (jsonDecode(storedSession)) {
+      {
+        'sessionToken': final String sessionToken,
+        'accountId': final String accountId,
+      } =>
+        (sessionToken: sessionToken, accountId: accountId),
+      _ => null,
+    };
+  } on FormatException {
+    return null;
+  }
 }
 
 // local shares the app ID de.murmli.app.dev and with it the Google client.

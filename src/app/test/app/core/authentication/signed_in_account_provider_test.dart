@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:clock/clock.dart';
@@ -7,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple_platform_interface/sign_in_with_apple_platform_interface.dart';
 import 'package:talker/talker.dart';
 
@@ -15,6 +17,7 @@ import 'package:app/app/core/api/failed_api_request_trace_id_provider.dart';
 import 'package:app/app/core/authentication/signed_in_account_provider.dart';
 import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/logging/talker_provider.dart';
+import 'package:app/app/core/storage/preference_keys.dart';
 
 import '../../../helpers/authentication.dart';
 import '../../../helpers/google_sign_in.dart';
@@ -42,14 +45,27 @@ void main() {
       ((socialSignIn.data as Map<String, Object?>)['idToken']!
           as Map<String, String>)['nonce']!;
 
+  late Map<String, String> secureStorage;
+
+  ProviderContainer createDevelopmentContainer(
+    SharedPreferencesWithCache preferences,
+  ) => createContainer(
+    preferences,
+    flavor: Flavor.development,
+    clock: Clock(() => now),
+    secureStorage: secureStorage,
+  );
+
   setUp(() async {
     now = signInTime;
-    container = createContainer(
-      await createPreferences(),
-      flavor: Flavor.development,
-      clock: Clock(() => now),
+    secureStorage = {};
+    container = createDevelopmentContainer(
+      await createPreferences({PreferenceKeys.installed: true}),
     );
   });
+
+  Future<void> restore() =>
+      container.read(signedInAccountProvider.notifier).restore();
 
   Future<ResponseBody> respondWithTokenIssuedNow(
     RequestOptions request,
@@ -200,6 +216,7 @@ void main() {
 
       expect(result, SignInResult.apiRequestFailed);
       expect(container.read(signedInAccountProvider), isNull);
+      expect(secureStorage, isEmpty);
     });
 
     test('signInWithApple with the API answering without an account id returns failed and stays signed out', () async {
@@ -213,6 +230,7 @@ void main() {
 
       expect(result, SignInResult.failed);
       expect(container.read(signedInAccountProvider), isNull);
+      expect(secureStorage, isEmpty);
     });
 
     test('signInWithGoogle initializes with the development server client ID, signs in with the ID token, exchanges the session token for a JSON web token and fetches the account with it', () async {
@@ -609,5 +627,115 @@ void main() {
         },
       );
     }
+
+    test('signInWithEmail stores the session token with the account id and restore after a restart signs in without waiting for the session check', () async {
+      recordAuthenticationRequests(container);
+      await signInWithEmail();
+
+      expect(secureStorage, storedSession(accountId));
+
+      final restarted = createDevelopmentContainer(await reopenPreferences());
+      final pendingSessionCheck = Completer<ResponseBody>();
+      final requests = recordAuthenticationRequests(
+        restarted,
+        respondFromAuth: (_) => pendingSessionCheck.future,
+      );
+      await restarted.read(signedInAccountProvider.notifier).restore();
+
+      expect(restarted.read(signedInAccountProvider)?.id, accountId);
+      await pumpEventQueue();
+      expect(requests.api.requests, isEmpty);
+      final sessionCheck = requests.auth.requests.single;
+      expect(sessionCheck.uri.path, tokenPath);
+      expect(
+        sessionCheck.headers['Authorization'],
+        'Bearer $signedSessionToken',
+      );
+      pendingSessionCheck.complete(
+        jsonResponse({'token': jsonWebTokenIssuedAt(now)}),
+      );
+      await pumpEventQueue();
+    });
+
+    test(
+      'restore without a stored session stays signed out without requests',
+      () async {
+        final requests = recordAuthenticationRequests(container);
+
+        await restore();
+        await pumpEventQueue();
+
+        expect(container.read(signedInAccountProvider), isNull);
+        expect(requests.auth.requests, isEmpty);
+      },
+    );
+
+    for (final unreadableSession in [
+      'not-json',
+      '{"sessionToken":"$signedSessionToken"}',
+    ]) {
+      test(
+        'restore with the unreadable stored session $unreadableSession stays signed out, deletes it and logs a warning without it',
+        () async {
+          secureStorage['session'] = unreadableSession;
+          final requests = recordAuthenticationRequests(container);
+
+          await restore();
+          await pumpEventQueue();
+
+          expect(container.read(signedInAccountProvider), isNull);
+          expect(secureStorage, isEmpty);
+          expect(requests.auth.requests, isEmpty);
+          final log = container.read(talkerProvider).history.single;
+          expect(log.logLevel, LogLevel.warning);
+          expect(
+            log.message,
+            isNot(
+              anyOf(contains(unreadableSession), contains('session-token')),
+            ),
+          );
+        },
+      );
+    }
+
+    test('restore without the installation marker clears the secure storage, sets the marker and stays signed out', () async {
+      final preferences = await createPreferences();
+      container = createDevelopmentContainer(preferences);
+      secureStorage.addAll({...storedSession(accountId), 'other': 'value'});
+
+      await restore();
+
+      expect(container.read(signedInAccountProvider), isNull);
+      expect(secureStorage, isEmpty);
+      expect(preferences.getBool(PreferenceKeys.installed), isTrue);
+    });
+
+    test('restore whose session check auth rejects with 401 signs out and deletes the stored session', () async {
+      secureStorage.addAll(storedSession(accountId));
+      recordAuthenticationRequests(
+        container,
+        respondFromAuth: (_) async => ResponseBody.fromString('', 401),
+      );
+
+      await restore();
+      await pumpEventQueue();
+
+      expect(container.read(signedInAccountProvider), isNull);
+      expect(secureStorage, isEmpty);
+    });
+
+    test('restore whose session check auth fails with 500 stays signed in and keeps the stored session', () async {
+      secureStorage.addAll(storedSession(accountId));
+      recordAuthenticationRequests(
+        container,
+        respondFromAuth: (_) async => ResponseBody.fromString('', 500),
+      );
+
+      await restore();
+      await pumpEventQueue();
+
+      expect(container.read(signedInAccountProvider)?.id, accountId);
+      expect(secureStorage, storedSession(accountId));
+    });
   });
 }

@@ -1,4 +1,5 @@
 import 'package:clock/clock.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:talker/talker.dart';
@@ -21,19 +22,23 @@ ProviderContainer createContainer(
   bool? debugBuild,
   Account? signedInAccount,
   Clock? clock,
-}) => ProviderContainer.test(
-  overrides: [
-    sharedPreferencesProvider.overrideWithValue(preferences),
-    talkerProvider.overrideWithValue(
-      Talker(settings: TalkerSettings(useConsoleLogs: false)),
-    ),
-    crashReporterProvider.overrideWithValue(RecordingCrashReporter()),
-    if (flavor != null) flavorProvider.overrideWithValue(flavor),
-    if (debugBuild != null) debugBuildProvider.overrideWithValue(debugBuild),
-    if (signedInAccount != null)
-      signedInAccountProvider.overrideWithBuild(
-        (ref, notifier) => signedInAccount,
+  Map<String, String>? secureStorage,
+}) {
+  FlutterSecureStorage.setMockInitialValues(secureStorage ?? {});
+  return ProviderContainer.test(
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(preferences),
+      talkerProvider.overrideWithValue(
+        Talker(settings: TalkerSettings(useConsoleLogs: false)),
       ),
-    if (clock != null) appClockProvider.overrideWithValue(clock),
-  ],
-);
+      crashReporterProvider.overrideWithValue(RecordingCrashReporter()),
+      if (flavor != null) flavorProvider.overrideWithValue(flavor),
+      if (debugBuild != null) debugBuildProvider.overrideWithValue(debugBuild),
+      if (signedInAccount != null)
+        signedInAccountProvider.overrideWithBuild(
+          (ref, notifier) => signedInAccount,
+        ),
+      if (clock != null) appClockProvider.overrideWithValue(clock),
+    ],
+  );
+}

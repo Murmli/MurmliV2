@@ -36,6 +36,10 @@ String jsonWebTokenIssuedAt(
   ].join('.');
 }
 
+Map<String, String> storedSession(String accountId) => {
+  'session': '{"sessionToken":"$signedSessionToken","accountId":"$accountId"}',
+};
+
 ResponseBody jsonResponse(
   Object body, {
   int statusCode = 200,

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:auto_route/auto_route.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:app/app/core/authentication/account.dart';
@@ -39,6 +40,20 @@ void main() {
         HomeTab.chat,
       );
     });
+
+    testWidgets(
+      'start with a stored session that auth rejects shows the onboarding page',
+      (tester) async {
+        await pumpApp(
+          tester,
+          signedInAccount: const Account(id: 'account'),
+          respondFromAuth: (_) async => ResponseBody.fromString('', 401),
+        );
+
+        expect(find.byType(OnboardingPage), findsOneWidget);
+        expect(find.byType(HomePage), findsNothing);
+      },
+    );
 
     testWidgets(
       'navigating to settings while signed out shows the onboarding page',
