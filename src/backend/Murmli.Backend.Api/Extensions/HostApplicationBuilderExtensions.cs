@@ -1,10 +1,12 @@
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Murmli.Backend.Api.AuthService;
+using Murmli.Backend.Api.Database;
 using Murmli.Backend.Api.Products;
 using Murmli.Backend.Api.Users;
 using Murmli.Backend.Data.Extensions;
@@ -15,7 +17,16 @@ public static class HostApplicationBuilderExtensions
 {
     public static void AddApi(this IHostApplicationBuilder builder)
     {
-        builder.AddMurmliDbContext();
+        var databaseOptions = builder.Configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? new DatabaseOptions();
+        builder.AddMurmliDbContext(
+            configureNpgsql: npgsql =>
+                npgsql.EnableRetryOnFailure(databaseOptions.MaxRetryCount, databaseOptions.MaxRetryDelay, errorCodesToAdd: null)
+        );
+        builder
+            .Services.AddOptions<DatabaseOptions>()
+            .BindConfiguration(DatabaseOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
         builder.Services.AddAuthentication().AddJwtBearer(options => options.MapInboundClaims = false);
         var authenticatedUserWithSubjectPolicy = new AuthorizationPolicyBuilder()
