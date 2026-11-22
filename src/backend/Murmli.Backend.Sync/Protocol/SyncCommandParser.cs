@@ -21,10 +21,6 @@ internal sealed class SyncCommandParser(SyncDataTypeRegistry registry)
 
     private const string FieldsMember = "fields";
 
-    private const long MinimumTime = -62_135_596_800_000;
-
-    private const long MaximumTime = 253_402_300_799_999;
-
     private static readonly FrozenSet<string> CommandMembers = FrozenSet.Create(
         StringComparer.Ordinal,
         IdMember,
@@ -81,14 +77,7 @@ internal sealed class SyncCommandParser(SyncDataTypeRegistry registry)
             return new SyncParsedCommand(commandId, target, null, null);
         }
 
-        var claim = new SyncCommandClaim(
-            claimedCommandId,
-            kind,
-            claimedScopeId,
-            dataTypeName,
-            claimedRecordId,
-            DateTimeOffset.FromUnixTimeMilliseconds(time)
-        );
+        var claim = new SyncCommandClaim(claimedCommandId, kind, claimedScopeId, dataTypeName, claimedRecordId, time);
         var claimedTarget = new SyncCommandTarget(claimedScopeId, dataTypeName, claimedRecordId);
         if (
             hasUnknownMember
@@ -109,13 +98,8 @@ internal sealed class SyncCommandParser(SyncDataTypeRegistry registry)
     private static string? ReadString(Dictionary<string, JsonElement> members, string name) =>
         members.TryGetValue(name, out var element) && element.TryGetReadableString(out var text) ? text : null;
 
-    private static long? ReadTime(Dictionary<string, JsonElement> members) =>
-        members.TryGetValue(TimeMember, out var element)
-        && element.ValueKind == JsonValueKind.Number
-        && element.TryGetInt64(out var time)
-        && time is >= MinimumTime and <= MaximumTime
-            ? time
-            : null;
+    private static DateTimeOffset? ReadTime(Dictionary<string, JsonElement> members) =>
+        members.TryGetValue(TimeMember, out var element) && element.TryGetUnixMilliseconds(out var time) ? time : null;
 
     private static bool TryParseFields(
         Dictionary<string, JsonElement> members,

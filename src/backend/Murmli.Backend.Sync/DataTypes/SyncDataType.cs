@@ -15,6 +15,10 @@ public abstract class SyncDataType
 
     public string ScopeKind => Definition.ScopeKind;
 
+    public bool IsScopeRoot => Definition.MaxOwnedScopesPerAccount is not null;
+
+    public virtual SyncMemberRole MinimumRole(SyncCommandKind kind) => SyncMemberRole.Member;
+
     internal abstract SyncDataTypeDefinition Definition { get; }
 
     internal abstract IReadOnlyList<string> Validate(IModel model);
@@ -29,7 +33,9 @@ public abstract class SyncDataType
 
     internal abstract bool ApplyChanges(SyncRecord record, SyncFieldChanges changes, DateTimeOffset commandTime, bool isNew);
 
-    internal abstract SyncRuleDecision EvaluateRules(SyncRecord record);
+    internal abstract SyncRuleDecision EvaluateRules(SyncRecord record, Guid? actingMemberId);
+
+    internal abstract void ApplyFills(SyncRecord record, bool isNew, DateTimeOffset commandTime, Guid? actingMemberId);
 
     internal abstract string GetPrimaryKeyName(MurmliDbContext context);
 
@@ -65,6 +71,20 @@ public abstract class SyncDataType<TRecord> : SyncDataType
             errors.Add($"The data type {DisplayName} must call MaximumRecordsPerScope with a value of at least 1.");
         }
 
+        if (Definition.MaxOwnedScopesPerAccount < 1)
+        {
+            errors.Add($"The data type {DisplayName} must call ScopeRoot with a value of at least 1.");
+        }
+
+        var createRole = MinimumRole(SyncCommandKind.Create);
+        var setFieldsRole = MinimumRole(SyncCommandKind.SetFields);
+        if (SyncMemberRole.Known.Any(role => role.Satisfies(createRole) && !role.Satisfies(setFieldsRole)))
+        {
+            errors.Add(
+                $"The data type {DisplayName} requires the role '{createRole.Key}' for create, which does not satisfy the role '{setFieldsRole.Key}' for setFields, although a create on an existing record applies as setFields."
+            );
+        }
+
         if (Layout.Groups.Count == 0)
         {
             errors.Add($"The data type {DisplayName} declares no field group.");
@@ -83,9 +103,38 @@ public abstract class SyncDataType<TRecord> : SyncDataType
             errors.Add($"The data type {DisplayName} binds the property {propertyName} more than once.");
         }
 
-        foreach (var field in Layout.Fields.Where(field => !field.HasDefaultOnCreate && !field.IsRequiredOnCreate))
+        var deviceFields = Layout.Groups.SelectMany(group => group.Fields).ToList();
+        foreach (var field in deviceFields.Where(field => !field.HasDefaultOnCreate && !field.IsRequiredOnCreate))
         {
             errors.Add($"The field '{field.Name}' of the data type {DisplayName} has no default on create, so it must be RequiredOnCreate.");
+        }
+
+        foreach (var field in deviceFields.Where(field => field.IsMemberReference))
+        {
+            errors.Add($"The field '{field.Name}' of the data type {DisplayName} is a member reference, which only a server field can be.");
+        }
+
+        foreach (var field in Layout.ServerFields)
+        {
+            var fillTypeName = field.Fill switch
+            {
+                SyncServerFill.CommandTimeOnCreate when field.ValueType != typeof(DateTimeOffset) => "DateTimeOffset",
+                SyncServerFill.ActingMemberOnCreate or SyncServerFill.ActingMemberOnApply when field.ValueType != typeof(Guid?) => "Guid?",
+                _ => null,
+            };
+            if (fillTypeName is not null)
+            {
+                errors.Add(
+                    $"The server field '{field.Name}' of the data type {DisplayName} uses the fill {field.Fill}, which needs a property of type {fillTypeName}, but its property {field.PropertyName} has another type."
+                );
+            }
+
+            if (!field.HasDefaultOnCreate && field.Fill != SyncServerFill.CommandTimeOnCreate)
+            {
+                errors.Add(
+                    $"The server field '{field.Name}' of the data type {DisplayName} has no default on create, so it needs the fill CommandTimeOnCreate."
+                );
+            }
         }
 
         var entityType = model.FindEntityType(typeof(TRecord));
@@ -234,7 +283,26 @@ public abstract class SyncDataType<TRecord> : SyncDataType
         return true;
     }
 
-    internal sealed override SyncRuleDecision EvaluateRules(SyncRecord record) => Evaluate(new SyncRuleContext<TRecord>((TRecord)record));
+    internal sealed override SyncRuleDecision EvaluateRules(SyncRecord record, Guid? actingMemberId) =>
+        Evaluate(new SyncRuleContext<TRecord>((TRecord)record, actingMemberId));
+
+    internal sealed override void ApplyFills(SyncRecord record, bool isNew, DateTimeOffset commandTime, Guid? actingMemberId)
+    {
+        var typedRecord = (TRecord)record;
+        foreach (var field in Layout.ServerFields)
+        {
+            switch (field.Fill)
+            {
+                case SyncServerFill.CommandTimeOnCreate when isNew:
+                    field.SetFillValue(typedRecord, commandTime);
+                    break;
+                case SyncServerFill.ActingMemberOnCreate when isNew:
+                case SyncServerFill.ActingMemberOnApply:
+                    field.SetFillValue(typedRecord, actingMemberId);
+                    break;
+            }
+        }
+    }
 
     internal sealed override string GetPrimaryKeyName(MurmliDbContext context) =>
         context.Model.FindEntityType(typeof(TRecord))!.FindPrimaryKey()!.GetName()!;

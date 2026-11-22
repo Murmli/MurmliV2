@@ -10,13 +10,21 @@ public sealed class SyncDataTypeBuilder<TRecord>
 
     private readonly List<SyncField<TRecord>> declaredFields = [];
 
-    private SyncDataTypeDefinition definition = new("", "", 0);
+    private readonly List<SyncField<TRecord>> serverFields = [];
+
+    private SyncDataTypeDefinition definition = new("", "", 0, null);
 
     internal SyncDataTypeBuilder() { }
 
     public SyncDataTypeBuilder<TRecord> Named(string name, string scopeKind)
     {
         definition = definition with { Name = name, ScopeKind = scopeKind };
+        return this;
+    }
+
+    public SyncDataTypeBuilder<TRecord> ScopeRoot(int maxOwnedScopesPerAccount)
+    {
+        definition = definition with { MaxOwnedScopesPerAccount = maxOwnedScopesPerAccount };
         return this;
     }
 
@@ -33,7 +41,13 @@ public sealed class SyncDataTypeBuilder<TRecord>
         SyncFieldType<TValue> type
     )
     {
-        var field = new SyncField<TRecord, TValue>(name, new SyncPropertyAccessor<TRecord, TValue>(value), type, isSentToDevices: true);
+        var field = new SyncField<TRecord, TValue>(
+            name,
+            new SyncPropertyAccessor<TRecord, TValue>(value),
+            type,
+            isSentToDevices: true,
+            SyncServerFill.None
+        );
         groups.Add(new SyncFieldGroup<TRecord>(name, new SyncPropertyAccessor<TRecord, DateTimeOffset>(changedAt), [field]));
         declaredFields.Add(field);
         return new SyncFieldBuilder(field.MarkRequiredOnCreate);
@@ -51,8 +65,14 @@ public sealed class SyncDataTypeBuilder<TRecord>
         string name,
         Expression<Func<TRecord, TValue>> value,
         SyncFieldType<TValue> type,
+        SyncServerFill fill = SyncServerFill.None,
         bool isSentToDevices = true
-    ) => declaredFields.Add(new SyncField<TRecord, TValue>(name, new SyncPropertyAccessor<TRecord, TValue>(value), type, isSentToDevices));
+    )
+    {
+        var field = new SyncField<TRecord, TValue>(name, new SyncPropertyAccessor<TRecord, TValue>(value), type, isSentToDevices, fill);
+        declaredFields.Add(field);
+        serverFields.Add(field);
+    }
 
-    internal SyncDataTypeLayout<TRecord> Build() => new(definition, [.. groups], [.. declaredFields]);
+    internal SyncDataTypeLayout<TRecord> Build() => new(definition, [.. groups], [.. declaredFields], [.. serverFields]);
 }

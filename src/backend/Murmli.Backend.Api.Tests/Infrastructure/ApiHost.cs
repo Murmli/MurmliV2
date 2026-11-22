@@ -85,7 +85,7 @@ internal sealed class ApiHost : IAsyncDisposable
             builder.Services.ConfigureDbContext<MurmliDbContext>(options =>
                 options.ReplaceService<IModelCustomizer, SyncTestModelCustomizer>()
             );
-            builder.Services.AddSyncDataType<TestNoteType>();
+            builder.Services.AddSyncDataType<TestNoteType>().AddSyncDataType<TestBoardType>().AddSyncDataType<TestCardType>();
         }
 
         if (activities is not null)

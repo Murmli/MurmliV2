@@ -10,6 +10,8 @@ internal sealed class SyncDataTypeRegistry
 
     private readonly Dictionary<SyncDataType, int> maximumRecordsPerScope = [];
 
+    private readonly Dictionary<SyncDataType, int> maximumOwnedScopesPerAccount = [];
+
     private readonly Dictionary<string, int> deletionThresholds = new(StringComparer.Ordinal);
 
     public SyncDataTypeRegistry(IEnumerable<SyncDataType> dataTypes, IOptions<SyncOptions> options)
@@ -23,6 +25,13 @@ internal sealed class SyncDataTypeRegistry
             var maximum = dataTypeOptions.GetValueOrDefault(dataType.Name)?.MaxRecordsPerScope ?? dataType.Definition.MaximumRecordsPerScope;
             maximumRecordsPerScope.Add(dataType, maximum);
             deletionThresholds[dataType.ScopeKind] = (int)Math.Min((long)deletionThresholds.GetValueOrDefault(dataType.ScopeKind) + maximum, int.MaxValue);
+            if (dataType.IsScopeRoot)
+            {
+                maximumOwnedScopesPerAccount.Add(
+                    dataType,
+                    dataTypeOptions.GetValueOrDefault(dataType.Name)?.MaxOwnedScopesPerAccount ?? dataType.Definition.MaxOwnedScopesPerAccount!.Value
+                );
+            }
         }
     }
 
@@ -37,6 +46,8 @@ internal sealed class SyncDataTypeRegistry
     }
 
     public int GetMaximumRecordsPerScope(SyncDataType dataType) => maximumRecordsPerScope[dataType];
+
+    public int GetMaxOwnedScopesPerAccount(SyncDataType rootType) => maximumOwnedScopesPerAccount[rootType];
 
     public int GetDeletionThreshold(string scopeKind) => deletionThresholds.GetValueOrDefault(scopeKind);
 }

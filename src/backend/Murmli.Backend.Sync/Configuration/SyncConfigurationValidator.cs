@@ -16,10 +16,12 @@ internal sealed class SyncConfigurationValidator(IEnumerable<SyncDataType> dataT
         var model = scope.ServiceProvider.GetRequiredService<MurmliDbContext>().Model;
         var errors = new List<string>();
         var dataTypeNames = new HashSet<string>(StringComparer.Ordinal);
+        var definitions = new List<SyncDataTypeDefinition>();
         foreach (var dataType in dataTypes)
         {
             try
             {
+                definitions.Add(dataType.Definition);
                 ValidateDataType(dataType, model, dataTypeNames, errors);
             }
             catch (Exception exception)
@@ -28,16 +30,29 @@ internal sealed class SyncConfigurationValidator(IEnumerable<SyncDataType> dataT
             }
         }
 
+        ValidateScopeRoots(definitions, errors);
         foreach (var (dataTypeName, dataTypeOptions) in options.DataTypes)
         {
             if (!dataTypeNames.Contains(dataTypeName))
             {
                 errors.Add($"{SyncOptions.SectionName}:DataTypes:{dataTypeName} names no registered data type.");
             }
+            else if (
+                dataTypeOptions is { MaxOwnedScopesPerAccount: not null }
+                && !definitions.Any(definition => definition.Name == dataTypeName && definition.MaxOwnedScopesPerAccount is not null)
+            )
+            {
+                errors.Add($"{SyncOptions.SectionName}:DataTypes:{dataTypeName}:MaxOwnedScopesPerAccount applies only to scope root types.");
+            }
 
             if (dataTypeOptions is { MaxRecordsPerScope: < 1 })
             {
                 errors.Add($"{SyncOptions.SectionName}:DataTypes:{dataTypeName}:MaxRecordsPerScope must be at least 1.");
+            }
+
+            if (dataTypeOptions is { MaxOwnedScopesPerAccount: < 1 })
+            {
+                errors.Add($"{SyncOptions.SectionName}:DataTypes:{dataTypeName}:MaxOwnedScopesPerAccount must be at least 1.");
             }
         }
 
@@ -60,13 +75,38 @@ internal sealed class SyncConfigurationValidator(IEnumerable<SyncDataType> dataT
         {
             errors.Add($"The data type {dataType.GetType().FullName} must call Named with a non-empty scope kind.");
         }
-        else if (definition.ScopeKind != SyncScope.PersonalKind)
-        {
-            errors.Add(
-                $"The data type '{definition.Name}' must use the scope kind '{SyncScope.PersonalKind}': shared scope kinds need a root type, which arrives with #128."
-            );
-        }
 
         errors.AddRange(dataType.Validate(model));
+    }
+
+    private static void ValidateScopeRoots(List<SyncDataTypeDefinition> definitions, List<string> errors)
+    {
+        foreach (
+            var kind in definitions
+                .Where(definition => !string.IsNullOrEmpty(definition.ScopeKind))
+                .GroupBy(definition => definition.ScopeKind, StringComparer.Ordinal)
+        )
+        {
+            var rootNames = kind
+                .Where(definition => definition.MaxOwnedScopesPerAccount is not null)
+                .Select(definition => definition.Name)
+                .ToList();
+            if (kind.Key == SyncScope.PersonalKind)
+            {
+                errors.AddRange(
+                    rootNames.Select(rootName => $"The data type '{rootName}' is a scope root of the scope kind '{SyncScope.PersonalKind}', which has no roots.")
+                );
+            }
+            else if (rootNames.Count == 0)
+            {
+                errors.Add($"The scope kind '{kind.Key}' has no scope root type.");
+            }
+            else if (rootNames.Count > 1)
+            {
+                errors.Add(
+                    $"The scope kind '{kind.Key}' has more than one scope root type: {string.Join(", ", rootNames.Select(rootName => $"'{rootName}'"))}."
+                );
+            }
+        }
     }
 }

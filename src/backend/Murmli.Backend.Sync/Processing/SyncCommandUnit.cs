@@ -238,7 +238,7 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
             return (Ignored(claim, SyncIgnoreCause.LostToNewer), false);
         }
 
-        if (GetRuleOutcome(claim, command.DataType.EvaluateRules(record)) is { } ruleOutcome)
+        if (GetRuleOutcome(claim, command.DataType.EvaluateRules(record, actingMemberId: null)) is { } ruleOutcome)
         {
             return (ruleOutcome, false);
         }

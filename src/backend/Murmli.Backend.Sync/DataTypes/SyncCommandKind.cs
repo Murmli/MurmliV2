@@ -1,6 +1,6 @@
 namespace Murmli.Backend.Sync.DataTypes;
 
-internal readonly record struct SyncCommandKind(string Key)
+public readonly record struct SyncCommandKind(string Key)
 {
     public static SyncCommandKind Create { get; } = new("create");
 
@@ -10,7 +10,7 @@ internal readonly record struct SyncCommandKind(string Key)
 
     private static readonly SyncCommandKind[] Kinds = [Create, SetFields, Delete];
 
-    public static bool TryParse(string key, out SyncCommandKind kind)
+    internal static bool TryParse(string key, out SyncCommandKind kind)
     {
         kind = Array.Find(Kinds, candidate => candidate.Key == key);
         return kind != default;

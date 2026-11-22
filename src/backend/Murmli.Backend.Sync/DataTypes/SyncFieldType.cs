@@ -13,6 +13,8 @@ public abstract class SyncFieldType<TValue>
 
     internal virtual bool HasDefaultOnCreate => true;
 
+    internal virtual bool IsMemberReference => false;
+
     internal abstract bool TryRead(JsonElement element, [MaybeNullWhen(false)] out TValue value);
 
     internal abstract void Write(Utf8JsonWriter writer, TValue value);

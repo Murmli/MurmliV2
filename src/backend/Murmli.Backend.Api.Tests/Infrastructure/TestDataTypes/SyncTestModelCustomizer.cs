@@ -9,5 +9,7 @@ internal sealed class SyncTestModelCustomizer(ModelCustomizerDependencies depend
     {
         base.Customize(modelBuilder, context);
         modelBuilder.ApplyConfiguration(new TestNoteConfiguration());
+        modelBuilder.ApplyConfiguration(new TestBoardConfiguration());
+        modelBuilder.ApplyConfiguration(new TestCardConfiguration());
     }
 }

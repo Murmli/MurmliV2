@@ -32,4 +32,8 @@ public static class SyncFieldTypes
     }
 
     public static SyncFieldType<bool> Boolean() => new BooleanFieldType();
+
+    public static SyncFieldType<DateTimeOffset> Timestamp() => new TimestampFieldType();
+
+    public static SyncFieldType<Guid?> MemberReference() => new MemberReferenceFieldType();
 }
