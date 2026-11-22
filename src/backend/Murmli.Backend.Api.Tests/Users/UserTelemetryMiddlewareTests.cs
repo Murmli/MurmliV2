@@ -2,7 +2,12 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Murmli.Backend.Api.Tests.Infrastructure;
+using Npgsql;
 using OpenTelemetry.Logs;
 
 namespace Murmli.Backend.Api.Tests.Users;
@@ -77,6 +82,37 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
         Assert.Equal(userId, FindUserId(exceptionLog));
     }
 
+    [Fact]
+    public async Task InvokeAsync_DatabaseUnavailable_ReturnsServiceUnavailable()
+    {
+        var traceId = ActivityTraceId.CreateRandom();
+        await using (var api = await StartApiAsync())
+        {
+            await api.GetMeAsync(AuthUserId);
+            try
+            {
+                await SetConnectionsAllowedAsync(false);
+                using var response = await SendAsync(api, HttpMethod.Get, ProductSearchPath, TestTokens.Create(AuthUserId), traceId);
+                Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+                Assert.InRange(Assert.NotNull(response.Headers.RetryAfter?.Delta), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(20));
+                Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+                var problem = await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+                Assert.Equal("tag:murmli.de,2026:service-unavailable", problem.GetProperty("type").GetString());
+                Assert.Equal(503, problem.GetProperty("status").GetInt32());
+            }
+            finally
+            {
+                await SetConnectionsAllowedAsync(true);
+            }
+        }
+
+        var unavailableLog = Assert.Single(GetLogRecords(traceId), logRecord => logRecord.EventId.Name == "DatabaseUnavailable");
+        Assert.Equal(LogLevel.Warning, unavailableLog.LogLevel);
+        Assert.NotNull(unavailableLog.Exception);
+        Assert.Null(FindUserId(unavailableLog));
+        Assert.Equal(2, GetLogRecords(traceId).Count(logRecord => logRecord.EventId.Name == CoreEventId.ExecutionStrategyRetrying.Name));
+    }
+
     [Theory]
     [InlineData("/openapi/v1.json", HttpStatusCode.OK)]
     [InlineData("/v1/users/me", HttpStatusCode.Unauthorized)]
@@ -137,6 +173,13 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
     {
         // Span listeners are process-wide, the own trace ID separates this request from those of hosts in parallel tests
         var traceId = ActivityTraceId.CreateRandom();
+        using var response = await SendAsync(api, method, path, token, traceId);
+        Assert.Equal(expectedStatusCode, response.StatusCode);
+        return traceId;
+    }
+
+    private static async Task<HttpResponseMessage> SendAsync(ApiHost api, HttpMethod method, string path, string? token, ActivityTraceId traceId)
+    {
         using var request = new HttpRequestMessage(method, path);
         request.Headers.Add("traceparent", $"00-{traceId.ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01");
         if (token is not null)
@@ -144,9 +187,30 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
 
-        using var response = await api.HttpClient.SendAsync(request, TestContext.Current.CancellationToken);
-        Assert.Equal(expectedStatusCode, response.StatusCode);
-        return traceId;
+        return await api.HttpClient.SendAsync(request, TestContext.Current.CancellationToken);
+    }
+
+    private async Task SetConnectionsAllowedAsync(bool allowed)
+    {
+        var database = new NpgsqlConnectionStringBuilder(connectionString).Database;
+        await using var connection = new NpgsqlConnection(
+            new NpgsqlConnectionStringBuilder(connectionString) { Database = "postgres", Pooling = false }.ConnectionString
+        );
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var alterCommand = new NpgsqlCommand(
+            $"""ALTER DATABASE "{database}" WITH ALLOW_CONNECTIONS {(allowed ? "true" : "false")}""",
+            connection
+        );
+        await alterCommand.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        if (!allowed)
+        {
+            await using var terminateCommand = new NpgsqlCommand(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = @database AND pid <> pg_backend_pid()",
+                connection
+            );
+            terminateCommand.Parameters.AddWithValue("database", database);
+            await terminateCommand.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
     }
 
     private Activity GetRequestActivity(ActivityTraceId traceId) =>
