@@ -206,18 +206,23 @@ void main() {
       );
     }
 
-    test('signInWithApple with a failed request to the API returns apiRequestFailed and stays signed out', () async {
+    test('signInWithApple with a failed request to the API returns apiRequestFailed, stays signed out and ends the session at auth', () async {
       installFakeSignInWithApple();
-      recordAuthenticationRequests(
+      final requests = recordAuthenticationRequests(
         container,
         respondFromApi: (_) async => ResponseBody.fromString('', 500),
       );
 
       final result = await signInWithApple();
+      await pumpEventQueue();
 
       expect(result, SignInResult.apiRequestFailed);
       expect(container.read(signedInAccountProvider), isNull);
       expect(secureStorage, isEmpty);
+      final signOut = requests.auth.requests.last;
+      expect(signOut.method, 'POST');
+      expect(signOut.uri.path, signOutPath);
+      expect(signOut.headers['Authorization'], 'Bearer $signedSessionToken');
     });
 
     test('signInWithApple with the API answering without an account id returns failed and stays signed out', () async {
@@ -426,6 +431,24 @@ void main() {
         },
       );
     }
+
+    test('signInWithEmail whose account request the API rejects with 401 and whose renewal auth rejects with 401 returns failed without reporting a failure and stays signed out', () async {
+      var tokenResponses = 0;
+      recordAuthenticationRequests(
+        container,
+        respondFromAuth: (request) async =>
+            request.uri.path == tokenPath && tokenResponses++ > 0
+            ? ResponseBody.fromString('', 401)
+            : await respondAsAuth(request),
+        respondFromApi: (_) async => ResponseBody.fromString('', 401),
+      );
+
+      final result = await signInWithEmail();
+
+      expect(result, SignInResult.failed);
+      expect(container.read(signedInAccountProvider), isNull);
+      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+    });
 
     test('API request 13 minutes after sign-in reuses the access token of the sign-in', () async {
       final requests = recordAuthenticationRequests(

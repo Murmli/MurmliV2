@@ -223,12 +223,7 @@ class SignedInAccount extends _$SignedInAccount {
     final sessionToken = _sessionToken;
     if (sessionToken != null) {
       try {
-        await ref
-            .read(authClientProvider)
-            .post<void>(
-              '/api/auth/sign-out',
-              options: _authorizedBy(sessionToken),
-            );
+        await _signOutAtAuth(sessionToken);
       } on DioException catch (error) {
         ref
             .read(talkerProvider)
@@ -241,6 +236,10 @@ class SignedInAccount extends _$SignedInAccount {
   }
 
   Future<void> signOutLocally() => _endSession();
+
+  Future<void> _signOutAtAuth(String sessionToken) => ref
+      .read(authClientProvider)
+      .post<void>('/api/auth/sign-out', options: _authorizedBy(sessionToken));
 
   /// A [rejected] token that the current session did not issue yields null,
   /// so a request sent under an earlier session is never resent under this
@@ -348,6 +347,23 @@ class SignedInAccount extends _$SignedInAccount {
     }
   }
 
+  Future<void> _abandonSession(String sessionToken) async {
+    await _endSession();
+    unawaited(_signOutAbandonedSession(sessionToken));
+  }
+
+  Future<void> _signOutAbandonedSession(String sessionToken) async {
+    try {
+      await _signOutAtAuth(sessionToken);
+    } on DioException catch (error) {
+      ref
+          .read(talkerProvider)
+          .warning(
+            'Sign-out of the abandoned session failed: ${_httpOutcome(error)}',
+          );
+    }
+  }
+
   Future<SignInResult> _completeSignIn(String sessionToken) async {
     _startSession(sessionToken);
     const step = 'token request';
@@ -357,7 +373,7 @@ class SignedInAccount extends _$SignedInAccount {
         return SignInResult.failed;
       }
     } on DioException catch (error) {
-      await _endSession();
+      await _abandonSession(sessionToken);
       _logFailure(step, _renewalOutcome(error));
       return SignInResult.failed;
     }
@@ -368,11 +384,15 @@ class SignedInAccount extends _$SignedInAccount {
       if (response.data case {'id': final String id}) {
         return await _storeSession(sessionToken: sessionToken, accountId: id);
       }
-      await _endSession();
+      await _abandonSession(sessionToken);
       _logFailure('account request', 'no account id');
       return SignInResult.failed;
-    } on DioException {
-      await _endSession();
+    } on DioException catch (error) {
+      await _abandonSession(sessionToken);
+      if (error.type == DioExceptionType.cancel) {
+        _logFailure('account request', 'session rejected');
+        return SignInResult.failed;
+      }
       return SignInResult.apiRequestFailed;
     }
   }
@@ -390,7 +410,7 @@ class SignedInAccount extends _$SignedInAccount {
         }),
       );
     } on PlatformException catch (error) {
-      await _endSession();
+      await _abandonSession(sessionToken);
       _logFailure('session storage', error.code);
       return SignInResult.failed;
     }

@@ -82,6 +82,7 @@ Ablauf: [authentication.md](authentication.md#anmeldung). `signedInAccountProvid
 - Installationsmarke `installed` in den SharedPreferences: Fehlt sie, leert `restore()` den Secure Storage, weil die iOS-Keychain eine Deinstallation überdauert.
 - Android: Der Keystore-Schlüssel kommt nie ins Auto Backup. Nach einer Wiederherstellung löscht `resetOnError` die unlesbaren Daten, der Nutzer ist abgemeldet.
 - `main.dart` ruft `restore()` ohne Netz auf, die Session prüft danach eine JWT-Anfrage im Hintergrund. Lehnt `auth` sie mit 401 ab, ist der Nutzer abgemeldet (kurz sichtbare Startseite möglich), andere Fehler lassen ihn angemeldet. So öffnet die App auch offline und während des Kaltstarts von `auth`.
+- Scheitert die Anmeldung, nachdem `auth` die Session angelegt hat (JWT, `/v1/users/me` oder Secure Storage), beendet die App sie im Hintergrund bei `auth` (`POST /api/auth/sign-out`), Fehler dabei nur im Log.
 - Abmelden (Einstellungen › Konto) beendet zuerst die Session bei `auth` (`POST /api/auth/sign-out` mit dem Session-Token). Ist `auth` nicht erreichbar, bestätigt der Nutzer das Abmelden nur auf dem Gerät, die Session am Server läuft dann nach 30 Tagen ohne Nutzung ab.
 - Ein Listener in `MurmliApp` führt bei jedem Wechsel von angemeldet zu abgemeldet von jeder Seite zur Onboarding-Seite.
 - Sign in with Apple braucht ein Gerät mit Apple Account mit Zwei-Faktor-Authentifizierung, im Simulator unzuverlässig (Apple-Feedback FB25318712).
