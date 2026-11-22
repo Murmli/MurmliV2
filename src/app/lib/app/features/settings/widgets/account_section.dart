@@ -8,8 +8,11 @@ import '../../../../i18n/strings.g.dart';
 import '../../../core/authentication/signed_in_account_provider.dart';
 import '../../../core/widgets/confirmation_dialog.dart';
 import '../../../core/widgets/message_dialog.dart';
+import '../providers/account_deletion_provider.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
+
+enum _AccountAction { signOut, deletion }
 
 class AccountSection extends HookConsumerWidget {
   const AccountSection({super.key});
@@ -17,22 +20,29 @@ class AccountSection extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final translations = context.t.settings.account;
-    final isSigningOut = useState(false);
+    final runningAction = useState<_AccountAction?>(null);
     return SettingsSection(
       title: translations.section,
       children: [
         SettingsRow(
           icon: Icons.logout,
           label: translations.signOut,
-          trailing: isSigningOut.value
-              ? const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(),
-                )
+          trailing: runningAction.value == _AccountAction.signOut
+              ? const _ProgressIndicator()
               : null,
-          onTap: isSigningOut.value
+          onTap: runningAction.value != null
               ? null
-              : () => unawaited(_signOut(context, ref, isSigningOut)),
+              : () => unawaited(_signOut(context, ref, runningAction)),
+        ),
+        SettingsRow(
+          icon: Icons.delete_outline,
+          label: translations.deleteAccount,
+          trailing: runningAction.value == _AccountAction.deletion
+              ? const _ProgressIndicator()
+              : null,
+          onTap: runningAction.value != null
+              ? null
+              : () => unawaited(_deleteAccount(context, ref, runningAction)),
         ),
       ],
     );
@@ -41,12 +51,13 @@ class AccountSection extends HookConsumerWidget {
   Future<void> _signOut(
     BuildContext context,
     WidgetRef ref,
-    ValueNotifier<bool> isSigningOut,
+    ValueNotifier<_AccountAction?> runningAction,
   ) async {
     final signedInAccount = ref.read(signedInAccountProvider.notifier);
-    final result = await _whileSigningOut(
+    final result = await _whileRunning(
       context,
-      isSigningOut,
+      runningAction,
+      _AccountAction.signOut,
       signedInAccount.signOut,
     );
     if (result == SignOutResult.signedOut || !context.mounted) {
@@ -63,9 +74,10 @@ class AccountSection extends HookConsumerWidget {
     if (!isConfirmed || !context.mounted) {
       return;
     }
-    final isSignedOut = await _whileSigningOut(
+    final isSignedOut = await _whileRunning(
       context,
-      isSigningOut,
+      runningAction,
+      _AccountAction.signOut,
       signedInAccount.signOutLocally,
     );
     if (isSignedOut || !context.mounted) {
@@ -80,18 +92,50 @@ class AccountSection extends HookConsumerWidget {
     );
   }
 
-  Future<T> _whileSigningOut<T>(
+  Future<void> _deleteAccount(
     BuildContext context,
-    ValueNotifier<bool> isSigningOut,
-    Future<T> Function() signOut,
+    WidgetRef ref,
+    ValueNotifier<_AccountAction?> runningAction,
   ) async {
-    isSigningOut.value = true;
+    final translations = context.t.settings.account.deleteDialog;
+    final isConfirmed = await showConfirmationDialog(
+      context,
+      title: translations.title,
+      message: translations.message,
+      cancelLabel: translations.cancel,
+      confirmLabel: translations.confirm,
+    );
+    if (isConfirmed && context.mounted) {
+      await _whileRunning(
+        context,
+        runningAction,
+        _AccountAction.deletion,
+        ref.read(deleteAccountProvider),
+      );
+    }
+  }
+
+  Future<T> _whileRunning<T>(
+    BuildContext context,
+    ValueNotifier<_AccountAction?> runningAction,
+    _AccountAction action,
+    Future<T> Function() run,
+  ) async {
+    runningAction.value = action;
     try {
-      return await signOut();
+      return await run();
     } finally {
       if (context.mounted) {
-        isSigningOut.value = false;
+        runningAction.value = null;
       }
     }
   }
+}
+
+class _ProgressIndicator extends StatelessWidget {
+  const _ProgressIndicator();
+
+  @override
+  Widget build(BuildContext context) =>
+      const SizedBox.square(dimension: 16, child: CircularProgressIndicator());
 }

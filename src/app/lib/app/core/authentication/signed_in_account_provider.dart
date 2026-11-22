@@ -245,6 +245,18 @@ class SignedInAccount extends _$SignedInAccount {
     return true;
   }
 
+  /// Yields false when the API request fails, apiClientProvider already
+  /// showed the error dialog. Deleting the account ends its sessions at auth.
+  Future<bool> deleteAccount() async {
+    try {
+      await ref.read(apiClientProvider).delete<void>('/v1/users/me');
+    } on DioException {
+      return false;
+    }
+    await _endSession();
+    return true;
+  }
+
   Future<void> _signOutAtAuth(String sessionToken) => ref
       .read(authClientProvider)
       .post<void>('/api/auth/sign-out', options: _authorizedBy(sessionToken));

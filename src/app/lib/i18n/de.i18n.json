@@ -96,6 +96,13 @@
         "title": "Abmelden fehlgeschlagen",
         "message": "Die Anmeldung konnte auf diesem Gerät nicht entfernt werden. Bitte versuche es erneut.",
         "confirm": "OK"
+      },
+      "deleteAccount": "Konto löschen",
+      "deleteDialog": {
+        "title": "Konto löschen?",
+        "message": "Dein Konto und alle zugehörigen Daten werden sofort und endgültig gelöscht. Das lässt sich nicht rückgängig machen.",
+        "cancel": "Abbrechen",
+        "confirm": "Endgültig löschen"
       }
     },
     "about": {

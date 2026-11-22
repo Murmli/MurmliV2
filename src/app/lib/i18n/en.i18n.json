@@ -96,6 +96,13 @@
         "title": "Sign out failed",
         "message": "This device could not remove the sign-in. Please try again.",
         "confirm": "OK"
+      },
+      "deleteAccount": "Delete account",
+      "deleteDialog": {
+        "title": "Delete account?",
+        "message": "Your account and all associated data will be deleted immediately and permanently. This cannot be undone.",
+        "cancel": "Cancel",
+        "confirm": "Delete permanently"
       }
     },
     "about": {
