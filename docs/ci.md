@@ -32,3 +32,4 @@ Lokale Checks (Befehle in [AGENTS.md](../AGENTS.md#ci)):
 | R8-Mapping über das Sentry Android Gradle Plugin | Das Android-SDK ordnet das Mapping über eine UUID in den Assets der App zu, die das Plugin vor R8 erzeugt. `sentry_dart_plugin` lädt keine Mappings hoch. |
 | Upload-Fehler lassen den Job scheitern | Fehlende Symbole sollen auffallen, auch um den Preis eines blockierten Deploys. |
 | Environment mit `deployment: false` | Build- und Upload-Jobs deployen nichts, Deployments nach `development` stammen nur aus `deploy-backend.yml`. |
+| Backend-Job mit `timeout-minutes: 20` | Die Tests des Abgleichs mit gleichzeitigen Anfragen können bei einem Fehler hängen; ohne Timeout liefe der Job bis zum Standard von 6 Stunden. |
