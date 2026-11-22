@@ -18,8 +18,6 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
 
     private const string OtherAuthUserId = "AuthUser0000000000000000000002";
 
-    private const string UserIdProperty = "UserId";
-
     private const string ProductSearchPath = "/v1/products?search=kefir";
 
     private readonly string connectionString = postgres.CreateDatabaseConnectionString();
@@ -39,10 +37,11 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
             traceId = await SendAsync(api, HttpMethod.Get, ProductSearchPath, TestTokens.Create(AuthUserId), HttpStatusCode.OK);
         }
 
-        Assert.Equal(userId.ToString(), GetRequestActivity(traceId).GetTagItem(UserIdProperty));
+        Assert.Equal(userId.ToString(), GetRequestActivity(traceId).GetTagItem(TestTelemetry.UserIdProperty));
         Assert.Contains(
             GetLogRecords(traceId),
-            logRecord => logRecord.CategoryName == "Microsoft.EntityFrameworkCore.Database.Command" && Equals(FindUserId(logRecord), userId)
+            logRecord =>
+                logRecord.CategoryName == "Microsoft.EntityFrameworkCore.Database.Command" && Equals(TestTelemetry.FindUserId(logRecord), userId)
         );
     }
 
@@ -59,7 +58,7 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
 
         var failureLog = Assert.Single(logRecords, logRecord => logRecord.EventId.Name == "AuthUserDeletionFailed");
         Assert.IsType<HttpRequestException>(failureLog.Exception);
-        Assert.Equal(userId, FindUserId(failureLog));
+        Assert.Equal(userId, TestTelemetry.FindUserId(failureLog));
     }
 
     [Fact]
@@ -79,7 +78,7 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
         );
         Assert.Equal("UnhandledException", exceptionLog.EventId.Name);
         Assert.Equal(ApiHost.FailingEndpointMessage, Assert.IsType<InvalidOperationException>(exceptionLog.Exception).Message);
-        Assert.Equal(userId, FindUserId(exceptionLog));
+        Assert.Equal(userId, TestTelemetry.FindUserId(exceptionLog));
     }
 
     [Fact]
@@ -97,7 +96,7 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
                 Assert.InRange(Assert.NotNull(response.Headers.RetryAfter?.Delta), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(20));
                 Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
                 var problem = await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
-                Assert.Equal("tag:murmli.de,2026:service-unavailable", problem.GetProperty("type").GetString());
+                Assert.Equal(TestProblemTypes.ServiceUnavailable, problem.GetProperty("type").GetString());
                 Assert.Equal(503, problem.GetProperty("status").GetInt32());
             }
             finally
@@ -109,7 +108,7 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
         var unavailableLog = Assert.Single(GetLogRecords(traceId), logRecord => logRecord.EventId.Name == "DatabaseUnavailable");
         Assert.Equal(LogLevel.Warning, unavailableLog.LogLevel);
         Assert.NotNull(unavailableLog.Exception);
-        Assert.Null(FindUserId(unavailableLog));
+        Assert.Null(TestTelemetry.FindUserId(unavailableLog));
         Assert.Equal(2, GetLogRecords(traceId).Count(logRecord => logRecord.EventId.Name == CoreEventId.ExecutionStrategyRetrying.Name));
     }
 
@@ -125,8 +124,8 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
             traceId = await SendAsync(api, HttpMethod.Get, path, null, expectedStatusCode);
         }
 
-        Assert.Null(GetRequestActivity(traceId).GetTagItem(UserIdProperty));
-        Assert.All(GetLogRecords(traceId), logRecord => Assert.Null(FindUserId(logRecord)));
+        Assert.Null(GetRequestActivity(traceId).GetTagItem(TestTelemetry.UserIdProperty));
+        Assert.All(GetLogRecords(traceId), logRecord => Assert.Null(TestTelemetry.FindUserId(logRecord)));
     }
 
     [Fact]
@@ -139,8 +138,8 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
             traceId = await SendAsync(api, HttpMethod.Get, ProductSearchPath, TestTokens.Create(AuthUserId), HttpStatusCode.OK);
         }
 
-        Assert.Null(GetRequestActivity(traceId).GetTagItem(UserIdProperty));
-        Assert.All(GetLogRecords(traceId), logRecord => Assert.Null(FindUserId(logRecord)));
+        Assert.Null(GetRequestActivity(traceId).GetTagItem(TestTelemetry.UserIdProperty));
+        Assert.All(GetLogRecords(traceId), logRecord => Assert.Null(TestTelemetry.FindUserId(logRecord)));
     }
 
     [Fact]
@@ -181,7 +180,7 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
     private static async Task<HttpResponseMessage> SendAsync(ApiHost api, HttpMethod method, string path, string? token, ActivityTraceId traceId)
     {
         using var request = new HttpRequestMessage(method, path);
-        request.Headers.Add("traceparent", $"00-{traceId.ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01");
+        request.Headers.Add("traceparent", TestTelemetry.CreateTraceParent(traceId));
         if (token is not null)
         {
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -219,24 +218,6 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
 
     private IEnumerable<LogRecord> GetLogRecords(ActivityTraceId traceId) => logRecords.Where(logRecord => logRecord.TraceId == traceId);
 
-    private static List<KeyValuePair<string, object?>> GetScopeItems(LogRecord logRecord)
-    {
-        var items = new List<KeyValuePair<string, object?>>();
-        logRecord.ForEachScope(
-            static (scope, scopeItems) =>
-            {
-                foreach (var item in scope)
-                {
-                    scopeItems.Add(item);
-                }
-            },
-            items
-        );
-        return items;
-    }
-
-    private static object? FindUserId(LogRecord logRecord) => GetScopeItems(logRecord).SingleOrDefault(item => item.Key == UserIdProperty).Value;
-
     private static string Describe(Activity activity) =>
         string.Join(
             '\n',
@@ -254,7 +235,7 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
             [
                 logRecord.FormattedMessage,
                 .. (logRecord.Attributes ?? []).Select(Describe),
-                .. GetScopeItems(logRecord).Select(Describe),
+                .. TestTelemetry.GetScopeItems(logRecord).Select(Describe),
                 logRecord.Exception?.ToString(),
             ]
         );

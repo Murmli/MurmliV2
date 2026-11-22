@@ -15,12 +15,6 @@ namespace Murmli.Backend.Api.Tests.Sync;
 
 public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiFixture>
 {
-    private const string AccountGoneType = "tag:murmli.de,2026:account-gone";
-
-    private const string InvalidRequestType = "tag:murmli.de,2026:invalid-request";
-
-    private const string ServiceUnavailableType = "tag:murmli.de,2026:service-unavailable";
-
     private const string InvalidDeviceId = "not-a-guid";
 
     [Fact]
@@ -50,9 +44,7 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
                 .AsNoTracking()
                 .SingleAsync(scope => scope.OwnerAccountId == device.AccountId, TestContext.Current.CancellationToken)
         );
-        var databaseIdentity = await fixture.Api.QueryDatabaseAsync(context =>
-            context.Set<DatabaseIdentity>().Select(identity => identity.Value).SingleAsync(TestContext.Current.CancellationToken)
-        );
+        var databaseIdentity = await new DatabaseAdministration(fixture.ConnectionString).ReadDatabaseIdentityAsync();
         var token = SyncTokenFormat.Decode(syncResponse.Token);
         Assert.Equal(databaseIdentity, token.DatabaseIdentity);
         Assert.Equal((block.ScopeId, scope.Epoch, 0L), Assert.Single(token.Scopes));
@@ -125,7 +117,7 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
             using var response = await device.SendAsync(
                 JsonContent.Create(device.CreateBody()),
                 device.DeviceId.ToString(),
-                CreateTraceParent(traceId)
+                TestTelemetry.CreateTraceParent(traceId)
             );
 
             Assert.Empty((await SyncTestDevice.ReadResponseAsync(response)).Scopes);
@@ -191,7 +183,7 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
 
             using var response = await sync;
 
-            await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.Gone, AccountGoneType);
+            await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.Gone, TestProblemTypes.AccountGone);
         }
     }
 
@@ -202,7 +194,7 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
 
         using var response = await SendBodyAsync(device, device.CreateBody());
 
-        await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.Gone, AccountGoneType);
+        await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.Gone, TestProblemTypes.AccountGone);
         Assert.False(
             await fixture.Api.QueryDatabaseAsync(context =>
                 context.Users.AnyAsync(user => user.AuthUserId == device.AuthUserId, TestContext.Current.CancellationToken)
@@ -217,7 +209,7 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
 
         using var response = await device.SendAsync(CreateContentWithoutType(device.CreateBody()), device.DeviceId.ToString());
 
-        await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.UnsupportedMediaType, InvalidRequestType);
+        await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.UnsupportedMediaType, TestProblemTypes.InvalidRequest);
     }
 
     [Fact]
@@ -247,7 +239,7 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
 
         using var response = await device.SendAsync(JsonContent.Create(device.CreateBody()), deviceId);
 
-        await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.BadRequest, InvalidRequestType);
+        await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.BadRequest, TestProblemTypes.InvalidRequest);
     }
 
     [Theory]
@@ -272,7 +264,7 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
 
         using var response = await device.SendAsync(new StringContent(body, Encoding.UTF8, "application/json"), device.DeviceId.ToString());
 
-        await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.BadRequest, InvalidRequestType);
+        await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.BadRequest, TestProblemTypes.InvalidRequest);
     }
 
     [Theory]
@@ -288,9 +280,9 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
     }
 
     [Theory]
-    [InlineData(false, false, HttpStatusCode.Gone, AccountGoneType)]
-    [InlineData(true, false, HttpStatusCode.UnsupportedMediaType, InvalidRequestType)]
-    [InlineData(true, true, HttpStatusCode.BadRequest, InvalidRequestType)]
+    [InlineData(false, false, HttpStatusCode.Gone, TestProblemTypes.AccountGone)]
+    [InlineData(true, false, HttpStatusCode.UnsupportedMediaType, TestProblemTypes.InvalidRequest)]
+    [InlineData(true, true, HttpStatusCode.BadRequest, TestProblemTypes.InvalidRequest)]
     public async Task Sync_SeveralChecksFail_ReturnsFirstFailureInDocumentedOrder(
         bool hasAccount,
         bool hasJsonContentType,
@@ -329,7 +321,7 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
             var noteId = Guid.NewGuid();
             var now = api.TimeProvider.GetUtcNow();
             await device.SyncAsync(device.CreateNote(noteId, now.AddSeconds(-10), "before"));
-            var change = device.SetNoteFields(noteId, now, new JsonObject { ["title"] = "after" });
+            var change = device.SetNoteFields(noteId, now, SyncTestCommands.TitleFields("after"));
 
             await using (await new DatabaseAdministration(connectionString).LockScopeRowAsync(device.PersonalScopeId))
             {
@@ -337,29 +329,20 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
                 using var response = await device.SendAsync(
                     JsonContent.Create(device.CreateBody(change)),
                     device.DeviceId.ToString(),
-                    CreateTraceParent(traceId)
+                    TestTelemetry.CreateTraceParent(traceId)
                 );
 
                 // The lock timeout answers the same 503, but only after it and with logged retries
                 var elapsed = Stopwatch.GetElapsedTime(start);
                 Assert.True(elapsed < lockTimeout, $"The sync answered after {elapsed}, not before the lock timeout.");
-                await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.ServiceUnavailable, ServiceUnavailableType);
+                await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.ServiceUnavailable, TestProblemTypes.ServiceUnavailable);
                 Assert.InRange(Assert.NotNull(response.Headers.RetryAfter?.Delta), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(20));
             }
 
             var resent = await device.SyncAsync(change);
 
             Assert.Equal("applied", Assert.Single(resent.Results).Status);
-            Assert.Equal(
-                "after",
-                await api.QueryDatabaseAsync(context =>
-                    context
-                        .Set<TestNote>()
-                        .Where(note => note.Id == noteId)
-                        .Select(note => note.Title)
-                        .SingleAsync(TestContext.Current.CancellationToken)
-                )
-            );
+            Assert.Equal("after", await TestNoteQueries.ReadTitleAsync(api, noteId));
         }
 
         Assert.DoesNotContain(
@@ -374,7 +357,4 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
         device.SendAsync(JsonContent.Create(body), device.DeviceId.ToString());
 
     private static ByteArrayContent CreateContentWithoutType(JsonObject body) => new(Encoding.UTF8.GetBytes(body.ToJsonString()));
-
-    private static string CreateTraceParent(ActivityTraceId traceId) =>
-        $"00-{traceId.ToHexString()}-{ActivitySpanId.CreateRandom().ToHexString()}-01";
 }

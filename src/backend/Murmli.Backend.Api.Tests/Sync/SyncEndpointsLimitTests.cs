@@ -1,17 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
-using Microsoft.EntityFrameworkCore;
 using Murmli.Backend.Api.Tests.Infrastructure;
 using Murmli.Backend.Api.Tests.Infrastructure.TestDataTypes;
-using Murmli.Backend.Data.Sync;
 using Murmli.Backend.Sync.Protocol;
 
 namespace Murmli.Backend.Api.Tests.Sync;
 
 public class SyncEndpointsLimitTests(PostgresFixture postgres) : IClassFixture<PostgresFixture>
 {
-    private const string RequestTooLargeType = "tag:murmli.de,2026:request-too-large";
-
     [Fact]
     public async Task Sync_TooManyCommands_RejectsWholeRequestAndProcessesNothing()
     {
@@ -26,7 +22,7 @@ public class SyncEndpointsLimitTests(PostgresFixture postgres) : IClassFixture<P
 
         using var response = await device.SendAsync(JsonContent.Create(body), device.DeviceId.ToString());
 
-        var problem = await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.RequestEntityTooLarge, RequestTooLargeType);
+        var problem = await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.RequestEntityTooLarge, TestProblemTypes.RequestTooLarge);
         Assert.Equal(2, problem.GetProperty("maxCommandsPerRequest").GetInt32());
         Assert.Equal(1_000_000, problem.GetProperty("maxRequestBytes").GetInt32());
         await AssertNothingProcessedAsync(api, device);
@@ -43,7 +39,7 @@ public class SyncEndpointsLimitTests(PostgresFixture postgres) : IClassFixture<P
 
         using var response = await device.SendAsync(JsonContent.Create(body), device.DeviceId.ToString());
 
-        var problem = await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.RequestEntityTooLarge, RequestTooLargeType);
+        var problem = await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.RequestEntityTooLarge, TestProblemTypes.RequestTooLarge);
         Assert.Equal(2000, problem.GetProperty("maxRequestBytes").GetInt32());
         await AssertNothingProcessedAsync(api, device);
         Assert.Equal(2000, (await device.SyncAsync()).Settings.MaxRequestBytes);
@@ -86,7 +82,7 @@ public class SyncEndpointsLimitTests(PostgresFixture postgres) : IClassFixture<P
         var results = responses.Select(response => Assert.Single(response.Results)).ToArray();
         Assert.Equal(3, results.Count(result => result.Status == "applied"));
         Assert.Equal(7, results.Count(result => result is { Status: "rejected", Reason: "limitExceeded" }));
-        Assert.Equal(3, await CountNotesAsync(api, devices[0].PersonalScopeId));
+        Assert.Equal(3, await TestNoteQueries.CountInScopeAsync(api, devices[0].PersonalScopeId));
     }
 
     [Fact]
@@ -102,27 +98,16 @@ public class SyncEndpointsLimitTests(PostgresFixture postgres) : IClassFixture<P
         var third = await device.SyncAsync(commands[2..]);
 
         Assert.Equal(
-            commands.Select(command => ((Guid?)command["id"]!.GetValue<Guid>(), "applied")),
+            commands.Select(command => ((Guid?)SyncTestCommands.GetId(command), "applied")),
             new[] { first, second, third }.Select(response => Assert.Single(response.Results)).Select(result => (result.CommandId, result.Status))
         );
-        Assert.Equal(3, await CountNotesAsync(api, device.PersonalScopeId));
+        Assert.Equal(3, await TestNoteQueries.CountInScopeAsync(api, device.PersonalScopeId));
     }
-
-    private static Task<int> CountNotesAsync(ApiHost api, Guid scopeId) =>
-        api.QueryDatabaseAsync(context =>
-            context.Set<TestNote>().CountAsync(note => note.ScopeId == scopeId, TestContext.Current.CancellationToken)
-        );
 
     private static async Task AssertNothingProcessedAsync(ApiHost api, SyncTestDevice device)
     {
-        Assert.Equal(0, await CountNotesAsync(api, device.PersonalScopeId));
-        Assert.False(
-            await api.QueryDatabaseAsync(context =>
-                context
-                    .Set<ProcessedSyncCommand>()
-                    .AnyAsync(command => command.AccountId == device.AccountId, TestContext.Current.CancellationToken)
-            )
-        );
+        Assert.Equal(0, await TestNoteQueries.CountInScopeAsync(api, device.PersonalScopeId));
+        Assert.Empty(await TestNoteQueries.ReadProcessedCommandsAsync(api, device.AccountId));
     }
 
     private Task<ApiHost> StartApiAsync(string key, string value) =>
