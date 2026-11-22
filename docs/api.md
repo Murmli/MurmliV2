@@ -5,11 +5,11 @@ Lokal lauscht die API über das Launch-Profil `http` fest auf Port 5020, damit l
 ## Pipeline
 
 1. `UseRouting`, `UseAuthentication` und `UseAuthorization` fügt `WebApplication` selbst ein (im Environment `Development` davor die Developer Exception Page). Geschützte Endpunkte ohne Anmeldung enden hier mit 401.
-2. `UserTelemetryMiddleware` (siehe [telemetry.md](telemetry.md#konto-id)).
+2. `UserTelemetryMiddleware` (siehe [telemetry.md](telemetry.md#konto-id)). Scheitert der Abruf der Konto-Id an einer Störung der Datenbank (Retries erschöpft, transienter Npgsql-Fehler, Timeout), antwortet sie mit 503 als Problem Details mit `type` `tag:murmli.de,2026:service-unavailable` und einem `Retry-After` (zufällig zwischen `Database:UnavailableRetryAfter` und dem Doppelten, Standard 10 s) und loggt `DatabaseUnavailable` ohne `UserId`.
 3. `UseExceptionHandler()` loggt unbehandelte Exceptions mit `UserId` und antwortet mit 500 als Problem Details (mit `traceId`, ohne Details der Exception). Ohne JSON im `Accept`-Header bleibt die 500-Antwort ohne Body.
 4. Die Endpunkte.
 
-Exceptions vor Schritt 3 (Authentifizierung, Abruf der Konto-Id) behandelt Kestrel: 500 ohne Body, Log ohne `UserId`, lokal die Developer Exception Page.
+Andere Exceptions vor Schritt 3 (Authentifizierung, Abruf der Konto-Id) behandelt Kestrel: 500 ohne Body, Log ohne `UserId`, lokal die Developer Exception Page.
 
 ## Versionierung
 
@@ -35,6 +35,14 @@ Höchstens 25 Treffer, jede Stufe entscheidet nur bei Gleichstand der vorigen ([
 
 Thekenartikel brauchen keine eigene Regel: Ihr Code wechselt mit jeder Packung und meist fehlen Nährwerte, sie rutschen ohnehin nach hinten.
 
+## Problem-Typen
+
+Fehler, auf die Clients eigens reagieren, sind Problem Details mit `type` `tag:murmli.de,2026:<code>`, geschrieben per `TypedResults.Problem` (auch ohne JSON im `Accept`-Header mit Body). Clients reagieren auf `type`, nie auf den bloßen Status, weil Proxys und das Framework dieselben Statuscodes erzeugen.
+
+| Code | Status | Header | Quelle |
+| --- | --- | --- | --- |
+| `service-unavailable` | 503 | `Retry-After` | `UserTelemetryMiddleware`, wenn der Abruf der Konto-Id an einer Störung der Datenbank scheitert ([Pipeline](#pipeline)) |
+
 ## Entscheidungen
 
 | Entscheidung | Grund |
@@ -42,5 +50,7 @@ Thekenartikel brauchen keine eigene Regel: Ihr Code wechselt mit jeder Packung u
 | Präfix per `MapGroup` statt Asp.Versioning | Asp.Versioning hat noch kein Release für .NET 11, sein OpenAPI-Paket hängt an Microsoft.OpenApi 2.x, ASP.NET Core 11 braucht 3.x. Der Wechsel ist [#68](https://github.com/Murmli/MurmliV2/issues/68) und behält Pfade und Dokumentnamen. |
 | Kein `WithGroupName("v1")` | Mit nur dem Dokument `v1` landen alle Endpunkte ohnehin darin, ab einer zweiten Version setzt Asp.Versioning die Gruppennamen. |
 | Schalter `OpenApi:Enabled` statt `IsDevelopment()` | Die API läuft in Azure Dev als Production, `Development` setzt nur `aspire run` über die launchSettings. |
-| Problem Details über `AddProblemDetails()` | `UseExceptionHandler()` ohne Pfad braucht den `IProblemDetailsService`. Über ihn schreiben auch `TypedResults.ValidationProblem` (400) und `TypedResults.Problem` (502, Konto löschen) samt `traceId`, ohne JSON im `Accept`-Header schreiben die beiden ihre Problem Details selbst. |
+| Problem Details über `AddProblemDetails()` | `UseExceptionHandler()` ohne Pfad braucht den `IProblemDetailsService`. Über ihn schreiben auch `TypedResults.ValidationProblem` (400) und `TypedResults.Problem` (502 beim Löschen des Kontos, 503 bei einer Störung der Datenbank) samt `traceId`, ohne JSON im `Accept`-Header schreiben die beiden ihre Problem Details selbst. |
 | Suchbegriff im Query-String | Suchbegriffe sind keine Gesundheitsdaten, „Keine Gesundheitsdaten in URLs“ greift nicht. |
+| Problem-Typen als `tag:`-URI | `type` ist der Bezeichner aus RFC 9457, eine Tag-URI (RFC 4151) ist für Bezeichner ohne Seite dahinter gedacht. Verworfen: nur der Status, ein eigenes Feld `code`, `https:`-URIs ohne Seite. |
+| `Retry-After` mit Zufall | Verteilt die Rückkehr wartender Geräte, damit sie nach einer Störung nicht alle im selben Moment wiederkommen. |

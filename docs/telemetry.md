@@ -20,7 +20,7 @@ Ohne `UserId` bleiben:
 - Anfragen ohne Anmeldung oder ohne Konto (nie `GET /v1/users/me` aufgerufen, Konto gelöscht), der Produktimport und `auth`.
 - Der erste `GET /v1/users/me`, der das Konto anlegt: nur der Log `UserCreated` trägt die Id.
 - Kind-Spans (Npgsql, HttpClient), sie hängen über die Trace-ID am Request.
-- Logs vor der Middleware (Authentifizierung, die Abfrage der Konto-Id selbst).
+- Logs vor der Middleware (Authentifizierung, die Abfrage der Konto-Id selbst samt `DatabaseUnavailable`, wenn sie an einer Störung der Datenbank scheitert).
 
 ## Export
 

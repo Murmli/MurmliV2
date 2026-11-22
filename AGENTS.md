@@ -400,6 +400,7 @@ Hintergrund und Entscheidungen: [docs/api.md](docs/api.md)
 - Endpunkte und Middleware nur in `UseApi` registrieren (`Program.cs` und `ApiHost` der Tests richten die Pipeline nur über `UseApi()` ein, `ApiHost` mappt danach höchstens Test-Endpunkte), neue Endpunkte in die Gruppe `/v1`, nie direkt auf `application`. Ohne Version bleiben nur `/health` und das OpenAPI-Dokument. `UseExceptionHandler()` bleibt nach `UserTelemetryMiddleware`, sonst fehlt `UserId` an unbehandelten Exceptions. Kein `IExceptionHandler` registrieren, ohne `ExceptionHandlerOptions.SuppressDiagnosticsCallback` anzupassen, sonst fehlt für die Exceptions, die er behandelt, der Log `UnhandledException` samt `UserId`.
 - Bis zum ersten Live-Gang alles in `v1` ändern, auch inkompatibel. Danach innerhalb einer Version nur rückwärtskompatibel ändern (neue Endpunkte, neue Felder in Antworten), alles andere bekommt eine neue Version.
 - Kein Asp.Versioning einführen, bevor es .NET 11 unterstützt ([#68](https://github.com/Murmli/MurmliV2/issues/68)), und keine Version per Header oder Query.
+- Fehler, auf die Clients eigens reagieren, als Problem Details mit `type` `tag:murmli.de,2026:<code>` aus `ProblemTypes`, geschrieben per `TypedResults.Problem` (auch ohne JSON im `Accept`-Header mit Body). Clients reagieren auf `type`, nie auf den bloßen Status.
 
 ## Authentifizierung
 
