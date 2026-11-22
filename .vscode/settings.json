@@ -1,3 +1,17 @@
 {
-  "dart.flutterSdkPath": "src/app/.fvm/flutter_sdk"
+  "dart.flutterSdkPath": "src/app/.fvm/flutter_sdk",
+  "dotnet.defaultSolution": "src/backend/Murmli.Backend.slnx",
+  "[dart]": {
+    "editor.defaultFormatter": "Dart-Code.dart-code",
+    "editor.formatOnSave": true
+  },
+  "[csharp]": {
+    "editor.defaultFormatter": "ms-dotnettools.csharp",
+    "editor.formatOnSave": true
+  },
+  "files.exclude": {
+    "**/*.g.dart": true,
+    "**/*.gr.dart": true,
+    "**/*.freezed.dart": true
+  }
 }
