@@ -38,6 +38,8 @@ enum SignInResult {
   apiRequestFailed,
 }
 
+enum SignOutResult { signedOut, authUnreachable }
+
 @Riverpod(keepAlive: true)
 class SignedInAccount extends _$SignedInAccount {
   late final Future<void> _googleSignInInitialization = GoogleSignInPlatform
@@ -215,6 +217,29 @@ class SignedInAccount extends _$SignedInAccount {
     }
     return sessionToken;
   }
+
+  Future<SignOutResult> signOut() async {
+    final sessionToken = _sessionToken;
+    if (sessionToken != null) {
+      try {
+        await ref
+            .read(authClientProvider)
+            .post<void>(
+              '/api/auth/sign-out',
+              options: _authorizedBy(sessionToken),
+            );
+      } on DioException catch (error) {
+        ref
+            .read(talkerProvider)
+            .warning('Sign-out failed: ${_httpOutcome(error)}');
+        return SignOutResult.authUnreachable;
+      }
+    }
+    await _endSession();
+    return SignOutResult.signedOut;
+  }
+
+  Future<void> signOutLocally() => _endSession();
 
   Future<String?> accessToken({String? rejected}) async {
     try {

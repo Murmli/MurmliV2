@@ -1,14 +1,19 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:app/app/core/authentication/account.dart';
+import 'package:app/app/core/authentication/signed_in_account_provider.dart';
 import 'package:app/app/core/crash_reporting/crash_reporter_provider.dart';
 import 'package:app/app/core/storage/preference_keys.dart';
+import 'package:app/app/features/onboarding/onboarding_page.dart';
 import 'package:app/app/features/settings/settings_page.dart';
 import 'package:app/i18n/strings.g.dart';
 
+import '../../../helpers/authentication.dart';
 import '../../../helpers/crash_reporter.dart';
 import '../../../helpers/preferences.dart';
 import '../../../helpers/pump_app.dart';
@@ -99,6 +104,93 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'tapping sign out ends the session at auth, deletes the stored session, removes the crash reporting user and shows the onboarding page',
+      (tester) async {
+        final container = await openSettings(tester);
+        final requests = recordAuthenticationRequests(container);
+
+        await tapRow(tester, translations.account.signOut);
+
+        final signOut = requests.auth.requests.single;
+        expect(signOut.method, 'POST');
+        expect(signOut.uri.path, signOutPath);
+        expect(signOut.headers['Authorization'], 'Bearer $signedSessionToken');
+        expect(await const FlutterSecureStorage().readAll(), isEmpty);
+        expect(
+          (container.read(
+            crashReporterProvider,
+          ) as RecordingCrashReporter).calls.last,
+          'user none',
+        );
+        expect(find.byType(OnboardingPage), findsOneWidget);
+      },
+    );
+
+    for (final (scenario, respondFromAuth) in [
+      (
+        'auth being unreachable',
+        (RequestOptions request) async => throw DioException.connectionError(
+          requestOptions: request,
+          reason: 'Connection refused',
+        ),
+      ),
+      (
+        'auth failing with 503',
+        (RequestOptions request) async => ResponseBody.fromString('', 503),
+      ),
+    ]) {
+      Future<ProviderContainer> tapSignOutWhileAuthFails(
+        WidgetTester tester,
+      ) async {
+        final container = await openSettings(tester);
+        recordAuthenticationRequests(
+          container,
+          respondFromAuth: respondFromAuth,
+        );
+        await tapRow(tester, translations.account.signOut);
+        return container;
+      }
+
+      testWidgets(
+        'tapping sign out with $scenario and canceling the dialog stays signed in on the settings page and keeps the stored session',
+        (tester) async {
+          final container = await tapSignOutWhileAuthFails(tester);
+
+          expect(
+            find.text(translations.account.signOutOfflineDialog.title),
+            findsOneWidget,
+          );
+          await tester.tap(
+            find.text(translations.account.signOutOfflineDialog.cancel),
+          );
+          await tester.pumpAndSettle();
+
+          expect(container.read(signedInAccountProvider), isNotNull);
+          expect(
+            await const FlutterSecureStorage().readAll(),
+            storedSession('account'),
+          );
+          expect(find.byType(SettingsPage), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'tapping sign out with $scenario and confirming the dialog deletes the stored session and shows the onboarding page',
+        (tester) async {
+          await tapSignOutWhileAuthFails(tester);
+
+          await tester.tap(
+            find.text(translations.account.signOutOfflineDialog.confirm),
+          );
+          await tester.pumpAndSettle();
+
+          expect(await const FlutterSecureStorage().readAll(), isEmpty);
+          expect(find.byType(OnboardingPage), findsOneWidget);
+        },
+      );
+    }
 
     testWidgets('about section shows the app version', (tester) async {
       await openSettings(tester);

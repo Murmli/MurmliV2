@@ -83,6 +83,16 @@
       "send": "Send error reports",
       "description": "Reports crashes and errors so we can fix them."
     },
+    "account": {
+      "section": "Account",
+      "signOut": "Sign out",
+      "signOutOfflineDialog": {
+        "title": "Server unreachable",
+        "message": "Sign out on this device anyway? The session on the server will then only expire after 30 days without use.",
+        "cancel": "Cancel",
+        "confirm": "Sign out anyway"
+      }
+    },
     "about": {
       "section": "About Murmli",
       "version": "Version",

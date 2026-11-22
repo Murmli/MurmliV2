@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../../i18n/strings.g.dart';
 import '../../core/theme/app_spacing.dart';
 import 'widgets/about_section.dart';
+import 'widgets/account_section.dart';
 import 'widgets/crash_reporting_section.dart';
 import 'widgets/language_section.dart';
 import 'widgets/theme_section.dart';
@@ -29,6 +30,8 @@ class SettingsPage extends StatelessWidget {
           ThemeSection(),
           SizedBox(height: AppSpacing.space24),
           CrashReportingSection(),
+          SizedBox(height: AppSpacing.space24),
+          AccountSection(),
           SizedBox(height: AppSpacing.space24),
           AboutSection(),
         ],

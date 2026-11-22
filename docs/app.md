@@ -81,6 +81,7 @@ Ablauf: [authentication.md](authentication.md#anmeldung). `signedInAccountProvid
 - Installationsmarke `installed` in den SharedPreferences: Fehlt sie, leert `restore()` den Secure Storage, weil die iOS-Keychain eine Deinstallation überdauert.
 - Android: Der Keystore-Schlüssel kommt nie ins Auto Backup. Nach einer Wiederherstellung löscht `resetOnError` die unlesbaren Daten, der Nutzer ist abgemeldet.
 - `main.dart` ruft `restore()` ohne Netz auf, die Session prüft danach eine JWT-Anfrage im Hintergrund. Lehnt `auth` sie mit 401 ab, ist der Nutzer abgemeldet (kurz sichtbare Startseite möglich), andere Fehler lassen ihn angemeldet. So öffnet die App auch offline und während des Kaltstarts von `auth`.
+- Abmelden (Einstellungen › Konto) beendet zuerst die Session bei `auth` (`POST /api/auth/sign-out` mit dem Session-Token). Ist `auth` nicht erreichbar, bestätigt der Nutzer das Abmelden nur auf dem Gerät, die Session am Server läuft dann nach 30 Tagen ohne Nutzung ab.
 - Ein Listener in `MurmliApp` führt bei jedem Wechsel von angemeldet zu abgemeldet von jeder Seite zur Onboarding-Seite.
 - Sign in with Apple braucht ein Gerät mit Apple Account mit Zwei-Faktor-Authentifizierung, im Simulator unzuverlässig (Apple-Feedback FB25318712).
 - Offen bis zum Release: `sign_in_with_apple` 8.2.0 scheitert auf dem iPad mit Fehler 1000 ([aboutyou/dart_packages#489](https://github.com/aboutyou/dart_packages/issues/489)).
@@ -127,6 +128,7 @@ Ablauf: [authentication.md](authentication.md#anmeldung). `signedInAccountProvid
 | JWT nur im Speicher, nur das Session-Token im Secure Storage | Das JWT läuft nach 15 Minuten ab und lässt sich aus der Session jederzeit neu holen. Verworfen: das JWT mitspeichern. |
 | Session-Prüfung nach dem Start im Hintergrund | Die App öffnet ohne Netz und ohne auf den Kaltstart von `auth` zu warten, dafür ist bei abgelaufener Session kurz die Startseite sichtbar. Verworfen: im Splash auf die Prüfung warten. |
 | Listener in `MurmliApp` führt nach dem Abmelden zur Onboarding-Seite | Greift bei Abmelden, Löschen und abgelaufener Session auf jeder Seite. Verworfen: `reevaluateListenable` von auto_route, es überspringt bereits aufgelöste Guards und wartet auf Animationen. |
+| Abmelden nur auf dem Gerät erst nach Bestätigung, wenn `auth` nicht erreichbar ist | Der Nutzer erfährt, dass die Session am Server bis zu 30 Tage weiterläuft, und kann trotzdem abmelden. Verworfen: still nur auf dem Gerät abmelden, Abmelden ohne `auth` verweigern. |
 | Installationsmarke leert den Secure Storage nach einer Neuinstallation | Die iOS-Keychain überdauert die Deinstallation. Verworfen: nach einer Neuinstallation auf iOS angemeldet bleiben. |
 | Einfacher `Interceptor` mit einer geteilten Erneuerung statt `QueuedInterceptor` | `QueuedInterceptor` reiht alle Requests hintereinander, nicht nur die Erneuerung. |
 | Logzeile als Fehler auch bei 401 mit erfolgreicher Wiederholung | Beabsichtigt: `ApiTraceInterceptor` loggt jeden Request vor dem `AccessTokenInterceptor`, so bleibt die Wiederholung im Log sichtbar. Ein Fehlerdialog erscheint nur, wenn auch die Wiederholung scheitert, und dann einmal. |

@@ -13,6 +13,7 @@ import 'http_client_adapter.dart';
 const socialSignInPath = '/api/auth/sign-in/social';
 const emailSignInPath = '/api/auth/sign-in/email';
 const tokenPath = '/api/auth/token';
+const signOutPath = '/api/auth/sign-out';
 const signInEmail = 'test@murmli.de';
 const signInPassword = 'correct-horse-battery-staple';
 const signedSessionToken = 'signed-session-token';
@@ -62,6 +63,7 @@ Future<ResponseBody> respondAsAuth(RequestOptions request) async =>
         },
       ),
       tokenPath => jsonResponse({'token': issuedJsonWebToken}),
+      signOutPath => jsonResponse({'success': true}),
       _ => ResponseBody.fromString('', 404),
     };
 
