@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Murmli.Backend.Sync.Accounts;
 using Murmli.Backend.Sync.Configuration;
@@ -26,5 +27,16 @@ public static class HostApplicationBuilderExtensions
         builder.Services.AddSingleton<SyncCommandParser>();
         builder.Services.AddScoped<SyncCommandUnit>();
         builder.Services.AddScoped<SyncAccountLifecycle>();
+        builder.Services.AddScoped<SyncChangeReader>();
+        builder.Services.AddScoped(provider => new SyncProcessor(
+            provider.GetRequiredService<SyncDataTypeRegistry>(),
+            provider.GetRequiredService<SyncCommandParser>(),
+            provider.GetRequiredService<SyncCommandUnit>(),
+            provider.GetRequiredService<SyncAccountLifecycle>(),
+            provider.GetRequiredService<SyncChangeReader>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<IOptions<SyncOptions>>(),
+            provider.GetRequiredService<ILogger<SyncProcessor>>()
+        ));
     }
 }
