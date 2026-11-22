@@ -13,7 +13,8 @@
       "request": "launch",
       "cwd": "${workspaceFolder}/src/app",
       "program": "lib/main.dart",
-      "args": ["--flavor", "local"]
+      "args": ["--flavor", "local"],
+      "preLaunchTask": "App: build_runner"
     },
     {
       "name": "App (development)",
@@ -21,7 +22,8 @@
       "request": "launch",
       "cwd": "${workspaceFolder}/src/app",
       "program": "lib/main.dart",
-      "args": ["--flavor", "development"]
+      "args": ["--flavor", "development"],
+      "preLaunchTask": "App: build_runner"
     }
   ],
   "compounds": [

@@ -1,0 +1,56 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "App: build_runner",
+      "type": "shell",
+      "command": "fvm dart run build_runner build",
+      "options": { "cwd": "${workspaceFolder}/src/app" },
+      "problemMatcher": []
+    },
+    {
+      "label": "App: format check",
+      "type": "shell",
+      "command": "fvm dart format --output=none --set-exit-if-changed .",
+      "options": { "cwd": "${workspaceFolder}/src/app" },
+      "problemMatcher": []
+    },
+    {
+      "label": "App: analyze",
+      "type": "shell",
+      "command": "fvm flutter analyze",
+      "options": { "cwd": "${workspaceFolder}/src/app" },
+      "problemMatcher": []
+    },
+    {
+      "label": "App: test",
+      "type": "shell",
+      "command": "fvm flutter test",
+      "options": { "cwd": "${workspaceFolder}/src/app" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Backend: format check",
+      "type": "shell",
+      "command": "dotnet format --verify-no-changes",
+      "options": { "cwd": "${workspaceFolder}/src/backend" },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Backend: test",
+      "type": "shell",
+      "command": "dotnet test",
+      "options": { "cwd": "${workspaceFolder}/src/backend" },
+      "group": "test",
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Auth: check",
+      "type": "shell",
+      "command": "npm run check",
+      "options": { "cwd": "${workspaceFolder}/src/auth" },
+      "problemMatcher": "$tsc"
+    }
+  ]
+}
