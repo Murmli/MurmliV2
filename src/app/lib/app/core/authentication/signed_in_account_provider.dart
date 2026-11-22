@@ -328,8 +328,12 @@ class SignedInAccount extends _$SignedInAccount {
   Future<void> _deleteStoredSession() async {
     try {
       await _secureStorage.delete(key: _sessionKey);
-    } on PlatformException catch (error) {
-      _logStorageFailure('delete', error);
+    } on PlatformException {
+      try {
+        await _secureStorage.deleteAll();
+      } on PlatformException catch (error) {
+        _logStorageFailure('delete', error);
+      }
     }
   }
 

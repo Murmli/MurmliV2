@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 
 import 'package:clock/clock.dart';
@@ -628,6 +629,41 @@ void main() {
       );
     }
 
+    for (final (scenario, failsToClear) in [
+      ('deleting the entry fails', false),
+      ('deleting the entry and clearing the storage fail', true),
+    ]) {
+      test(
+        'signOut when $scenario signs out and logs a warning only if the storage keeps the session',
+        () async {
+          secureStorage = _FailingSecureStorage(
+            storedSession(accountId),
+            failsToClear: failsToClear,
+          );
+          container = createDevelopmentContainer(await reopenPreferences());
+          recordAuthenticationRequests(container);
+          await restore();
+          await pumpEventQueue();
+          container.read(talkerProvider).cleanHistory();
+
+          await container.read(signedInAccountProvider.notifier).signOut();
+
+          expect(container.read(signedInAccountProvider), isNull);
+          final warnings = container
+              .read(talkerProvider)
+              .history
+              .where((log) => log.logLevel == LogLevel.warning);
+          if (failsToClear) {
+            expect(secureStorage, storedSession(accountId));
+            expect(warnings.single.message, endsWith(_storageErrorCode));
+          } else {
+            expect(secureStorage, isEmpty);
+            expect(warnings, isEmpty);
+          }
+        },
+      );
+    }
+
     test('signInWithEmail stores the session token with the account id and restore after a restart signs in without waiting for the session check', () async {
       recordAuthenticationRequests(container);
       await signInWithEmail();
@@ -738,4 +774,37 @@ void main() {
       expect(secureStorage, storedSession(accountId));
     });
   });
+}
+
+const _storageErrorCode = 'storage-failure';
+
+class _FailingSecureStorage extends MapBase<String, String> {
+  _FailingSecureStorage(
+    Map<String, String> entries, {
+    required this.failsToClear,
+  }) : _entries = {...entries};
+
+  final Map<String, String> _entries;
+  final bool failsToClear;
+
+  @override
+  String? operator [](Object? key) => _entries[key];
+
+  @override
+  void operator []=(String key, String value) => _entries[key] = value;
+
+  @override
+  Iterable<String> get keys => _entries.keys;
+
+  @override
+  String? remove(Object? key) =>
+      throw PlatformException(code: _storageErrorCode);
+
+  @override
+  void clear() {
+    if (failsToClear) {
+      throw PlatformException(code: _storageErrorCode);
+    }
+    _entries.clear();
+  }
 }
