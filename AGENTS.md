@@ -401,6 +401,7 @@ Hintergrund und Entscheidungen: [docs/api.md](docs/api.md)
 - Bis zum ersten Live-Gang alles in `v1` ändern, auch inkompatibel. Danach innerhalb einer Version nur rückwärtskompatibel ändern (neue Endpunkte, neue Felder in Antworten), alles andere bekommt eine neue Version.
 - Kein Asp.Versioning einführen, bevor es .NET 11 unterstützt ([#68](https://github.com/Murmli/MurmliV2/issues/68)), und keine Version per Header oder Query.
 - Fehler, auf die Clients eigens reagieren, als Problem Details mit `type` `tag:murmli.de,2026:<code>` aus `ProblemTypes`, geschrieben per `TypedResults.Problem` (auch ohne JSON im `Accept`-Header mit Body). Clients reagieren auf `type`, nie auf den bloßen Status.
+- Keine Middleware zur Antwortkompression (`AddResponseCompression`, `UseResponseCompression`). Komprimiert wird nur in `/v1/sync` und nur eine Antwort, in der mindestens ein Block einen vollständigen Stand hat ([docs/sync.md](docs/sync.md#kompression)); jede andere Antwort bleibt wegen BREACH unkomprimiert.
 
 ## Authentifizierung
 

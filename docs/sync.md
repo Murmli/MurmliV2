@@ -22,7 +22,7 @@ Entschieden, noch nicht gebaut: das Verhalten der App, das dieses Dokument besch
 
 ### Kern
 
-Der Kern ist die Bibliothek `Murmli.Backend.Sync` (ohne ASP.NET Core). Er kennt keine Datentypen: Er verwaltet Bereiche, verarbeitete Kommandos, Löschmarkierungen und die Kennung der Datenbank, wendet Kommandos an und liefert Änderungen. Den Endpunkt `POST /v1/sync` stellt die API (`Murmli.Backend.Api/Sync`, [api.md](api.md#abgleich)), Abhängigkeiten laufen `Telemetry ← Data ← Sync ← Api ← Api.Host`. Öffentlich ist nur, was die API braucht: die Typen von Anfrage und Antwort (`Protocol`), `SyncProcessor` mit `SyncCaller` und `SyncOutcome`, der Vertrag der Datentypen (`DataTypes`), `SyncOptions` samt `SyncDataTypeOptions` sowie `AddSync()` und `AddSyncDataType<T>()`; alles andere ist intern. Die Entitäten der Kerntabellen und die Basisklasse `SyncRecord` liegen in `Murmli.Backend.Data/Sync`, ohne `DbSet` am `MurmliDbContext`; der Kern liest und schreibt sie über `context.Set<T>()`.
+Der Kern ist die Bibliothek `Murmli.Backend.Sync` (ohne ASP.NET Core). Er kennt keine Datentypen: Er verwaltet Bereiche, verarbeitete Kommandos, Löschmarkierungen und die Kennung der Datenbank, wendet Kommandos an und liefert Änderungen. Den Endpunkt `POST /v1/sync` stellt die API (`Murmli.Backend.Api/Sync`, [api.md](api.md#abgleich)), Abhängigkeiten laufen `Telemetry ← Data ← Sync ← Api ← Api.Host`. Öffentlich ist nur, was die API braucht: die Typen von Anfrage und Antwort (`Protocol`), `SyncProcessor` mit `SyncCaller`, `SyncResponseEncoding` und `SyncOutcome`, der Vertrag der Datentypen (`DataTypes`), `SyncOptions` samt `SyncDataTypeOptions` sowie `AddSync()` und `AddSyncDataType<T>()`; alles andere ist intern. Die Entitäten der Kerntabellen und die Basisklasse `SyncRecord` liegen in `Murmli.Backend.Data/Sync`, ohne `DbSet` am `MurmliDbContext`; der Kern liest und schreibt sie über `context.Set<T>()`.
 
 ### Tragende Regel
 
@@ -34,7 +34,7 @@ Abgeglichene Tabellen ändert nur der Kern. Jede Änderung an einem Datensatz od
 2. Heads: Eine Anweisung liest den persönlichen Bereich (Version, Epoche, Untergrenze) samt Kennung der Datenbank. Fehlt der Bereich, legt der Kern ihn in einer eigenen Transaktion an (`INSERT … ON CONFLICT DO NOTHING` auf dem eindeutigen Index je Konto, so entsteht er auch bei gleichzeitigen ersten Abgleichen genau einmal) und liest die Heads erneut.
 3. Ohne Kommandos und mit unverändertem Stand antwortet er mit demselben Token, ohne weitere Anweisung.
 4. Jedes Kommando läuft in einer eigenen Transaktion (READ COMMITTED): Die Kommando-ID wird als erste Anweisung für das Konto eingetragen, dann sperrt der Kern den Bereich (`FOR NO KEY UPDATE`), prüft, wendet die Konfliktregeln an, erhöht bei einer übernommenen Änderung die Version des Bereichs um eins und schreibt Datensatz bzw. Löschmarkierung und Ergebnis zusammen.
-5. Danach liest er in einer Transaktion mit REPEATABLE READ: Heads, gezählte Löschmarkierungen, Datensätze je Bereich und Datentyp, mitgelieferter Stand, neues Token.
+5. Danach liest er in einer Transaktion mit REPEATABLE READ: Heads, gezählte Löschmarkierungen, Datensätze je Bereich und Datentyp, mitgelieferter Stand, neues Token. Die Antwort schreibt er dabei Block für Block in einen Puffer, bei Bedarf mit gzip ([Kompression](#kompression)).
 
 Warum kein Abruf etwas verpasst: Jede Änderung erhöht die Version unter der Sperre ihres Bereichs, und Postgres macht einen Commit sichtbar, bevor es dessen Sperren freigibt. Wer Version 17 sieht, sieht alle Änderungen bis 17. Ein Abruf „geändert seit Zeitpunkt X“ könnte dagegen Änderungen dauerhaft übersehen, weil Transaktionen nicht in der Reihenfolge ihrer Zeitstempel festgeschrieben werden. Transaktionen, Sperren und eigenes SQL im Einzelnen: [database.md](database.md#abgleich).
 
@@ -377,9 +377,16 @@ Entschieden, noch nicht gebaut: `removedByOwnAccount: true`; bis dahin ist es im
 
 ### Kompression
 
-Der Server komprimiert eine Antwort genau dann mit gzip, wenn mindestens ein Block `fullState: true` hat und `Accept-Encoding` `gzip` mit einem q über 0 nennt. Dann trägt sie genau `Content-Encoding: gzip`, ein einziger Wert in Kleinbuchstaben, denn dart:io entpackt nur bei genau diesem Wert. Jede Antwort mit Status 200 trägt `Vary: Accept-Encoding`. Änderungen ohne vollständigen Stand bleiben unkomprimiert ([Entscheidungen](#entscheidungen)).
+Der Server komprimiert eine Antwort genau dann mit gzip, wenn mindestens ein Block `fullState: true` hat und `Accept-Encoding` `gzip` mit einem q über 0 nennt. Dann trägt sie genau `Content-Encoding: gzip`, ein einziger Wert in Kleinbuchstaben, denn dart:io entpackt nur bei genau diesem Wert. Jede Antwort mit Status 200 trägt `Vary: Accept-Encoding`. Änderungen ohne vollständigen Stand bleiben unkomprimiert ([Entscheidungen](#entscheidungen)), ebenso jede Antwort mit einem anderen Status als 200.
 
-Entschieden, noch nicht gebaut: gzip für vollständige Stände. Entfällt, sobald die Kompression vollständiger Stände aus [#123](https://github.com/Murmli/MurmliV2/issues/123) gebaut ist.
+`Accept-Encoding` liest der Server nach RFC 9110 als Liste von Einträgen, getrennt durch Kommas:
+
+- Groß- und Kleinschreibung zählen nicht, Leerzeichen um `;` sind erlaubt, ein Eintrag ohne `q` hat q = 1.
+- Es zählt nur der erste Eintrag `gzip`, die Gewichte anderer Einträge, auch von `identity`, zählen nicht. `*`, `x-gzip` und `identity` nennen gzip nicht.
+- Lässt sich der Header nicht vollständig lesen, etwa wegen eines q außerhalb von 0 bis 1 (`gzip;q=2`) oder eines anderen Parameters als `q` (`gzip;level=9`), oder enthält er keinen Eintrag, bleibt die Antwort unkomprimiert.
+- Schließt der Header eine unkomprimierte Antwort aus (`identity;q=0`, `*;q=0`), ohne gzip zu erlauben, antwortet der Server trotzdem unkomprimiert, nie mit 406.
+
+Wie stark der Server komprimiert, stellt `Sync:FullStateCompressionLevel` ein: `Optimal`, `Fastest` (Standard), `NoCompression` oder `SmallestSize`. Mit einem anderen Wert startet die API nicht.
 
 ### Fehler der ganzen Anfrage
 
@@ -629,6 +636,8 @@ Entschieden, noch nicht gebaut: der Leser in der Simulation der App. Entfällt, 
 
 Die Tests des Backends laufen gegen ein echtes Postgres (Testcontainers) und `ApiHost` mit derselben Pipeline wie die API. Damit der Kern nichts über die Einkaufsliste weiß, laufen künstliche Datentypen mit, die es nur im Testcode gibt (`Murmli.Backend.Api.Tests/Infrastructure/TestDataTypes/`); ihre Tabellen liegen im Schema `synctest` und entstehen per handgeschriebenem DDL, nie per Migration ([database.md](database.md#abgleich)). Dieselben Datentypen sind für die Simulation der App ([#136](https://github.com/Murmli/MurmliV2/issues/136)) vorgesehen.
 
+Das Testprojekt der API setzt den Laufzeitschalter `System.IO.Compression.UseStrictValidation`, damit eine gzip-Antwort ohne Trailer dort scheitert, statt dass `GZipStream` sie still als vollständig liest; der Schalter muss bleiben.
+
 `testNote` liegt im persönlichen Bereich (`personal`), höchstens 50 je Bereich (`Sync:DataTypes:testNote:MaxRecordsPerScope`):
 
 | Feld | Rolle | Wert |
@@ -658,6 +667,8 @@ Entschieden, noch nicht gebaut: `testBoard` als Wurzel geteilter Bereiche der Ar
 | Problemtypen als Tag-URI `tag:murmli.de,2026:<code>` in `type` | `type` ist nach RFC 9457 die eigentliche Kennung, Tag-URIs sind für Kennungen gedacht, die sich nicht abrufen lassen. Verworfen: nur der Statuscode (Zwischenstationen und das Framework liefern dieselben), eine Erweiterung `code`, `urn:`- oder `https:`-URIs. |
 | Token binär mit fester Breite, base64url | Einfach zu prüfen, deterministisch. Verworfen: JSON-Map (größer, keine feste Reihenfolge), Versionen als LEB128 (etwas kleiner, mehr Parsen). |
 | gzip nur für vollständige Stände, gesetzt von der Antwort selbst | Unabhängig von der Umgebung, ohne Wirkung auf den Live-Kanal. Deltas bleiben unkomprimiert, denn BREACH braucht vom Angreifer gesteuerten Text und viele beobachtbare Antworten desselben Opfers; vollständige Stände der Bereiche eines anderen Kontos kann ein Mitglied nicht beliebig auslösen. Verworfen: die Middleware zur Antwortkompression von ASP.NET Core (ihre HTTPS-Prüfung kippt zwischen lokalem HTTP und den weitergereichten Headern in Azure, sie träfe den Ereignisstrom des Live-Kanals und bevorzugt zstd und br). |
+| Antwort Block für Block in einen Puffer | Mit gzip liegt ein großer vollständiger Stand nur komprimiert im Speicher, unkomprimiert höchstens ein Block; die Verbindung zur Datenbank ist frei, bevor das Gerät die Antwort lädt. Verworfen: die Antwort erst als Objekte aufbauen (der ganze Stand als Objekte im Speicher), direkt in den Body der Antwort schreiben (Transaktion und Verbindung blieben bis zum Ende des Downloads offen, und nach den ersten gesendeten Bytes ließe sich der Lesepfad nicht mehr wiederholen). |
+| `Accept-Encoding` streng gelesen, nur der Eintrag `gzip` zählt | Eine Antwort, die das Gerät nicht entpacken kann, kostet die ganze Runde, eine unkomprimierte liest jedes Gerät; dart:io nennt `gzip` immer ausdrücklich. Verworfen: `*` als gzip werten (RFC 9110 erlaubt es, kein Gerät braucht es), `x-gzip` wie `gzip` werten (RFC 9110 empfiehlt es, kein Gerät sendet es), fehlerhafte Einträge überspringen und den Rest werten. |
 | Kein Header für die App-Version, nur der Problemtyp `app-version-unsupported` reserviert | Wie die App ihre Version nennt und welche Versionen gelten, entscheidet [#69](https://github.com/Murmli/MurmliV2/issues/69). Verworfen: Header und Mindestversionen schon jetzt. |
 | `settings.maxRequestBytes` bindet das Gerät, die 413 ist nur ein Sicherheitsnetz | Eine 413 mit `Connection: close` kann bei dio als abgebrochene Verbindung ankommen. Verworfen: übergroße Bodys am Server bis zu einer zweiten, harten Grenze zu Ende lesen (eine Grenze mehr, darüber scheitert es trotzdem). |
 | Kern als eigenes Projekt `Murmli.Backend.Sync` in der Solution | Die künstlichen Datentypen der Tests erfüllen den Vertrag der Datentypen aus Testcode, ohne dass Sichtbarkeit für Tests erweitert wird, und die API nutzt ihn über die Grenze ihrer Assembly. Kein eigenes Paket und keine eigene Version ([#121](https://github.com/Murmli/MurmliV2/issues/121): „Keine eigene Bibliothek“ heißt kein eigenes Release). Verworfen: Ordner in der API (Vertrag intern), Prüfung nur über HTTP. |
