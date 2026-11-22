@@ -342,6 +342,12 @@ Hintergrund und Entscheidungen: [docs/ci.md](docs/ci.md)
 - Release-Builds in `build-app.yml` behalten `--split-debug-info=build/debug-info` (gleich `symbols_path` im Abschnitt `sentry:` der `src/app/pubspec.yaml`) und laufen ohne `--obfuscate`.
 - Jede Datei mit Secrets oder Schlüsseln, die ein Job in `build-app.yml` oder `deliver-app.yml` schreibt (auch indirekt über fastlane), löscht dessen letzter Step „Remove signing secrets“ (`if: always()`). Neue solche Dateien dort ergänzen.
 
+## VS Code
+
+Hintergrund und Entscheidungen: [docs/vscode.md](docs/vscode.md)
+
+- Die Tasks in `.vscode/tasks.json` enthalten die lokalen Checks unter [CI](#ci) ohne `pub get`, `npm ci` und `dotnet restore`: Ändert sich dort ein Befehl, die Task im selben Commit anpassen.
+
 ## Aspire und Azure
 
 Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)

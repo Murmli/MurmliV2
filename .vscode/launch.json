@@ -1,0 +1,36 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend (Aspire)",
+      "type": "aspire",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/backend/Murmli.Backend.Aspire"
+    },
+    {
+      "name": "App (local)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/src/app",
+      "program": "lib/main.dart",
+      "args": ["--flavor", "local"],
+      "preLaunchTask": "App: build_runner"
+    },
+    {
+      "name": "App (development)",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/src/app",
+      "program": "lib/main.dart",
+      "args": ["--flavor", "development"],
+      "preLaunchTask": "App: build_runner"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Backend + App (local)",
+      "configurations": ["Backend (Aspire)", "App (local)"],
+      "stopAll": true
+    }
+  ]
+}
