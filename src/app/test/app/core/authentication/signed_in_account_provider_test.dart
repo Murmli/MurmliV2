@@ -629,6 +629,117 @@ void main() {
       );
     }
 
+    test('API request whose renewal is in flight during sign-out is canceled without being sent and the late access token leaves the account signed out', () async {
+      var renewalIsPending = false;
+      final pendingRenewal = Completer<ResponseBody>();
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: (request) =>
+            renewalIsPending && request.uri.path == tokenPath
+            ? pendingRenewal.future
+            : respondWithTokenIssuedNow(request),
+      );
+      await signInWithEmail();
+      renewalIsPending = true;
+      now = signInTime.add(const Duration(minutes: 14));
+      final example = requestExample();
+      await pumpEventQueue();
+
+      await container.read(signedInAccountProvider.notifier).signOut();
+      pendingRenewal.complete(
+        jsonResponse({'token': jsonWebTokenIssuedAt(now)}),
+      );
+
+      await expectLater(
+        example,
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.type,
+            'type',
+            DioExceptionType.cancel,
+          ),
+        ),
+      );
+      expect(container.read(signedInAccountProvider), isNull);
+      expect(exampleRequests(requests.api), isEmpty);
+    });
+
+    test('renewal of the previous session rejected by auth with 401 after a new sign-in keeps the new session', () async {
+      const previousSessionToken = 'previous-session-token';
+      const newSessionToken = 'new-session-token';
+      var sessionToken = previousSessionToken;
+      var previousRenewalIsPending = false;
+      final pendingPreviousRenewal = Completer<ResponseBody>();
+      recordAuthenticationRequests(
+        container,
+        respondFromAuth: (request) async => switch (request.uri.path) {
+          emailSignInPath => jsonResponse(
+            {'redirect': false, 'token': 'unsigned-session-token'},
+            headers: {
+              'set-auth-token': [sessionToken],
+            },
+          ),
+          tokenPath
+              when previousRenewalIsPending &&
+                  request.headers['Authorization'] ==
+                      'Bearer $previousSessionToken' =>
+            await pendingPreviousRenewal.future,
+          _ => await respondWithTokenIssuedNow(request),
+        },
+      );
+      await signInWithEmail();
+      previousRenewalIsPending = true;
+      now = signInTime.add(const Duration(minutes: 14));
+      final example = requestExample();
+      await pumpEventQueue();
+      await container.read(signedInAccountProvider.notifier).signOut();
+      sessionToken = newSessionToken;
+      await signInWithEmail();
+
+      pendingPreviousRenewal.complete(ResponseBody.fromString('', 401));
+
+      await expectLater(example, throwsA(isA<DioException>()));
+      expect(container.read(signedInAccountProvider)?.id, accountId);
+      expect(secureStorage['session'], contains(newSessionToken));
+    });
+
+    test('API request sent before a sign-out and new sign-in and then rejected with 401 is canceled without a resend under the new session and without reporting a failure', () async {
+      final pendingExampleResponse = Completer<ResponseBody>();
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: respondWithTokenIssuedNow,
+        respondFromApi: (request) => request.uri.path == '/v1/example'
+            ? pendingExampleResponse.future
+            : respondAsApi(request),
+      );
+      await signInWithEmail();
+      final example = requestExample();
+      await pumpEventQueue();
+      await container.read(signedInAccountProvider.notifier).signOut();
+      now = signInTime.add(const Duration(minutes: 1));
+      await signInWithEmail();
+
+      pendingExampleResponse.complete(ResponseBody.fromString('', 401));
+
+      await expectLater(
+        example,
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.type,
+            'type',
+            DioExceptionType.cancel,
+          ),
+        ),
+      );
+      expect(
+        exampleRequests(requests.api).single.headers['Authorization'],
+        'Bearer ${jsonWebTokenIssuedAt(signInTime)}',
+      );
+      expect(tokenRequests(requests.auth), hasLength(2));
+      expect(container.read(signedInAccountProvider)?.id, accountId);
+      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+    });
+
     for (final (scenario, failsToClear) in [
       ('deleting the entry fails', false),
       ('deleting the entry and clearing the storage fail', true),

@@ -52,6 +52,7 @@ class SignedInAccount extends _$SignedInAccount {
 
   String? _sessionToken;
   AccessToken? _accessToken;
+  final _accessTokensOfSession = <String>{};
   Future<AccessToken?>? _renewal;
 
   @override
@@ -241,6 +242,9 @@ class SignedInAccount extends _$SignedInAccount {
 
   Future<void> signOutLocally() => _endSession();
 
+  /// A [rejected] token that the current session did not issue yields null,
+  /// so a request sent under an earlier session is never resent under this
+  /// one.
   Future<String?> accessToken({String? rejected}) async {
     try {
       return await _validAccessToken(rejected: rejected);
@@ -254,7 +258,8 @@ class SignedInAccount extends _$SignedInAccount {
 
   Future<String?> _validAccessToken({String? rejected}) async {
     final sessionToken = _sessionToken;
-    if (sessionToken == null) {
+    if (sessionToken == null ||
+        (rejected != null && !_accessTokensOfSession.contains(rejected))) {
       return null;
     }
     final cachedAccessToken = _accessToken;
@@ -314,15 +319,21 @@ class SignedInAccount extends _$SignedInAccount {
       return null;
     }
     _accessToken = accessToken;
+    _accessTokensOfSession.add(accessToken.value);
     return accessToken;
   }
 
   Future<void> _endSession() async {
-    _sessionToken = null;
-    _accessToken = null;
-    _renewal = null;
+    _startSession(null);
     state = null;
     await _deleteStoredSession();
+  }
+
+  void _startSession(String? sessionToken) {
+    _sessionToken = sessionToken;
+    _accessToken = null;
+    _accessTokensOfSession.clear();
+    _renewal = null;
   }
 
   Future<void> _deleteStoredSession() async {
@@ -338,9 +349,7 @@ class SignedInAccount extends _$SignedInAccount {
   }
 
   Future<SignInResult> _completeSignIn(String sessionToken) async {
-    _sessionToken = sessionToken;
-    _accessToken = null;
-    _renewal = null;
+    _startSession(sessionToken);
     const step = 'token request';
     try {
       if (await _validAccessToken() == null) {

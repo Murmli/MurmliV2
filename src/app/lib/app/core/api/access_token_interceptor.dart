@@ -63,6 +63,9 @@ class AccessTokenInterceptor extends Interceptor {
         true,
       );
       return;
+    } on Object catch (error, stackTrace) {
+      handler.reject(_unknownFailure(options, error, stackTrace), true);
+      return;
     }
     if (accessToken == null) {
       handler.reject(_withoutSession(options));
@@ -86,6 +89,9 @@ class AccessTokenInterceptor extends Interceptor {
     } on DioException {
       handler.next(error);
       return;
+    } on Object catch (renewalError, stackTrace) {
+      handler.next(_unknownFailure(options, renewalError, stackTrace));
+      return;
     }
     if (renewedAccessToken == null) {
       handler.next(_withoutSession(options));
@@ -100,8 +106,21 @@ class AccessTokenInterceptor extends Interceptor {
     } on DioException catch (retryError) {
       // The retry passed all interceptors itself and was reported there.
       handler.reject(retryError);
+    } on Object catch (retryError, stackTrace) {
+      handler.next(_unknownFailure(options, retryError, stackTrace));
     }
   }
+
+  DioException _unknownFailure(
+    RequestOptions options,
+    Object error,
+    StackTrace stackTrace,
+  ) => DioException(
+    requestOptions: options,
+    type: DioExceptionType.unknown,
+    error: error,
+    stackTrace: stackTrace,
+  );
 
   DioException _withoutSession(RequestOptions options) => DioException(
     requestOptions: options,
