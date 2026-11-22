@@ -303,6 +303,52 @@ namespace Murmli.Backend.Data.Migrations
                     b.ToTable("processed_commands", "sync");
                 });
 
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncMemberEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("role");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_id");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("state");
+
+                    b.HasKey("Id")
+                        .HasName("pk_member_entries");
+
+                    b.HasIndex("AccountId")
+                        .HasDatabaseName("ix_member_entries_account_id");
+
+                    b.HasIndex("ScopeId", "AccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_member_entries_scope_id_account_id");
+
+                    b.ToTable("member_entries", "sync");
+                });
+
             modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncScope", b =>
                 {
                     b.Property<Guid>("Id")
@@ -390,6 +436,22 @@ namespace Murmli.Backend.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_processed_commands_users_account_id");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncMemberEntry", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_member_entries_users_account_id");
+
+                    b.HasOne("Murmli.Backend.Data.Sync.SyncScope", null)
+                        .WithMany()
+                        .HasForeignKey("ScopeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_member_entries_scopes_scope_id");
                 });
 
             modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncScope", b =>
