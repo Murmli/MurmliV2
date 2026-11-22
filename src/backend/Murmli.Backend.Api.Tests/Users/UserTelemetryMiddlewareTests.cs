@@ -193,6 +193,7 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
     private async Task SetConnectionsAllowedAsync(bool allowed)
     {
         var database = new NpgsqlConnectionStringBuilder(connectionString).Database;
+        Assert.NotNull(database);
         await using var connection = new NpgsqlConnection(
             new NpgsqlConnectionStringBuilder(connectionString) { Database = "postgres", Pooling = false }.ConnectionString
         );
