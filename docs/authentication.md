@@ -7,7 +7,7 @@ Better Auth läuft als Node-Dienst `auth` (`src/auth`), stellt kurzlebige JWTs a
 1. `POST /api/auth/sign-in/email` (E-Mail, Passwort) oder `POST /api/auth/sign-in/social` (ID-Token von [Apple bzw. Google](#apple-und-google)). Signiert ist das Session-Token nur im Header `set-auth-token` (Plugin `bearer`, `requireSignature: true`), nicht im Body.
 2. `GET /api/auth/token` mit `Authorization: Bearer <Session-Token>` liefert das JWT: ES256, 15 Minuten gültig, nur `sub` (Better-Auth-ID), `iss` (`BETTER_AUTH_URL`), `aud` (`murmli-api`), `iat`, `exp`.
 3. API-Aufrufe mit `Authorization: Bearer <JWT>`, vor Ablauf neues JWT per Schritt 2.
-4. `POST /api/auth/sign-out`, sonst gilt die Session 7 Tage, verlängert bei Nutzung (Better-Auth-Standard).
+4. `POST /api/auth/sign-out`, sonst gilt die Session 30 Tage ohne Nutzung (`session.expiresIn`). Jeder Abruf eines JWT (`GET /api/auth/token`) mehr als einen Tag nach der letzten Verlängerung (`updateAge`) verlängert sie.
 
 Was die App anbietet: [app.md](app.md#anmeldung).
 
