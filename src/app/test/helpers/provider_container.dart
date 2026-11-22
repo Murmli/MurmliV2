@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:talker/talker.dart';
@@ -10,6 +11,7 @@ import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/flavor/flavor_provider.dart';
 import 'package:app/app/core/logging/talker_provider.dart';
 import 'package:app/app/core/storage/shared_preferences_provider.dart';
+import 'package:app/app/core/time/clock_provider.dart';
 
 import 'crash_reporter.dart';
 
@@ -18,6 +20,7 @@ ProviderContainer createContainer(
   Flavor? flavor,
   bool? debugBuild,
   Account? signedInAccount,
+  Clock? clock,
 }) => ProviderContainer.test(
   overrides: [
     sharedPreferencesProvider.overrideWithValue(preferences),
@@ -31,5 +34,6 @@ ProviderContainer createContainer(
       signedInAccountProvider.overrideWithBuild(
         (ref, notifier) => signedInAccount,
       ),
+    if (clock != null) appClockProvider.overrideWithValue(clock),
   ],
 );

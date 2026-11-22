@@ -5,6 +5,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:app/app/core/api/api_client_provider.dart';
 import 'package:app/app/core/crash_reporting/crash_reporting_options.dart';
 
+import '../../../helpers/authentication.dart';
 import '../../../helpers/http_client_adapter.dart';
 import '../../../helpers/preferences.dart';
 import '../../../helpers/provider_container.dart';
@@ -23,9 +24,10 @@ void main() {
       final adapter = RecordingHttpClientAdapter(
         respond: (_) async => ResponseBody.fromString('', 500),
       );
-      final apiClient = createContainer(
-        await createPreferences(),
-      ).read(apiClientProvider)..httpClientAdapter = adapter;
+      final container = createContainer(await createPreferences());
+      await signIn(container);
+      final apiClient = container.read(apiClientProvider)
+        ..httpClientAdapter = adapter;
 
       try {
         await apiClient.get<void>('/v1/example');

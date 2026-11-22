@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:clock/clock.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
@@ -9,18 +10,23 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:sign_in_with_apple_platform_interface/sign_in_with_apple_platform_interface.dart';
 import 'package:talker/talker.dart';
 
+import 'package:app/app/core/api/api_client_provider.dart';
+import 'package:app/app/core/api/failed_api_request_trace_id_provider.dart';
 import 'package:app/app/core/authentication/signed_in_account_provider.dart';
 import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/logging/talker_provider.dart';
 
 import '../../../helpers/authentication.dart';
 import '../../../helpers/google_sign_in.dart';
+import '../../../helpers/http_client_adapter.dart';
 import '../../../helpers/preferences.dart';
 import '../../../helpers/provider_container.dart';
 import '../../../helpers/sign_in_with_apple.dart';
 
 void main() {
   late ProviderContainer container;
+  final signInTime = DateTime.utc(2026, 11, 22, 12);
+  late DateTime now;
 
   Future<SignInResult> signInWithApple() =>
       container.read(signedInAccountProvider.notifier).signInWithApple();
@@ -37,11 +43,28 @@ void main() {
           as Map<String, String>)['nonce']!;
 
   setUp(() async {
+    now = signInTime;
     container = createContainer(
       await createPreferences(),
       flavor: Flavor.development,
+      clock: Clock(() => now),
     );
   });
+
+  Future<ResponseBody> respondWithTokenIssuedNow(
+    RequestOptions request,
+  ) async => request.uri.path == tokenPath
+      ? jsonResponse({'token': jsonWebTokenIssuedAt(now)})
+      : await respondAsAuth(request);
+
+  Iterable<RequestOptions> tokenRequests(RecordingHttpClientAdapter auth) =>
+      auth.requests.where((request) => request.uri.path == tokenPath);
+
+  Iterable<RequestOptions> exampleRequests(RecordingHttpClientAdapter api) =>
+      api.requests.where((request) => request.uri.path == '/v1/example');
+
+  Future<Response<void>> requestExample() =>
+      container.read(apiClientProvider).get<void>('/v1/example');
 
   group('SignedInAccount', () {
     test('signInWithApple requests no scopes, signs in with the identity token and the hashed nonce, exchanges the session token for a JSON web token and fetches the account with it', () async {
@@ -72,7 +95,10 @@ void main() {
       );
       final accountRequest = requests.api.requests.single;
       expect(accountRequest.uri.path, '/v1/users/me');
-      expect(accountRequest.headers['Authorization'], 'Bearer $jsonWebToken');
+      expect(
+        accountRequest.headers['Authorization'],
+        'Bearer $issuedJsonWebToken',
+      );
     });
 
     test('signInWithApple canceled by the user returns canceled without requests and stays signed out', () async {
@@ -215,7 +241,10 @@ void main() {
       );
       final accountRequest = requests.api.requests.single;
       expect(accountRequest.uri.path, '/v1/users/me');
-      expect(accountRequest.headers['Authorization'], 'Bearer $jsonWebToken');
+      expect(
+        accountRequest.headers['Authorization'],
+        'Bearer $issuedJsonWebToken',
+      );
     });
 
     test('signInWithGoogle canceled by the user returns canceled without requests and stays signed out', () async {
@@ -327,7 +356,10 @@ void main() {
       );
       final accountRequest = requests.api.requests.single;
       expect(accountRequest.uri.path, '/v1/users/me');
-      expect(accountRequest.headers['Authorization'], 'Bearer $jsonWebToken');
+      expect(
+        accountRequest.headers['Authorization'],
+        'Bearer $issuedJsonWebToken',
+      );
     });
 
     for (final (scenario, respondFromAuth, expectedResult) in [
@@ -371,6 +403,208 @@ void main() {
           expect(
             log.message,
             isNot(anyOf(contains(signInEmail), contains(signInPassword))),
+          );
+        },
+      );
+    }
+
+    test('API request 13 minutes after sign-in reuses the access token of the sign-in', () async {
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: respondWithTokenIssuedNow,
+      );
+      await signInWithEmail();
+      now = signInTime.add(const Duration(minutes: 13));
+
+      await requestExample();
+
+      expect(tokenRequests(requests.auth), hasLength(1));
+      expect(
+        exampleRequests(requests.api).single.headers['Authorization'],
+        'Bearer ${jsonWebTokenIssuedAt(signInTime)}',
+      );
+    });
+
+    test('API request 14 minutes after sign-in renews the access token first and sends the new one', () async {
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: respondWithTokenIssuedNow,
+      );
+      await signInWithEmail();
+      now = signInTime.add(const Duration(minutes: 14));
+
+      await requestExample();
+
+      expect(tokenRequests(requests.auth), hasLength(2));
+      expect(
+        tokenRequests(requests.auth).last.headers['Authorization'],
+        'Bearer $signedSessionToken',
+      );
+      expect(
+        exampleRequests(requests.api).single.headers['Authorization'],
+        'Bearer ${jsonWebTokenIssuedAt(now)}',
+      );
+    });
+
+    test(
+      'parallel API requests with a due access token share one renewal',
+      () async {
+        final requests = recordAuthenticationRequests(
+          container,
+          respondFromAuth: respondWithTokenIssuedNow,
+        );
+        await signInWithEmail();
+        now = signInTime.add(const Duration(minutes: 14));
+
+        await Future.wait([
+          requestExample(),
+          requestExample(),
+          requestExample(),
+        ]);
+
+        expect(tokenRequests(requests.auth), hasLength(2));
+        expect(
+          exampleRequests(requests.api)
+              .map((request) => request.headers['Authorization']),
+          everyElement('Bearer ${jsonWebTokenIssuedAt(now)}'),
+        );
+      },
+    );
+
+    test('API request rejected with 401 renews the access token once, retries with the new one and returns the response without reporting a failure', () async {
+      var exampleResponses = 0;
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: respondWithTokenIssuedNow,
+        respondFromApi: (request) async => request.uri.path == '/v1/example'
+            ? ResponseBody.fromString('', exampleResponses++ == 0 ? 401 : 204)
+            : await respondAsApi(request),
+      );
+      await signInWithEmail();
+      now = signInTime.add(const Duration(minutes: 1));
+
+      final response = await requestExample();
+
+      expect(response.statusCode, 204);
+      expect(tokenRequests(requests.auth), hasLength(2));
+      expect(
+        exampleRequests(requests.api)
+            .map((request) => request.headers['Authorization']),
+        [
+          'Bearer ${jsonWebTokenIssuedAt(signInTime)}',
+          'Bearer ${jsonWebTokenIssuedAt(now)}',
+        ],
+      );
+      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+    });
+
+    test('API request rejected with 401 again after the retry throws the error, retries no further and reports only the retry', () async {
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: respondWithTokenIssuedNow,
+        respondFromApi: (request) async => request.uri.path == '/v1/example'
+            ? ResponseBody.fromString('', 401)
+            : await respondAsApi(request),
+      );
+      await signInWithEmail();
+      now = signInTime.add(const Duration(minutes: 1));
+
+      await expectLater(
+        requestExample(),
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.response?.statusCode,
+            'status code',
+            401,
+          ),
+        ),
+      );
+
+      expect(tokenRequests(requests.auth), hasLength(2));
+      expect(exampleRequests(requests.api), hasLength(2));
+      expect(
+        container.read(failedApiRequestTraceIdProvider),
+        sentTraceId(exampleRequests(requests.api).last),
+      );
+    });
+
+    test('API request whose renewal auth rejects with 401 ends the session and is canceled without reporting a failure', () async {
+      var tokenStatusCode = 200;
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: (request) async =>
+            request.uri.path == tokenPath && tokenStatusCode != 200
+            ? ResponseBody.fromString('', tokenStatusCode)
+            : await respondWithTokenIssuedNow(request),
+      );
+      await signInWithEmail();
+      tokenStatusCode = 401;
+      now = signInTime.add(const Duration(minutes: 14));
+
+      await expectLater(
+        requestExample(),
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.type,
+            'type',
+            DioExceptionType.cancel,
+          ),
+        ),
+      );
+
+      expect(container.read(signedInAccountProvider), isNull);
+      expect(exampleRequests(requests.api), isEmpty);
+      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+    });
+
+    for (final (scenario, failRenewal) in [
+      (
+        'auth failing with 500',
+        (RequestOptions request) async => ResponseBody.fromString('', 500),
+      ),
+      (
+        'auth being unreachable',
+        (RequestOptions request) async => throw DioException.connectionError(
+          requestOptions: request,
+          reason: 'Connection refused',
+        ),
+      ),
+    ]) {
+      test(
+        'API request whose renewal fails with $scenario stays signed in, throws, reports the failure and logs a warning without tokens',
+        () async {
+          var renewalFails = false;
+          final requests = recordAuthenticationRequests(
+            container,
+            respondFromAuth: (request) async =>
+                renewalFails && request.uri.path == tokenPath
+                ? await failRenewal(request)
+                : await respondWithTokenIssuedNow(request),
+          );
+          await signInWithEmail();
+          renewalFails = true;
+          now = signInTime.add(const Duration(minutes: 14));
+
+          await expectLater(requestExample(), throwsA(isA<DioException>()));
+
+          expect(container.read(signedInAccountProvider)?.id, accountId);
+          expect(exampleRequests(requests.api), isEmpty);
+          expect(container.read(failedApiRequestTraceIdProvider), isNotNull);
+          final history = container.read(talkerProvider).history;
+          expect(
+            history.where((log) => log.logLevel == LogLevel.warning),
+            hasLength(1),
+          );
+          expect(
+            history.map((log) => log.message),
+            everyElement(
+              isNot(
+                anyOf(
+                  contains(signedSessionToken),
+                  contains(jsonWebTokenIssuedAt(signInTime)),
+                ),
+              ),
+            ),
           );
         },
       );

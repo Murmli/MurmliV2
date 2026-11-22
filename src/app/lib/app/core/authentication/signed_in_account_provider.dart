@@ -11,6 +11,8 @@ import '../api/api_client_provider.dart';
 import '../flavor/flavor.dart';
 import '../flavor/flavor_provider.dart';
 import '../logging/talker_provider.dart';
+import '../time/clock_provider.dart';
+import 'access_token.dart';
 import 'account.dart';
 import 'auth_client_provider.dart';
 
@@ -34,6 +36,10 @@ class SignedInAccount extends _$SignedInAccount {
           serverClientId: _googleServerClientIdOf(ref.read(flavorProvider)),
         ),
       );
+
+  String? _sessionToken;
+  AccessToken? _accessToken;
+  Future<AccessToken?>? _renewal;
 
   @override
   Account? build() => null;
@@ -156,46 +162,118 @@ class SignedInAccount extends _$SignedInAccount {
     return sessionToken;
   }
 
-  Future<SignInResult> _completeSignIn(String sessionToken) async {
-    final jsonWebToken = await _fetchJsonWebToken(sessionToken);
-    if (jsonWebToken == null) {
-      return SignInResult.failed;
-    }
+  Future<String?> accessToken({String? rejected}) async {
     try {
-      final response = await ref
-          .read(apiClientProvider)
-          .get<Map<String, Object?>>(
-            '/v1/users/me',
-            options: _authorizedBy(jsonWebToken),
-          );
-      if (response.data case {'id': final String id}) {
-        state = Account(id: id);
-        return SignInResult.signedIn;
-      }
-      _logFailure('account request', 'no account id');
-      return SignInResult.failed;
-    } on DioException {
-      return SignInResult.apiRequestFailed;
+      return await _validAccessToken(rejected: rejected);
+    } on DioException catch (error) {
+      ref
+          .read(talkerProvider)
+          .warning('Access token renewal failed: ${_renewalOutcome(error)}');
+      rethrow;
     }
   }
 
-  Future<String?> _fetchJsonWebToken(String sessionToken) async {
-    const step = 'token request';
+  Future<String?> _validAccessToken({String? rejected}) async {
+    final sessionToken = _sessionToken;
+    if (sessionToken == null) {
+      return null;
+    }
+    final cachedAccessToken = _accessToken;
+    if (cachedAccessToken != null &&
+        !cachedAccessToken.isDueAt(ref.read(appClockProvider).now()) &&
+        cachedAccessToken.value != rejected) {
+      return cachedAccessToken.value;
+    }
+    return (await _sharedRenewal(sessionToken))?.value;
+  }
+
+  Future<AccessToken?> _sharedRenewal(String sessionToken) {
+    final runningRenewal = _renewal;
+    if (runningRenewal != null) {
+      return runningRenewal;
+    }
+    late final Future<AccessToken?> renewal;
+    renewal = _renew(sessionToken).whenComplete(() {
+      if (identical(_renewal, renewal)) {
+        _renewal = null;
+      }
+    });
+    return _renewal = renewal;
+  }
+
+  Future<AccessToken?> _renew(String sessionToken) async {
+    final Response<Map<String, Object?>> response;
     try {
-      final response = await ref
+      response = await ref
           .read(authClientProvider)
           .get<Map<String, Object?>>(
             '/api/auth/token',
             options: _authorizedBy(sessionToken),
           );
-      if (response.data case {'token': final String jsonWebToken}) {
-        return jsonWebToken;
-      }
-      _logFailure(step, 'no token');
-      return null;
     } on DioException catch (error) {
-      _logFailure(step, _httpOutcome(error));
+      if (error.response?.statusCode == 401) {
+        if (_sessionToken == sessionToken) {
+          _endSession();
+        }
+        return null;
+      }
+      rethrow;
+    }
+    final AccessToken accessToken;
+    try {
+      accessToken = switch (response.data) {
+        {'token': final String jsonWebToken} => AccessToken.parse(
+          jsonWebToken,
+          receivedAt: ref.read(appClockProvider).now(),
+        ),
+        _ => throw const FormatException('The response carries no token.'),
+      };
+    } on FormatException catch (error) {
+      throw DioException(requestOptions: response.requestOptions, error: error);
+    }
+    if (_sessionToken != sessionToken) {
       return null;
+    }
+    _accessToken = accessToken;
+    return accessToken;
+  }
+
+  void _endSession() {
+    _sessionToken = null;
+    _accessToken = null;
+    _renewal = null;
+    state = null;
+  }
+
+  Future<SignInResult> _completeSignIn(String sessionToken) async {
+    _sessionToken = sessionToken;
+    _accessToken = null;
+    _renewal = null;
+    const step = 'token request';
+    try {
+      if (await _validAccessToken() == null) {
+        _logFailure(step, 'session rejected');
+        return SignInResult.failed;
+      }
+    } on DioException catch (error) {
+      _endSession();
+      _logFailure(step, _renewalOutcome(error));
+      return SignInResult.failed;
+    }
+    try {
+      final response = await ref
+          .read(apiClientProvider)
+          .get<Map<String, Object?>>('/v1/users/me');
+      if (response.data case {'id': final String id}) {
+        state = Account(id: id);
+        return SignInResult.signedIn;
+      }
+      _endSession();
+      _logFailure('account request', 'no account id');
+      return SignInResult.failed;
+    } on DioException {
+      _endSession();
+      return SignInResult.apiRequestFailed;
     }
   }
 
@@ -224,3 +302,6 @@ String _credentialErrorCode(Exception error) => switch (error) {
 
 String _httpOutcome(DioException error) =>
     error.response?.statusCode?.toString() ?? error.type.name;
+
+String _renewalOutcome(DioException error) =>
+    error.error is FormatException ? 'unreadable token' : _httpOutcome(error);
