@@ -255,6 +255,159 @@ void main() {
       },
     );
 
+    group('deleting the account', () {
+      late final Translations englishTranslations;
+      final storedPreferencesBeforeDeletion = {
+        PreferenceKeys.crashReportingEnabled: false,
+        PreferenceKeys.appLanguage: 'english',
+        PreferenceKeys.themeMode: 'dark',
+      };
+
+      setUpAll(() async => englishTranslations = await AppLocale.en.build());
+
+      Future<ProviderContainer> openSettingsWithStoredPreferences(
+        WidgetTester tester,
+      ) async {
+        final container = await pumpApp(
+          tester,
+          storedPreferences: storedPreferencesBeforeDeletion,
+          signedInAccount: const Account(id: 'account'),
+        );
+        await tester.tap(
+          find.byTooltip(englishTranslations.home.settingsTooltip),
+        );
+        await tester.pumpAndSettle();
+        return container;
+      }
+
+      Future<void> confirmDeletion(WidgetTester tester) async {
+        final account = englishTranslations.settings.account;
+        await tapRow(tester, account.deleteAccount);
+        await tester.tap(find.text(account.deleteDialog.confirm));
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets(
+        'tapping delete account and canceling the dialog sends no request and stays signed in on the settings page',
+        (tester) async {
+          final container = await openSettings(tester);
+          final requests = recordAuthenticationRequests(container);
+
+          await tapRow(tester, translations.account.deleteAccount);
+
+          expect(
+            find.text(translations.account.deleteDialog.message),
+            findsOneWidget,
+          );
+          await tester.tap(find.text(translations.account.deleteDialog.cancel));
+          await tester.pumpAndSettle();
+
+          expect(requests.api.requests, isEmpty);
+          expect(container.read(signedInAccountProvider), isNotNull);
+          expect(find.byType(SettingsPage), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'confirming the deletion deletes the account at the API, removes the device data except the crash reporting opt-out and the installation marker and shows the onboarding page',
+        (tester) async {
+          final container = await openSettingsWithStoredPreferences(tester);
+          final requests = recordAuthenticationRequests(
+            container,
+            respondFromApi: (_) async => ResponseBody.fromString('', 204),
+          );
+
+          await confirmDeletion(tester);
+
+          final deletion = requests.api.requests.single;
+          expect(deletion.method, 'DELETE');
+          expect(deletion.uri.path, '/v1/users/me');
+          expect(
+            deletion.headers['Authorization'],
+            'Bearer $issuedJsonWebToken',
+          );
+          expect(await const FlutterSecureStorage().readAll(), isEmpty);
+          final storedPreferences = await reopenPreferences();
+          expect(storedPreferences.keys, {
+            PreferenceKeys.crashReportingEnabled,
+            PreferenceKeys.installed,
+          });
+          expect(
+            storedPreferences.getBool(PreferenceKeys.crashReportingEnabled),
+            isFalse,
+          );
+          expect(find.byType(OnboardingPage), findsOneWidget);
+          expect(
+            tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+            ThemeMode.system,
+          );
+          expect(LocaleSettings.currentLocale, AppLocale.de);
+        },
+      );
+
+      testWidgets(
+        'failing deletion shows the error dialog and keeps the account and the device data, confirming again deletes the account',
+        (tester) async {
+          final container = await openSettingsWithStoredPreferences(tester);
+          var deletionAttempts = 0;
+          final requests = recordAuthenticationRequests(
+            container,
+            respondFromApi: (_) async => ++deletionAttempts == 1
+                ? jsonResponse(const {'status': 502}, statusCode: 502)
+                : ResponseBody.fromString('', 204),
+          );
+
+          await confirmDeletion(tester);
+
+          expect(find.text(englishTranslations.apiError.title), findsOneWidget);
+          expect(container.read(signedInAccountProvider), isNotNull);
+          expect(
+            await const FlutterSecureStorage().readAll(),
+            storedSession('account'),
+          );
+          expect((await reopenPreferences()).keys, {
+            PreferenceKeys.installed,
+            ...storedPreferencesBeforeDeletion.keys,
+          });
+          await tester.tap(find.text(englishTranslations.apiError.close));
+          await tester.pumpAndSettle();
+          expect(find.byType(SettingsPage), findsOneWidget);
+
+          await confirmDeletion(tester);
+
+          expect(requests.api.requests, hasLength(2));
+          expect(find.byType(OnboardingPage), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'tapping delete account again while the deletion is pending shows a progress indicator and sends no second request',
+        (tester) async {
+          final container = await openSettings(tester);
+          final pendingDeletion = Completer<ResponseBody>();
+          final requests = recordAuthenticationRequests(
+            container,
+            respondFromApi: (_) => pendingDeletion.future,
+          );
+          await tapRow(tester, translations.account.deleteAccount);
+          await tester.tap(
+            find.text(translations.account.deleteDialog.confirm),
+          );
+          await tester.pump(const Duration(seconds: 1));
+
+          await tester.tap(find.text(translations.account.deleteAccount));
+          await tester.pump(const Duration(seconds: 1));
+
+          expect(requests.api.requests, hasLength(1));
+          expect(find.byType(AlertDialog), findsNothing);
+          expect(find.byType(CircularProgressIndicator), findsOneWidget);
+          pendingDeletion.complete(ResponseBody.fromString('', 204));
+          await tester.pumpAndSettle();
+          expect(find.byType(OnboardingPage), findsOneWidget);
+        },
+      );
+    });
+
     testWidgets('about section shows the app version', (tester) async {
       await openSettings(tester);
 
