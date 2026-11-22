@@ -6,6 +6,7 @@
     <Project Path="Murmli.Backend.Api/Murmli.Backend.Api.csproj" />
     <Project Path="Murmli.Backend.Data/Murmli.Backend.Data.csproj" />
     <Project Path="Murmli.Backend.ProductImport/Murmli.Backend.ProductImport.csproj" />
+    <Project Path="Murmli.Backend.Sync/Murmli.Backend.Sync.csproj" />
     <Project Path="Murmli.Backend.Telemetry/Murmli.Backend.Telemetry.csproj" />
   </Folder>
   <Folder Name="/src/hosts/">

@@ -9,6 +9,7 @@ using Murmli.Backend.Api.Database;
 using Murmli.Backend.Api.Products;
 using Murmli.Backend.Api.Users;
 using Murmli.Backend.Data.Extensions;
+using Murmli.Backend.Sync.Extensions;
 
 namespace Murmli.Backend.Api.Extensions;
 
@@ -58,6 +59,7 @@ public static class HostApplicationBuilderExtensions
         builder.Services.AddProblemDetails();
 
         builder.Services.AddSingleton(TimeProvider.System);
+        builder.AddSync();
         builder.Services.AddScoped<UserRegistry>();
         builder.Services.AddScoped<ProductSearch>();
     }

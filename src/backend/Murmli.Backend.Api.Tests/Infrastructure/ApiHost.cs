@@ -5,15 +5,19 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Time.Testing;
 using Murmli.Backend.Api.Extensions;
+using Murmli.Backend.Api.Tests.Infrastructure.TestDataTypes;
 using Murmli.Backend.Api.Users;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Extensions;
+using Murmli.Backend.Sync.Extensions;
 using Murmli.Backend.Telemetry.Extensions;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Trace;
@@ -52,7 +56,8 @@ internal sealed class ApiHost : IAsyncDisposable
         bool mapFailingEndpoint = false,
         ICollection<Activity>? activities = null,
         ICollection<LogRecord>? logRecords = null,
-        bool mapExplicitlyAuthorizedEndpoint = false
+        bool mapExplicitlyAuthorizedEndpoint = false,
+        bool testDataTypes = false
     )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -75,6 +80,14 @@ internal sealed class ApiHost : IAsyncDisposable
         builder.Configuration.AddInMemoryCollection(additionalConfiguration);
         builder.AddTelemetry();
         builder.AddApi();
+        if (testDataTypes)
+        {
+            builder.Services.ConfigureDbContext<MurmliDbContext>(options =>
+                options.ReplaceService<IModelCustomizer, SyncTestModelCustomizer>()
+            );
+            builder.Services.AddSyncDataType<TestNoteType>();
+        }
+
         if (activities is not null)
         {
             builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddInMemoryExporter(activities));
@@ -95,6 +108,14 @@ internal sealed class ApiHost : IAsyncDisposable
 
         var application = builder.Build();
         await application.MigrateDatabaseAsync(cancellationToken);
+        if (testDataTypes)
+        {
+            await using var scope = application.Services.CreateAsyncScope();
+            await scope
+                .ServiceProvider.GetRequiredService<MurmliDbContext>()
+                .Database.ExecuteSqlRawAsync(SyncTestSchema.Ddl, cancellationToken);
+        }
+
         application.UseApi();
         if (mapFailingEndpoint)
         {

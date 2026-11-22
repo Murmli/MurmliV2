@@ -17,6 +17,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Murmli.Backend.Data\Murmli.Backend.Data.csproj" />
+        <ProjectReference Include="..\Murmli.Backend.Sync\Murmli.Backend.Sync.csproj" />
     </ItemGroup>
 
 </Project>

@@ -1,13 +1,18 @@
 using System.Net;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Murmli.Backend.Api.Extensions;
 using Murmli.Backend.Api.Tests.Infrastructure;
+using Murmli.Backend.Api.Tests.Infrastructure.TestDataTypes;
 using Murmli.Backend.Data;
+using Murmli.Backend.Sync.Configuration;
+using Murmli.Backend.Sync.Extensions;
 
 namespace Murmli.Backend.Api.Tests.Extensions;
 
@@ -57,6 +62,31 @@ public class HostApplicationBuilderExtensionsTests(PostgresFixture postgres) : I
         var exception = Assert.Throws<OptionsValidationException>(() => scope.ServiceProvider.GetRequiredService<MurmliDbContext>());
 
         Assert.Contains(expectedError, exception.Message);
+    }
+
+    [Fact]
+    public async Task AddApi_SyncFieldNullabilityDiffersFromModel_FailsOptionsValidation()
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
+        builder.Configuration.AddInMemoryCollection(
+            new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:murmli"] = "Host=localhost;Database=murmli;Username=postgres;Password=postgres",
+            }
+        );
+        builder.AddApi();
+        builder.Services.ConfigureDbContext<MurmliDbContext>(options =>
+            options.ReplaceService<IModelCustomizer, SyncTestModelCustomizer>()
+        );
+        builder.Services.AddSyncDataType<NullableTitleNoteType>();
+        await using var application = builder.Build();
+
+        var exception = Assert.Throws<OptionsValidationException>(() =>
+            application.Services.GetRequiredService<IOptions<SyncOptions>>().Value
+        );
+
+        Assert.Contains("brokenNote", exception.Message);
+        Assert.Contains("title", exception.Message);
     }
 
     private static async Task<HttpResponseMessage> SendAsync(ApiHost api, string path, string token)
