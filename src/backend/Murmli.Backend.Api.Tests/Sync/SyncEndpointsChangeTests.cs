@@ -7,7 +7,9 @@ using Murmli.Backend.Api.Tests.Infrastructure;
 using Murmli.Backend.Api.Tests.Infrastructure.TestDataTypes;
 using Murmli.Backend.Data.Sync;
 using Murmli.Backend.Sync.Cleanup;
+using Murmli.Backend.Sync.DataTypes;
 using Murmli.Backend.Sync.Protocol;
+using Murmli.Backend.Sync.Writing;
 
 namespace Murmli.Backend.Api.Tests.Sync;
 
@@ -18,6 +20,8 @@ public class SyncEndpointsChangeTests(SyncApiFixture fixture) : IClassFixture<Sy
     private const string OriginalFields = """{"title":"original","color":null,"weight":null,"pinned":false}""";
 
     private static readonly TimeSpan PastRetention = TimeSpan.FromDays(45) + TimeSpan.FromMinutes(1);
+
+    private static readonly SyncServerWriteResult AppliedResult = new("applied", null, null);
 
     [Theory]
     [InlineData("lostToNewer")]
@@ -446,6 +450,203 @@ public class SyncEndpointsChangeTests(SyncApiFixture fixture) : IClassFixture<Sy
         Task<SyncResponse> ReadAsync(SyncTestDevice device) => sharedScope ? device.SyncAllAsync() : device.SyncAsync();
     }
 
+    [Fact]
+    public async Task Sync_ServerWrite_ReachesDevicesLikeCommand()
+    {
+        var (owner, boardId, cardId) = await SignInWithBoardAndCardAsync(fixture.Api);
+        var reader = owner.OtherDevice();
+        await reader.SyncAllAsync();
+        var initialVersion = (await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId))!.Version;
+        var newCardId = Guid.NewGuid();
+
+        var doneResult = await fixture.Api.WriteAsServerAsync(
+            new SyncServerCommand(
+                Guid.NewGuid(),
+                SyncActor.System,
+                SyncCommandKind.SetFields,
+                boardId,
+                TestCardType.DataTypeName,
+                cardId,
+                SyncServerFields.Of(("done", true))
+            )
+        );
+        var afterDone = await reader.SyncAllAsync();
+        var createResult = await fixture.Api.WriteAsServerAsync(
+            new SyncServerCommand(
+                Guid.NewGuid(),
+                SyncActor.OnBehalfOf(owner.AccountId),
+                SyncCommandKind.Create,
+                boardId,
+                TestCardType.DataTypeName,
+                newCardId,
+                SyncServerFields.Of(("text", "bread"))
+            )
+        );
+        var deleteResult = await fixture.Api.WriteAsServerAsync(
+            new SyncServerCommand(Guid.NewGuid(), SyncActor.System, SyncCommandKind.Delete, boardId, TestCardType.DataTypeName, cardId)
+        );
+        var afterCreateAndDelete = await reader.SyncAllAsync();
+
+        Assert.Equal(AppliedResult, doneResult);
+        var doneBlock = Assert.Single(afterDone.Scopes, block => block.ScopeId == boardId);
+        Assert.False(doneBlock.FullState);
+        var doneCard = Assert.Single(doneBlock.Records);
+        Assert.Equal((cardId, true), (doneCard.Id, doneCard.Fields.GetProperty("done").GetBoolean()));
+        Assert.Empty(doneBlock.DeletedRecords);
+        Assert.Equal(AppliedResult, createResult);
+        Assert.Equal(AppliedResult, deleteResult);
+        var block = Assert.Single(afterCreateAndDelete.Scopes, block => block.ScopeId == boardId);
+        Assert.False(block.FullState);
+        var newCard = Assert.Single(block.Records);
+        Assert.Equal((newCardId, "bread"), (newCard.Id, newCard.Fields.GetProperty("text").GetString()));
+        Assert.Equal([new SyncDeletedRecord(TestCardType.DataTypeName, cardId)], block.DeletedRecords);
+        Assert.Equal(initialVersion + 3, (await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId))!.Version);
+    }
+
+    [Fact]
+    public async Task WriteAsync_SystemDeleteInDeletedScope_ReturnsTargetDeletedWithoutClaim()
+    {
+        var (owner, boardId, cardId) = await SignInWithBoardAndCardAsync(fixture.Api);
+        await owner.ApplyAllAsync(owner.DeleteBoard(boardId, fixture.Api.TimeProvider.GetUtcNow()));
+        var commandId = Guid.NewGuid();
+
+        var result = await fixture.Api.WriteAsServerAsync(
+            new SyncServerCommand(commandId, SyncActor.System, SyncCommandKind.Delete, boardId, TestCardType.DataTypeName, cardId)
+        );
+
+        Assert.Equal(new SyncServerWriteResult("ignored", null, "targetDeleted"), result);
+        Assert.Empty(await ReadProcessedCommandsByIdAsync(fixture.Api, commandId));
+    }
+
+    [Fact]
+    public async Task WriteAsync_OnBehalfOfRootCreate_CreatesScopeWithOwnerEntry()
+    {
+        var device = await SyncTestDevice.SignInAsync(fixture.Api);
+        var boardId = Guid.NewGuid();
+        var commandId = Guid.NewGuid();
+
+        var result = await fixture.Api.WriteAsServerAsync(
+            new SyncServerCommand(
+                commandId,
+                SyncActor.OnBehalfOf(device.AccountId),
+                SyncCommandKind.Create,
+                boardId,
+                TestBoardType.DataTypeName,
+                boardId,
+                SyncServerFields.Of(("title", "server board"))
+            )
+        );
+
+        Assert.Equal(AppliedResult, result);
+        var scope = Assert.IsType<SyncScope>(await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId));
+        Assert.Equal((device.AccountId, TestBoardType.ScopeKindName, 1L), (scope.OwnerAccountId, scope.Kind, scope.Version));
+        var ownerEntry = Assert.Single(await SharedScopeQueries.ReadMemberEntriesAsync(fixture.Api, boardId));
+        Assert.Equal(("owner", SyncMemberState.Active, (Guid?)device.AccountId), (ownerEntry.Role, ownerEntry.State, ownerEntry.AccountId));
+        Assert.Equal(device.AccountId, Assert.Single(await ReadProcessedCommandsByIdAsync(fixture.Api, commandId)).AccountId);
+        var block = Assert.Single((await device.SyncAllAsync()).Scopes, block => block.ScopeId == boardId);
+        Assert.True(block.FullState);
+        var board = Assert.Single(block.Records);
+        Assert.Equal((boardId, "server board"), (board.Id, board.Fields.GetProperty("title").GetString()));
+        Assert.True(Assert.Single(block.Members).IsOwn);
+    }
+
+    [Theory]
+    [InlineData("unknownDataType")]
+    [InlineData("unknownKind")]
+    [InlineData("rootRecordIdDiffersFromScopeId")]
+    [InlineData("recordIdEqualsScopeId")]
+    [InlineData("systemRootCreate")]
+    [InlineData("fieldsOnDelete")]
+    [InlineData("fieldsMissingOnSetFields")]
+    [InlineData("emptySetFields")]
+    [InlineData("unknownField")]
+    [InlineData("valueInvalid")]
+    [InlineData("requiredFieldMissing")]
+    [InlineData("filledServerField")]
+    [InlineData("memberReference")]
+    [InlineData("preconditionOnRootDelete")]
+    [InlineData("systemRootDelete")]
+    [InlineData("recordIdVersion7")]
+    [InlineData("scopeIdVersion7")]
+    [InlineData("actorMissing")]
+    [InlineData("actorDerived")]
+    public async Task WriteAsync_InvalidCommand_RejectedInvalidWithoutClaim(string scenario)
+    {
+        var (owner, boardId, cardId) = await SignInWithBoardAndCardAsync(fixture.Api);
+        var noteId = Guid.NewGuid();
+        await owner.ApplyAllAsync(owner.CreateNote(noteId, fixture.Api.TimeProvider.GetUtcNow().AddSeconds(-10), OriginalTitle));
+        var ownerEntryId = Assert.Single(await SharedScopeQueries.ReadMemberEntriesAsync(fixture.Api, boardId)).Id;
+        var boardVersion = (await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId))!.Version;
+        var commandId = Guid.NewGuid();
+        var newBoardId = Guid.NewGuid();
+        var cardChange = new SyncServerCommand(
+            commandId,
+            SyncActor.System,
+            SyncCommandKind.SetFields,
+            boardId,
+            TestCardType.DataTypeName,
+            cardId,
+            SyncServerFields.Of(("text", "x"))
+        );
+        var noteChange = cardChange with
+        {
+            ScopeId = owner.PersonalScopeId,
+            DataType = TestNoteType.DataTypeName,
+            RecordId = noteId,
+            Fields = SyncServerFields.Of(("title", "x")),
+        };
+        var boardDelete = cardChange with
+        {
+            Kind = SyncCommandKind.Delete,
+            DataType = TestBoardType.DataTypeName,
+            RecordId = boardId,
+            Fields = null,
+        };
+        var command = scenario switch
+        {
+            "unknownDataType" => cardChange with { DataType = "unknownType" },
+            "unknownKind" => cardChange with { Kind = new SyncCommandKind("move") },
+            "rootRecordIdDiffersFromScopeId" => cardChange with
+            {
+                DataType = TestBoardType.DataTypeName,
+                RecordId = Guid.NewGuid(),
+                Fields = SyncServerFields.Of(("title", "x")),
+            },
+            "recordIdEqualsScopeId" => cardChange with { RecordId = boardId },
+            "systemRootCreate" => cardChange with
+            {
+                Kind = SyncCommandKind.Create,
+                ScopeId = newBoardId,
+                DataType = TestBoardType.DataTypeName,
+                RecordId = newBoardId,
+                Fields = SyncServerFields.Of(("title", "x")),
+            },
+            "fieldsOnDelete" => cardChange with { Kind = SyncCommandKind.Delete },
+            "fieldsMissingOnSetFields" => cardChange with { Fields = null },
+            "emptySetFields" => cardChange with { Fields = SyncServerFields.Of() },
+            "unknownField" => cardChange with { Fields = SyncServerFields.Of(("text", "x"), ("unknown", 1)) },
+            "valueInvalid" => noteChange with { Fields = SyncServerFields.Of(("title", new string('x', 101))) },
+            "requiredFieldMissing" => noteChange with { Kind = SyncCommandKind.Create, RecordId = Guid.NewGuid(), Fields = SyncServerFields.Of() },
+            "filledServerField" => cardChange with { Fields = SyncServerFields.Of(("text", "x"), ("createdAt", 1)) },
+            "memberReference" => cardChange with { Fields = SyncServerFields.Of(("text", "x"), ("doneBy", ownerEntryId)) },
+            "preconditionOnRootDelete" => boardDelete with { Actor = SyncActor.OnBehalfOf(owner.AccountId), Precondition = _ => true },
+            "systemRootDelete" => boardDelete,
+            "recordIdVersion7" => cardChange with { Kind = SyncCommandKind.Create, RecordId = Guid.CreateVersion7() },
+            "scopeIdVersion7" => cardChange with { ScopeId = Guid.CreateVersion7() },
+            "actorMissing" => cardChange with { Actor = null! },
+            "actorDerived" => cardChange with { Actor = new DerivedActor() },
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null),
+        };
+
+        var result = await fixture.Api.WriteAsServerAsync(command);
+
+        Assert.Equal(new SyncServerWriteResult("rejected", "invalid", null), result);
+        Assert.Empty(await ReadProcessedCommandsByIdAsync(fixture.Api, commandId));
+        Assert.Equal("milk", (await SharedScopeQueries.ReadCardAsync(fixture.Api, cardId))?.Text);
+        Assert.Equal(OriginalTitle, await TestNoteQueries.ReadTitleAsync(fixture.Api, noteId));
+        Assert.Equal(boardVersion, (await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId))?.Version);
+    }
+
     private static async Task WriteRoundsAsync(SyncTestDevice writer, DateTimeOffset now, Guid scopeId)
     {
         var isPersonalScope = scopeId == writer.PersonalScopeId;
@@ -482,6 +683,28 @@ public class SyncEndpointsChangeTests(SyncApiFixture fixture) : IClassFixture<Sy
         }
     }
 
+    private static async Task<(SyncTestDevice Owner, Guid BoardId, Guid CardId)> SignInWithBoardAndCardAsync(ApiHost api)
+    {
+        var owner = await SyncTestDevice.SignInAsync(api);
+        var now = api.TimeProvider.GetUtcNow();
+        var boardId = Guid.NewGuid();
+        var cardId = Guid.NewGuid();
+        await owner.ApplyAllAsync(
+            owner.CreateBoard(boardId, now.AddSeconds(-30), "board"),
+            owner.CreateCard(boardId, cardId, now.AddSeconds(-20), "milk")
+        );
+        return (owner, boardId, cardId);
+    }
+
+    private static Task<List<ProcessedSyncCommand>> ReadProcessedCommandsByIdAsync(ApiHost api, Guid commandId) =>
+        api.QueryDatabaseAsync(context =>
+            context
+                .Set<ProcessedSyncCommand>()
+                .AsNoTracking()
+                .Where(command => command.CommandId == commandId)
+                .ToListAsync(TestContext.Current.CancellationToken)
+        );
+
     private static void Apply(Dictionary<Guid, JsonElement> copy, SyncResponse response, Guid scopeId)
     {
         foreach (var block in response.Scopes.Where(block => block.ScopeId == scopeId))
@@ -511,4 +734,6 @@ public class SyncEndpointsChangeTests(SyncApiFixture fixture) : IClassFixture<Sy
         );
         return SyncTokenFormat.Encode(databaseIdentity, [(scope.Id, scope.Epoch, scope.Version)]);
     }
+
+    private sealed record DerivedActor() : SyncActor(SyncActor.System);
 }

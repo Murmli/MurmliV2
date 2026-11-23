@@ -3,12 +3,14 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Murmli.Backend.Data;
 using Murmli.Backend.Sync.Accounts;
 using Murmli.Backend.Sync.Cleanup;
 using Murmli.Backend.Sync.Configuration;
 using Murmli.Backend.Sync.DataTypes;
 using Murmli.Backend.Sync.Processing;
 using Murmli.Backend.Sync.Protocol;
+using Murmli.Backend.Sync.Writing;
 
 namespace Murmli.Backend.Sync.Extensions;
 
@@ -39,6 +41,13 @@ public static class HostApplicationBuilderExtensions
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<IOptions<SyncOptions>>(),
             provider.GetRequiredService<ILogger<SyncProcessor>>()
+        ));
+        builder.Services.AddScoped(provider => new SyncServerWriter(
+            provider.GetRequiredService<SyncDataTypeRegistry>(),
+            provider.GetRequiredService<SyncCommandUnit>(),
+            provider.GetRequiredService<MurmliDbContext>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<ILogger<SyncServerWriter>>()
         ));
     }
 }

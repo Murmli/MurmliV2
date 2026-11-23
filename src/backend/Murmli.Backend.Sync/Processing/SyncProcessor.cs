@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -121,11 +120,6 @@ public sealed partial class SyncProcessor
         && !exception.IsDatabaseDisturbance()
         && exception is not SyncAccountGoneException;
 
-    private static SyncScopeSeed? CreateScopeSeed(SyncCommand? command) =>
-        command is { DataType.IsScopeRoot: true } && command.Kind == SyncCommandKind.Create
-            ? new SyncScopeSeed(Guid.NewGuid(), RandomNumberGenerator.GetInt32(int.MinValue, int.MaxValue))
-            : null;
-
     private static string? GetKnownKind(SyncCommandClaim? claim) =>
         claim is not null && SyncCommandKind.TryParse(claim.Kind, out var kind) ? kind.Key : null;
 
@@ -189,7 +183,7 @@ public sealed partial class SyncProcessor
         var preCheckRejection = parsed.Command is null ? SyncRejectionReason.Invalid : GetClockRejection(claim.Time, now);
         var command = preCheckRejection is null ? parsed.Command : null;
         return await unit.RunAsync(
-            new SyncCommandUnitInput(accountId, claim, now, command, preCheckRejection, CreateScopeSeed(command)),
+            new SyncCommandUnitInput(accountId, claim, now, command, preCheckRejection, SyncScopeSeed.For(command)),
             cancellationToken
         );
     }

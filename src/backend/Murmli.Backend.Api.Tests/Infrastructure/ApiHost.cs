@@ -19,6 +19,7 @@ using Murmli.Backend.Data;
 using Murmli.Backend.Data.Extensions;
 using Murmli.Backend.Sync.Cleanup;
 using Murmli.Backend.Sync.Extensions;
+using Murmli.Backend.Sync.Writing;
 using Murmli.Backend.Telemetry.Extensions;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Trace;
@@ -179,6 +180,12 @@ internal sealed class ApiHost : IAsyncDisposable
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", TestTokens.Create(authUserId));
         using var response = await HttpClient.SendAsync(request, TestContext.Current.CancellationToken);
         return response.StatusCode;
+    }
+
+    public async Task<SyncServerWriteResult> WriteAsServerAsync(SyncServerCommand command)
+    {
+        await using var scope = application.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<SyncServerWriter>().WriteAsync(command, TestContext.Current.CancellationToken);
     }
 
     public async Task<T> QueryDatabaseAsync<T>(Func<MurmliDbContext, Task<T>> query)

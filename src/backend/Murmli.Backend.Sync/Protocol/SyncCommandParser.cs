@@ -116,7 +116,7 @@ internal sealed class SyncCommandParser(SyncDataTypeRegistry registry)
             return !hasFields || fields.ValueKind == JsonValueKind.Null;
         }
 
-        changes = hasFields ? dataType.ParseFields(fields, kind) : null;
+        changes = hasFields ? dataType.ParseFields(fields, kind, isServerWrite: false) : null;
         return changes is not null;
     }
 }

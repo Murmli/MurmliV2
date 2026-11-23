@@ -23,7 +23,7 @@ public abstract class SyncDataType
 
     internal abstract IReadOnlyList<string> Validate(IModel model);
 
-    internal abstract SyncFieldChanges? ParseFields(JsonElement fields, SyncCommandKind kind);
+    internal abstract SyncFieldChanges? ParseFields(JsonElement fields, SyncCommandKind kind, bool isServerWrite);
 
     internal abstract Task<SyncRecord?> FindTrackedAsync(MurmliDbContext context, Guid recordId, CancellationToken cancellationToken);
 
@@ -35,7 +35,7 @@ public abstract class SyncDataType
 
     internal abstract SyncRuleDecision EvaluateRules(SyncRecord record, Guid? actingMemberId);
 
-    internal abstract void ApplyFills(SyncRecord record, bool isNew, DateTimeOffset commandTime, Guid? actingMemberId);
+    internal abstract void ApplyFills(SyncRecord record, bool isNew, DateTimeOffset commandTime, Guid? actingMemberId, bool isSystemWrite);
 
     internal abstract string GetPrimaryKeyName(MurmliDbContext context);
 
@@ -179,7 +179,7 @@ public abstract class SyncDataType<TRecord> : SyncDataType
         return errors;
     }
 
-    internal sealed override SyncFieldChanges? ParseFields(JsonElement fields, SyncCommandKind kind)
+    internal sealed override SyncFieldChanges? ParseFields(JsonElement fields, SyncCommandKind kind, bool isServerWrite)
     {
         if (fields.ValueKind != JsonValueKind.Object)
         {
@@ -191,7 +191,10 @@ public abstract class SyncDataType<TRecord> : SyncDataType
         {
             if (
                 !member.TryGetReadableName(out var name)
-                || !Layout.DeviceFields.TryGetValue(name, out var field)
+                || !(
+                    Layout.DeviceFields.TryGetValue(name, out var field)
+                    || (isServerWrite && Layout.WritableServerFields.TryGetValue(name, out field))
+                )
                 || assignments.ContainsKey(field)
                 || !field.TryRead(member.Value, out var assignment)
             )
@@ -229,7 +232,10 @@ public abstract class SyncDataType<TRecord> : SyncDataType
             groupChanges.Add(new SyncGroupChange<TRecord>(group, [.. group.Fields.Select(field => assignments[field])]));
         }
 
-        return new SyncFieldChanges<TRecord>(groupChanges);
+        return new SyncFieldChanges<TRecord>(
+            groupChanges,
+            [.. Layout.ServerFields.Where(assignments.ContainsKey).Select(field => assignments[field])]
+        );
     }
 
     internal sealed override async Task<SyncRecord?> FindTrackedAsync(
@@ -255,8 +261,9 @@ public abstract class SyncDataType<TRecord> : SyncDataType
     internal sealed override bool ApplyChanges(SyncRecord record, SyncFieldChanges changes, DateTimeOffset commandTime, bool isNew)
     {
         var typedRecord = (TRecord)record;
+        var typedChanges = (SyncFieldChanges<TRecord>)changes;
         var applied = false;
-        foreach (var change in ((SyncFieldChanges<TRecord>)changes).Groups)
+        foreach (var change in typedChanges.Groups)
         {
             if (isNew || commandTime >= change.Group.GetChangedAt(typedRecord))
             {
@@ -268,6 +275,12 @@ public abstract class SyncDataType<TRecord> : SyncDataType
                 change.Group.SetChangedAt(typedRecord, commandTime);
                 applied = true;
             }
+        }
+
+        foreach (var assignment in typedChanges.ServerAssignments)
+        {
+            assignment(typedRecord);
+            applied = true;
         }
 
         if (!isNew)
@@ -286,7 +299,7 @@ public abstract class SyncDataType<TRecord> : SyncDataType
     internal sealed override SyncRuleDecision EvaluateRules(SyncRecord record, Guid? actingMemberId) =>
         Evaluate(new SyncRuleContext<TRecord>((TRecord)record, actingMemberId));
 
-    internal sealed override void ApplyFills(SyncRecord record, bool isNew, DateTimeOffset commandTime, Guid? actingMemberId)
+    internal sealed override void ApplyFills(SyncRecord record, bool isNew, DateTimeOffset commandTime, Guid? actingMemberId, bool isSystemWrite)
     {
         var typedRecord = (TRecord)record;
         foreach (var field in Layout.ServerFields)
@@ -297,7 +310,7 @@ public abstract class SyncDataType<TRecord> : SyncDataType
                     field.SetFillValue(typedRecord, commandTime);
                     break;
                 case SyncServerFill.ActingMemberOnCreate when isNew:
-                case SyncServerFill.ActingMemberOnApply:
+                case SyncServerFill.ActingMemberOnApply when isNew || !isSystemWrite:
                     field.SetFillValue(typedRecord, actingMemberId);
                     break;
             }

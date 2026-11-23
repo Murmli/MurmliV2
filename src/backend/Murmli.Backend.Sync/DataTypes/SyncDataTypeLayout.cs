@@ -23,6 +23,13 @@ internal sealed class SyncDataTypeLayout<TRecord>
         }
 
         DeviceFields = deviceFields;
+        var writableServerFields = new Dictionary<string, SyncField<TRecord>>(StringComparer.Ordinal);
+        foreach (var field in serverFields.Where(field => field.Fill == SyncServerFill.None))
+        {
+            writableServerFields.TryAdd(field.Name, field);
+        }
+
+        WritableServerFields = writableServerFields;
         SentFields = [.. fields.Where(field => field.IsSentToDevices)];
         RequiredOnCreateFields = [.. fields.Where(field => field.IsRequiredOnCreate)];
     }
@@ -36,6 +43,8 @@ internal sealed class SyncDataTypeLayout<TRecord>
     public IReadOnlyList<SyncField<TRecord>> ServerFields { get; }
 
     public IReadOnlyDictionary<string, SyncField<TRecord>> DeviceFields { get; }
+
+    public IReadOnlyDictionary<string, SyncField<TRecord>> WritableServerFields { get; }
 
     public IReadOnlyList<SyncField<TRecord>> SentFields { get; }
 
