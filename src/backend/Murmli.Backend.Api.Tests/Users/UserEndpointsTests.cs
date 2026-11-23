@@ -96,8 +96,7 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
 
         Assert.Equal(HttpStatusCode.NoContent, statusCode);
         Assert.Empty(await ReadUsersAsync(api));
-        var deletedUser = Assert.Single(await ReadDeletedUsersAsync(api));
-        Assert.Equal(authUserId, deletedUser.AuthUserId);
+        Assert.Equal([authUserId, authUserId], (await ReadDeletedUsersAsync(api)).Select(deletedUser => deletedUser.AuthUserId));
         var request = Assert.Single(api.AuthService.Requests);
         Assert.Equal(HttpMethod.Post, request.Method);
         Assert.Equal("/service/delete-user", request.Path);
@@ -231,8 +230,10 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
 
         await DeleteMeAsync(api, TestTokens.Create("AuthUser0000000000000000000002"));
 
-        var deletedUser = Assert.Single(await ReadDeletedUsersAsync(api));
-        Assert.Equal("AuthUser0000000000000000000002", deletedUser.AuthUserId);
+        Assert.Equal(
+            ["AuthUser0000000000000000000002", "AuthUser0000000000000000000002"],
+            (await ReadDeletedUsersAsync(api)).Select(deletedUser => deletedUser.AuthUserId)
+        );
     }
 
     private static Task<HttpResponseMessage> SendGetMeAsync(ApiHost api, string token) => SendAsync(api, HttpMethod.Get, token);

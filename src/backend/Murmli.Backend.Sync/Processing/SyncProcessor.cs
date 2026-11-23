@@ -87,6 +87,11 @@ public sealed partial class SyncProcessor
                 }
             }
 
+            if (SyncChangeReader.IsAccountBeingDeleted(heads))
+            {
+                return new SyncOutcome.AccountGone();
+            }
+
             var visibleHeads = SyncChangeReader.GetVisibleHeads(heads, listed);
             if (request.Commands.Count == 0 && token is not null && changeReader.IsUnchanged(token, visibleHeads))
             {

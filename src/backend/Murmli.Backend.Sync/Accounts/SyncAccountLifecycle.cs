@@ -12,7 +12,7 @@ using Npgsql;
 
 namespace Murmli.Backend.Sync.Accounts;
 
-internal sealed class SyncAccountLifecycle(MurmliDbContext context, TimeProvider timeProvider, IOptions<SyncOptions> options)
+public sealed class SyncAccountLifecycle(MurmliDbContext context, TimeProvider timeProvider, IOptions<SyncOptions> options)
 {
     private string? OwnerForeignKeyName =>
         context
@@ -21,7 +21,42 @@ internal sealed class SyncAccountLifecycle(MurmliDbContext context, TimeProvider
             .Single(foreignKey => foreignKey.PrincipalEntityType.ClrType == typeof(User))
             .GetConstraintName();
 
-    public async Task<SyncBootstrapResult> EnsurePersonalScopeAsync(Guid accountId, CancellationToken cancellationToken = default)
+    public Task MarkDeletingAsync(Guid accountId, CancellationToken cancellationToken = default)
+    {
+        var now = timeProvider.GetUtcNowInMilliseconds();
+        return context
+            .Database.CreateExecutionStrategy()
+            .ExecuteInTransactionAsync(
+                attemptCancellationToken => SetDeletionMarkerAsync(accountId, now, attemptCancellationToken),
+                // A replay after an ambiguous commit finds the marker and changes nothing
+                _ => Task.FromResult(false),
+                IsolationLevel.ReadCommitted,
+                cancellationToken
+            );
+    }
+
+    public async Task DeleteOwnedScopesAsync(Guid accountId, CancellationToken cancellationToken = default)
+    {
+        var scopeIds = await context
+            .Set<SyncScope>()
+            .Where(scope => scope.OwnerAccountId == accountId && scope.Kind != SyncScope.PersonalKind)
+            .OrderBy(scope => scope.Id)
+            .Select(scope => scope.Id)
+            .ToListAsync(cancellationToken);
+        var strategy = context.Database.CreateExecutionStrategy();
+        foreach (var scopeId in scopeIds)
+        {
+            await strategy.ExecuteInTransactionAsync(
+                attemptCancellationToken => DeleteOwnedScopeAsync(accountId, scopeId, attemptCancellationToken),
+                // A replay after an ambiguous commit finds nothing left to delete
+                _ => Task.FromResult(false),
+                IsolationLevel.ReadCommitted,
+                cancellationToken
+            );
+        }
+    }
+
+    internal async Task<SyncBootstrapResult> EnsurePersonalScopeAsync(Guid accountId, CancellationToken cancellationToken = default)
     {
         var personalScopeId = Guid.NewGuid();
         var epoch = RandomNumberGenerator.GetInt32(int.MinValue, int.MaxValue);
@@ -54,14 +89,14 @@ internal sealed class SyncAccountLifecycle(MurmliDbContext context, TimeProvider
     )
     {
         context.PrepareSyncUnitAttempt();
-        await context.Database.ExecuteSqlAsync($"SELECT set_config('lock_timeout', {options.Value.GetLockTimeoutSetting()}, true)", cancellationToken);
+        await SetLockTimeoutAsync(cancellationToken);
         // ON CONFLICT infers the partial unique index only from a literal predicate
         var inserted = await context.Database.ExecuteSqlAsync(
             $"""
             INSERT INTO sync.scopes (id, kind, owner_account_id, version, epoch, tombstone_floor, created_at)
             SELECT {personalScopeId}, 'personal', u.id, 0, {epoch}, 0, {now}
             FROM identity.users u
-            WHERE u.id = {accountId}
+            WHERE u.id = {accountId} AND u.deletion_started_at IS NULL
             ON CONFLICT (owner_account_id) WHERE kind = 'personal' DO NOTHING
             """,
             cancellationToken
@@ -77,4 +112,28 @@ internal sealed class SyncAccountLifecycle(MurmliDbContext context, TimeProvider
             ? SyncBootstrapResult.Existing
             : SyncBootstrapResult.AccountGone;
     }
+
+    private async Task SetDeletionMarkerAsync(Guid accountId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        context.PrepareSyncUnitAttempt();
+        await SetLockTimeoutAsync(cancellationToken);
+        // Root creates read the marker after taking this lock, so none adds a scope once it is set
+        await context.LockPersonalScopeAsync(accountId, cancellationToken);
+        await context
+            .Users.Where(user => user.Id == accountId && user.DeletionStartedAt == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(user => user.DeletionStartedAt, now), cancellationToken);
+    }
+
+    private async Task DeleteOwnedScopeAsync(Guid accountId, Guid scopeId, CancellationToken cancellationToken)
+    {
+        context.PrepareSyncUnitAttempt();
+        await SetLockTimeoutAsync(cancellationToken);
+        await context
+            .Set<SyncScope>()
+            .Where(scope => scope.Id == scopeId && scope.OwnerAccountId == accountId)
+            .ExecuteDeleteAsync(cancellationToken);
+    }
+
+    private Task SetLockTimeoutAsync(CancellationToken cancellationToken) =>
+        context.Database.ExecuteSqlAsync($"SELECT set_config('lock_timeout', {options.Value.GetLockTimeoutSetting()}, true)", cancellationToken);
 }

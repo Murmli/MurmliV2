@@ -35,7 +35,7 @@ internal static class SyncEndpoints
         [FromServices] IOptions<DatabaseOptions> databaseOptions
     )
     {
-        if (httpContext.Features.Get<AccountFeature>() is not { } account)
+        if (httpContext.Features.Get<AccountFeature>() is not { IsBeingDeleted: false } account)
         {
             return Problem(StatusCodes.Status410Gone, ProblemTypes.AccountGone);
         }

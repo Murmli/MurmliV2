@@ -2,6 +2,7 @@ using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Murmli.Backend.Data;
+using Murmli.Backend.Data.Identity;
 using Murmli.Backend.Data.Sync;
 using Murmli.Backend.Sync.Configuration;
 using Murmli.Backend.Sync.DataTypes;
@@ -18,6 +19,8 @@ internal sealed class SyncChangeReader(
 )
 {
     public static bool HasPersonalScope(IReadOnlyList<SyncScopeHead> heads) => heads.Count > 0 && heads[0].Kind == SyncScope.PersonalKind;
+
+    public static bool IsAccountBeingDeleted(IReadOnlyList<SyncScopeHead> heads) => heads.Count > 0 && heads[0].IsAccountBeingDeleted;
 
     public static IReadOnlyList<SyncScopeHead> GetVisibleHeads(IReadOnlyList<SyncScopeHead> heads, IReadOnlyList<SyncDataType> listed)
     {
@@ -48,7 +51,8 @@ internal sealed class SyncChangeReader(
                 head.Version,
                 head.Epoch,
                 head.TombstoneFloor,
-                context.Set<DatabaseIdentity>().Select(identity => identity.Value).First()
+                context.Set<DatabaseIdentity>().Select(identity => identity.Value).First(),
+                context.Set<User>().Any(user => user.Id == accountId && user.DeletionStartedAt != null)
             ))
             .ToListAsync(cancellationToken);
         return [.. heads.OrderBy(head => head.Kind != SyncScope.PersonalKind).ThenBy(head => head.Id, BigEndianGuidComparer.Instance)];
@@ -170,7 +174,7 @@ internal sealed class SyncChangeReader(
         stream.SetLength(0);
         await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var heads = await ReadHeadsAsync(accountId, cancellationToken);
-        if (!HasPersonalScope(heads))
+        if (!HasPersonalScope(heads) || IsAccountBeingDeleted(heads))
         {
             return new SyncOutcome.AccountGone();
         }

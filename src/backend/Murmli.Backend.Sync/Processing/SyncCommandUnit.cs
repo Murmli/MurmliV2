@@ -195,9 +195,30 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
         var claim = command.Claim;
         var dataType = command.DataType;
         var isRootCreate = dataType.IsScopeRoot && command.Kind == SyncCommandKind.Create;
-        if (isRootCreate && await LockPersonalScopeAsync(input.AccountId, cancellationToken) is null)
+        int? ownedScopeCount = null;
+        if (isRootCreate)
         {
-            throw new SyncAccountGoneException();
+            if (await context.LockPersonalScopeAsync(input.AccountId, cancellationToken) is null)
+            {
+                throw new SyncAccountGoneException();
+            }
+
+            var account = await context
+                .Users.Where(user => user.Id == input.AccountId)
+                .Select(user => new
+                {
+                    IsBeingDeleted = user.DeletionStartedAt != null,
+                    OwnedScopeCount = context
+                        .Set<SyncScope>()
+                        .Count(scope => scope.OwnerAccountId == input.AccountId && scope.Kind == dataType.ScopeKind),
+                })
+                .SingleOrDefaultAsync(cancellationToken);
+            if (account is not { IsBeingDeleted: false })
+            {
+                throw new SyncAccountGoneException();
+            }
+
+            ownedScopeCount = account.OwnedScopeCount;
         }
 
         var scope = (
@@ -209,7 +230,7 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
         ).SingleOrDefault();
         if (scope is null)
         {
-            return isRootCreate ? await CreateScopeAsync(input, cancellationToken) : (Rejected(claim, SyncRejectionReason.NoAccess), false);
+            return ownedScopeCount is { } count ? CreateScope(input, count) : (Rejected(claim, SyncRejectionReason.NoAccess), false);
         }
 
         SyncMemberRole? memberRole = null;
@@ -331,22 +352,11 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
         return (Applied(claim), isNew);
     }
 
-    private async Task<SyncScope?> LockPersonalScopeAsync(Guid accountId, CancellationToken cancellationToken) =>
-        (
-            await context
-                .Set<SyncScope>()
-                .FromSql($"SELECT * FROM sync.scopes WHERE owner_account_id = {accountId} AND kind = 'personal' FOR NO KEY UPDATE")
-                .ToListAsync(cancellationToken)
-        ).SingleOrDefault();
-
-    private async Task<(SyncCommandOutcome Outcome, bool IsNew)> CreateScopeAsync(SyncCommandUnitInput input, CancellationToken cancellationToken)
+    private (SyncCommandOutcome Outcome, bool IsNew) CreateScope(SyncCommandUnitInput input, int ownedScopeCount)
     {
         var command = input.Command!;
         var claim = command.Claim;
         var dataType = command.DataType;
-        var ownedScopeCount = await context
-            .Set<SyncScope>()
-            .CountAsync(scope => scope.OwnerAccountId == input.AccountId && scope.Kind == dataType.ScopeKind, cancellationToken);
         if (ownedScopeCount >= registry.GetMaximumOwnedScopesPerAccount(dataType))
         {
             return (Rejected(claim, SyncRejectionReason.LimitExceeded), false);
