@@ -28,7 +28,7 @@ public class SyncCleanupServiceTests(PostgresFixture postgres) : IClassFixture<P
 
     private static readonly TimeSpan ClockAheadTolerance = TimeSpan.FromMinutes(5);
 
-    public static TheoryData<int> CancelledStatements => [.. Enumerable.Range(1, 16)];
+    public static TheoryData<int> CancelledStatements => [.. Enumerable.Range(1, 17)];
 
     [Theory]
     [InlineData(1)]

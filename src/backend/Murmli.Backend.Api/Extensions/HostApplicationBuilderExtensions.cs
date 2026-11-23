@@ -63,6 +63,7 @@ public static class HostApplicationBuilderExtensions
         builder.AddSync();
         builder.Services.AddSingleton<SyncRateLimiter>();
         builder.Services.AddHostedService<SyncCleanupService>();
+        builder.Services.AddSyncCleanupContributor<StaleAccountDeletionContributor>();
         builder.Services.AddScoped<UserRegistry>();
         builder.Services.AddScoped<ProductSearch>();
     }
