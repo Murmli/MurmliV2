@@ -216,6 +216,35 @@ namespace Murmli.Backend.Data.Migrations
                     b.ToTable("product_import_runs", "products");
                 });
 
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.CleanupLease", b =>
+                {
+                    b.Property<bool>("Singleton")
+                        .HasColumnType("boolean")
+                        .HasColumnName("singleton");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid?>("Holder")
+                        .HasColumnType("uuid")
+                        .HasColumnName("holder");
+
+                    b.HasKey("Singleton")
+                        .HasName("pk_cleanup_lease");
+
+                    b.ToTable("cleanup_lease", "sync", t =>
+                        {
+                            t.HasCheckConstraint("ck_cleanup_lease_singleton", "singleton");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Singleton = true
+                        });
+                });
+
             modelBuilder.Entity("Murmli.Backend.Data.Sync.DatabaseIdentity", b =>
                 {
                     b.Property<bool>("Singleton")
