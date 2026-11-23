@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
 using Murmli.Backend.Api.Database;
+using Murmli.Backend.Api.Diagnostics;
 using Murmli.Backend.Api.Problems;
 using Murmli.Backend.Api.Users;
 using Murmli.Backend.Sync.Configuration;
@@ -31,29 +32,34 @@ internal static class SyncEndpoints
         [FromHeader(Name = DeviceIdHeader)] string? deviceId,
         [FromServices] SyncProcessor processor,
         [FromServices] SyncRateLimiter rateLimiter,
+        [FromServices] ApiTelemetry telemetry,
         [FromServices] IOptions<SyncOptions> syncOptions,
         [FromServices] IOptions<DatabaseOptions> databaseOptions
     )
     {
         if (httpContext.Features.Get<AccountFeature>() is not { IsBeingDeleted: false } account)
         {
-            return Problem(StatusCodes.Status410Gone, ProblemTypes.AccountGone);
+            return Rejected(telemetry, SyncRequestRejection.AccountGone, Problem(StatusCodes.Status410Gone, ProblemTypes.AccountGone));
         }
 
         // Routing already answered a present non-JSON Content-Type, only a missing one gets here
         if (!httpContext.Request.HasJsonContentType())
         {
-            return Problem(StatusCodes.Status415UnsupportedMediaType, ProblemTypes.InvalidRequest);
+            return Rejected(
+                telemetry,
+                SyncRequestRejection.InvalidRequest,
+                Problem(StatusCodes.Status415UnsupportedMediaType, ProblemTypes.InvalidRequest)
+            );
         }
 
         if (!Guid.TryParseExact(deviceId, "D", out var device) || device.Version != 4)
         {
-            return Problem(StatusCodes.Status400BadRequest, ProblemTypes.InvalidRequest);
+            return Rejected(telemetry, SyncRequestRejection.InvalidRequest, Problem(StatusCodes.Status400BadRequest, ProblemTypes.InvalidRequest));
         }
 
-        if (!rateLimiter.TryAcquireRequest(account.AccountId, device, out var requestRetryAfter))
+        if (!rateLimiter.TryAcquireRequest(account.AccountId, device, out var requestRetryAfter, out var requestRejection))
         {
-            return new RateLimitedProblem(requestRetryAfter);
+            return Rejected(telemetry, requestRejection, new RateLimitedProblem(requestRetryAfter));
         }
 
         var options = syncOptions.Value;
@@ -68,22 +74,22 @@ internal static class SyncEndpoints
         }
         catch (BadHttpRequestException exception) when (exception.StatusCode == StatusCodes.Status413PayloadTooLarge)
         {
-            return RequestTooLarge(options);
+            return Rejected(telemetry, SyncRequestRejection.RequestTooLarge, RequestTooLarge(options));
         }
         catch (Exception exception) when (exception is BadHttpRequestException or JsonException)
         {
-            return Problem(StatusCodes.Status400BadRequest, ProblemTypes.InvalidRequest);
+            return Rejected(telemetry, SyncRequestRejection.InvalidRequest, Problem(StatusCodes.Status400BadRequest, ProblemTypes.InvalidRequest));
         }
 
         // The web defaults do not enforce nullable annotations
         if (request?.DataTypes is null || request.Commands is null || request.DataTypes.Any(dataType => dataType is null))
         {
-            return Problem(StatusCodes.Status400BadRequest, ProblemTypes.InvalidRequest);
+            return Rejected(telemetry, SyncRequestRejection.InvalidRequest, Problem(StatusCodes.Status400BadRequest, ProblemTypes.InvalidRequest));
         }
 
         if (request.Commands.Count > options.MaxCommandsPerRequest)
         {
-            return RequestTooLarge(options);
+            return Rejected(telemetry, SyncRequestRejection.RequestTooLarge, RequestTooLarge(options));
         }
 
         if (
@@ -91,7 +97,7 @@ internal static class SyncEndpoints
             && !rateLimiter.TryAcquireCommands(account.AccountId, request.Commands.Count, out var commandRetryAfter)
         )
         {
-            return new RateLimitedProblem(commandRetryAfter);
+            return Rejected(telemetry, SyncRequestRejection.RateLimitedCommands, new RateLimitedProblem(commandRetryAfter));
         }
 
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(httpContext.RequestAborted);
@@ -108,14 +114,22 @@ internal static class SyncEndpoints
         }
         catch (OperationCanceledException) when (deadline.IsCancellationRequested && !httpContext.RequestAborted.IsCancellationRequested)
         {
-            return new ServiceUnavailableProblem(databaseOptions.Value.UnavailableRetryAfter);
+            return Rejected(
+                telemetry,
+                SyncRequestRejection.ServiceUnavailable,
+                new ServiceUnavailableProblem(databaseOptions.Value.UnavailableRetryAfter)
+            );
         }
 
         return outcome switch
         {
             SyncOutcome.Completed completed => new SyncResponseResult(completed.Body, completed.Encoding),
-            SyncOutcome.AccountGone => Problem(StatusCodes.Status410Gone, ProblemTypes.AccountGone),
-            SyncOutcome.DatabaseUnavailable => new ServiceUnavailableProblem(databaseOptions.Value.UnavailableRetryAfter),
+            SyncOutcome.AccountGone => Rejected(telemetry, SyncRequestRejection.AccountGone, Problem(StatusCodes.Status410Gone, ProblemTypes.AccountGone)),
+            SyncOutcome.DatabaseUnavailable => Rejected(
+                telemetry,
+                SyncRequestRejection.ServiceUnavailable,
+                new ServiceUnavailableProblem(databaseOptions.Value.UnavailableRetryAfter)
+            ),
             _ => throw new UnreachableException(),
         };
     }
@@ -127,6 +141,12 @@ internal static class SyncEndpoints
         && gzip.Quality.GetValueOrDefault(1) > 0
             ? SyncResponseEncoding.Gzip
             : SyncResponseEncoding.Identity;
+
+    private static IResult Rejected(ApiTelemetry telemetry, string rejection, IResult result)
+    {
+        telemetry.RecordSyncRequestRejected(rejection);
+        return result;
+    }
 
     private static ProblemHttpResult Problem(int statusCode, string type) => TypedResults.Problem(statusCode: statusCode, type: type);
 

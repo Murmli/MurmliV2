@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Options;
+using Murmli.Backend.Api.Diagnostics;
 using Murmli.Backend.Sync.Configuration;
 
 namespace Murmli.Backend.Api.Sync;
@@ -31,10 +33,15 @@ internal sealed class SyncRateLimiter : IDisposable
         );
     }
 
-    public bool TryAcquireRequest(Guid accountId, Guid deviceId, out TimeSpan retryAfter) =>
-        TryAcquire(accountRequests, accountId, permitCount: 0, out retryAfter)
-        && TryAcquire(deviceRequests, $"{accountId:N}{deviceId:N}", permitCount: 1, out retryAfter)
-        && TryAcquire(accountRequests, accountId, permitCount: 1, out retryAfter);
+    public bool TryAcquireRequest(Guid accountId, Guid deviceId, out TimeSpan retryAfter, [NotNullWhen(false)] out string? rejection)
+    {
+        rejection =
+            !TryAcquire(accountRequests, accountId, permitCount: 0, out retryAfter) ? SyncRequestRejection.RateLimitedAccount
+            : !TryAcquire(deviceRequests, $"{accountId:N}{deviceId:N}", permitCount: 1, out retryAfter) ? SyncRequestRejection.RateLimitedDevice
+            : !TryAcquire(accountRequests, accountId, permitCount: 1, out retryAfter) ? SyncRequestRejection.RateLimitedAccount
+            : null;
+        return rejection is null;
+    }
 
     public bool TryAcquireCommands(Guid accountId, int commandCount, out TimeSpan retryAfter) =>
         TryAcquire(accountCommands, accountId, commandCount, out retryAfter);

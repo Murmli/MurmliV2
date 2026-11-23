@@ -21,7 +21,9 @@ using Murmli.Backend.Sync.Cleanup;
 using Murmli.Backend.Sync.Extensions;
 using Murmli.Backend.Sync.Writing;
 using Murmli.Backend.Telemetry.Extensions;
+using OpenTelemetry;
 using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
 namespace Murmli.Backend.Api.Tests.Infrastructure;
@@ -66,7 +68,8 @@ internal sealed class ApiHost : IAsyncDisposable
         bool waitingCleanupContributor = false,
         bool testCleanupContributors = false,
         ICollection<SyncCleanupContext>? cleanupContexts = null,
-        bool invalidBootstrapContributor = false
+        bool invalidBootstrapContributor = false,
+        ICollection<MetricSnapshot>? metricSnapshots = null
     )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -129,6 +132,14 @@ internal sealed class ApiHost : IAsyncDisposable
         if (logRecords is not null)
         {
             builder.Services.ConfigureOpenTelemetryLoggerProvider(logging => logging.AddInMemoryExporter(logRecords));
+        }
+
+        if (metricSnapshots is not null)
+        {
+            // Delta temporality: every export holds only the measurements since the previous one, so FlushMetrics separates setup from the measured requests
+            builder.Services.ConfigureOpenTelemetryMeterProvider(metrics =>
+                metrics.AddInMemoryExporter(metricSnapshots, reader => reader.TemporalityPreference = MetricReaderTemporalityPreference.Delta)
+            );
         }
 
         // Npgsql only writes UTC values to timestamp with time zone
@@ -199,6 +210,8 @@ internal sealed class ApiHost : IAsyncDisposable
         await using var scope = application.Services.CreateAsyncScope();
         return await query(scope.ServiceProvider.GetRequiredService<MurmliDbContext>());
     }
+
+    public void FlushMetrics() => Assert.True(Services.GetRequiredService<MeterProvider>().ForceFlush());
 
     public async ValueTask DisposeAsync()
     {

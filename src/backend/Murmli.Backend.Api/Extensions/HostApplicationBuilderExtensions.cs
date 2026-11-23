@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Murmli.Backend.Api.AuthService;
 using Murmli.Backend.Api.Database;
+using Murmli.Backend.Api.Diagnostics;
 using Murmli.Backend.Api.Products;
 using Murmli.Backend.Api.ShoppingLists;
 using Murmli.Backend.Api.Sync;
@@ -70,6 +71,7 @@ public static class HostApplicationBuilderExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
         builder.Services.AddSingleton<SyncRateLimiter>();
+        builder.Services.AddSingleton<ApiTelemetry>();
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddSyncCleanupContributor<StaleAccountDeletionContributor>();
         builder.Services.AddSyncCleanupContributor<CheckedItemsCleanupContributor>();
