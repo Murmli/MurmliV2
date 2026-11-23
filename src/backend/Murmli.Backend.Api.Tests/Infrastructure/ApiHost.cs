@@ -76,6 +76,7 @@ internal sealed class ApiHost : IAsyncDisposable
                 ["Authentication:Schemes:Bearer:SigningKeys:0:Value"] = TestTokens.SigningKeyBase64,
                 ["AuthService:BaseAddress"] = "http://auth.test",
                 ["AuthService:Key"] = AuthServiceKey,
+                ["Sync:Cleanup:Enabled"] = "false",
             }
         );
         builder.Configuration.AddInMemoryCollection(additionalConfiguration);

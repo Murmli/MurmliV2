@@ -29,7 +29,7 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
             {
                 return await RunOnceAsync(input, cancellationToken);
             }
-            catch (SyncCreateRaceException)
+            catch (Exception exception) when (exception is SyncCreateRaceException or SyncClaimRaceException)
             {
                 return await RunOnceAsync(input, cancellationToken);
             }
@@ -163,6 +163,7 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
 
     private async Task<SyncCommandOutcome> ReadAlreadyProcessedAsync(ProcessedSyncCommand processedCommand, CancellationToken cancellationToken)
     {
+        // ON CONFLICT DO NOTHING locks no row, so the cleanup or an account deletion can remove it before this read
         var stored = await context
             .Set<ProcessedSyncCommand>()
             .Where(command => command.AccountId == processedCommand.AccountId && command.CommandId == processedCommand.CommandId)
@@ -176,7 +177,7 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
                 command.DataType,
                 command.RecordId,
             })
-            .SingleAsync(cancellationToken);
+            .SingleOrDefaultAsync(cancellationToken) ?? throw new SyncClaimRaceException();
         var status = stored.Status ?? throw new InvalidOperationException("A processed sync command has no stored result.");
         return new SyncCommandOutcome(
             processedCommand.CommandId,

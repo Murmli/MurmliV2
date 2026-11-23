@@ -56,6 +56,13 @@ internal sealed class SyncConfigurationValidator(IEnumerable<SyncDataType> dataT
             }
         }
 
+        if (options.Cleanup.SafetyMargin < options.ClockAheadTolerance + options.RequestDeadline)
+        {
+            errors.Add(
+                $"{SyncOptions.SectionName}:Cleanup:SafetyMargin must be at least {SyncOptions.SectionName}:ClockAheadTolerance plus {SyncOptions.SectionName}:RequestDeadline."
+            );
+        }
+
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
     }
 

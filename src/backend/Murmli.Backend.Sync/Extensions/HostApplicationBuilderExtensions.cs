@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Murmli.Backend.Sync.Accounts;
+using Murmli.Backend.Sync.Cleanup;
 using Murmli.Backend.Sync.Configuration;
 using Murmli.Backend.Sync.DataTypes;
 using Murmli.Backend.Sync.Processing;
@@ -28,6 +29,7 @@ public static class HostApplicationBuilderExtensions
         builder.Services.AddScoped<SyncCommandUnit>();
         builder.Services.AddScoped<SyncAccountLifecycle>();
         builder.Services.AddScoped<SyncChangeReader>();
+        builder.Services.AddSingleton<SyncCleanupRunner>();
         builder.Services.AddScoped(provider => new SyncProcessor(
             provider.GetRequiredService<SyncDataTypeRegistry>(),
             provider.GetRequiredService<SyncCommandParser>(),

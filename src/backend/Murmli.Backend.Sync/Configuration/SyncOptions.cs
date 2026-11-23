@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.IO.Compression;
+using Microsoft.Extensions.Options;
 
 namespace Murmli.Backend.Sync.Configuration;
 
@@ -35,4 +36,7 @@ public sealed class SyncOptions
     public CompressionLevel FullStateCompressionLevel { get; set; } = CompressionLevel.Fastest;
 
     public Dictionary<string, SyncDataTypeOptions> DataTypes { get; set; } = [];
+
+    [ValidateObjectMembers]
+    public SyncCleanupOptions Cleanup { get; set; } = new();
 }
