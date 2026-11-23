@@ -124,7 +124,7 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         var now = fixture.Api.TimeProvider.GetUtcNow();
         var boardId = Guid.NewGuid();
         var cardId = Guid.NewGuid();
-        await ApplyAsync(owner, owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        await owner.ApplyAllAsync(owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
         var ownerMemberId = await ReadOwnerMemberIdAsync(boardId);
         var member = await SyncTestDevice.SignInAsync(fixture.Api);
         var memberId = await new DatabaseAdministration(fixture.ConnectionString).InsertMemberEntryAsync(
@@ -174,7 +174,7 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
     {
         var owner = await SyncTestDevice.SignInAsync(fixture.Api);
         var boardId = Guid.NewGuid();
-        await ApplyAsync(owner, owner.CreateBoard(boardId, fixture.Api.TimeProvider.GetUtcNow(), "board"));
+        await owner.ApplyAllAsync(owner.CreateBoard(boardId, fixture.Api.TimeProvider.GetUtcNow(), "board"));
         var ownerBoardEntry = Assert.Single(SyncTokenFormat.Decode(owner.Token!).Scopes, tokenScope => tokenScope.ScopeId == boardId);
         var other = await SyncTestDevice.SignInAsync(fixture.Api, firstSync: false);
 
@@ -200,7 +200,7 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
     {
         var device = await SyncTestDevice.SignInAsync(fixture.Api);
         var boardId = Guid.NewGuid();
-        await ApplyAsync(device, device.CreateBoard(boardId, fixture.Api.TimeProvider.GetUtcNow(), "board"));
+        await device.ApplyAllAsync(device.CreateBoard(boardId, fixture.Api.TimeProvider.GetUtcNow(), "board"));
 
         var notesOnly = await device.SyncAsync();
         var notesOnlyUnchanged = await device.SyncAsync();
@@ -260,7 +260,7 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         var boardId = Guid.NewGuid();
         var cardId = Guid.NewGuid();
         var noteId = Guid.NewGuid();
-        await ApplyAsync(owner, owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        await owner.ApplyAllAsync(owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
         var sender = scenario == "noteInForeignBoard" ? await SyncTestDevice.SignInAsync(fixture.Api) : owner;
         var command = scenario switch
         {
@@ -284,7 +284,7 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         var now = fixture.Api.TimeProvider.GetUtcNow();
         var boardSortingBeforePersonalScope = new Guid($"00000000{Guid.NewGuid().ToString()[8..]}");
         Guid[] boardIds = [boardSortingBeforePersonalScope, Guid.NewGuid(), Guid.NewGuid()];
-        await ApplyAsync(device, [.. boardIds.Select(boardId => device.CreateBoard(boardId, now, "board"))]);
+        await device.ApplyAllAsync([.. boardIds.Select(boardId => device.CreateBoard(boardId, now, "board"))]);
 
         var response = await device.OtherDevice().SyncAllAsync();
 
@@ -431,13 +431,13 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         var owner = await SyncTestDevice.SignInAsync(fixture.Api);
         var now = fixture.Api.TimeProvider.GetUtcNow();
         var boardId = Guid.NewGuid();
-        await ApplyAsync(owner, owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        await owner.ApplyAllAsync(owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
         var member = await SyncTestDevice.SignInAsync(fixture.Api);
         await JoinAsync(member, boardId, now);
-        await ApplyAsync(member, member.SetBoardTitle(boardId, now.AddSeconds(-10), "renamed"));
+        await member.ApplyAllAsync(member.SetBoardTitle(boardId, now.AddSeconds(-10), "renamed"));
         var memberDelete = member.DeleteBoard(boardId, now);
         var memberDeleteResponse = await member.SyncAllAsync(memberDelete);
-        await ApplyAsync(owner, owner.DeleteBoard(boardId, now));
+        await owner.ApplyAllAsync(owner.DeleteBoard(boardId, now));
 
         var response = await member.SyncAllAsync();
 
@@ -456,8 +456,8 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         var tokenBeforeBoard = device.Token;
         var now = fixture.Api.TimeProvider.GetUtcNow();
         var boardId = Guid.NewGuid();
-        await ApplyAsync(device, device.CreateBoard(boardId, now.AddSeconds(-30), "board"));
-        await ApplyAsync(device, device.DeleteBoard(boardId, now));
+        await device.ApplyAllAsync(device.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        await device.ApplyAllAsync(device.DeleteBoard(boardId, now));
         var otherDevice = device.OtherDevice();
         otherDevice.Token = tokenBeforeBoard;
         var create = otherDevice.CreateCard(boardId, Guid.NewGuid(), now, "late");
@@ -496,13 +496,13 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         var now = fixture.Api.TimeProvider.GetUtcNow();
         var boardId = Guid.NewGuid();
         var cardId = Guid.NewGuid();
-        await ApplyAsync(device, device.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        await device.ApplyAllAsync(device.CreateBoard(boardId, now.AddSeconds(-30), "board"));
         var ownerMemberId = await ReadOwnerMemberIdAsync(boardId);
         var value = field == "createdAt" ? JsonValue.Create(now.ToUnixTimeMilliseconds()) : JsonValue.Create(ownerMemberId);
         JsonObject command;
         if (kind == "setFields")
         {
-            await ApplyAsync(device, device.CreateCard(boardId, cardId, now.AddSeconds(-20), "milk"));
+            await device.ApplyAllAsync(device.CreateCard(boardId, cardId, now.AddSeconds(-20), "milk"));
             command = device.SetCardFields(boardId, cardId, now, new JsonObject { ["text"] = "changed", [field] = value });
         }
         else
@@ -524,7 +524,7 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         var now = fixture.Api.TimeProvider.GetUtcNow();
         var boardId = Guid.NewGuid();
         var cardId = Guid.NewGuid();
-        await ApplyAsync(device, device.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        await device.ApplyAllAsync(device.CreateBoard(boardId, now.AddSeconds(-30), "board"));
         var ownerMemberId = await ReadOwnerMemberIdAsync(boardId);
         var createdAt = now.AddSeconds(-10);
         var create = device.CreateCard(boardId, cardId, createdAt, "milk");
@@ -552,17 +552,17 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         var now = fixture.Api.TimeProvider.GetUtcNow();
         var boardId = Guid.NewGuid();
         var cardId = Guid.NewGuid();
-        await ApplyAsync(owner, owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
-        await ApplyAsync(owner, owner.CreateCard(boardId, cardId, now.AddSeconds(-10), "milk"));
+        await owner.ApplyAllAsync(owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        await owner.ApplyAllAsync(owner.CreateCard(boardId, cardId, now.AddSeconds(-10), "milk"));
         var ownerMemberId = await ReadOwnerMemberIdAsync(boardId);
         var member = await SyncTestDevice.SignInAsync(fixture.Api);
         var memberId = await JoinAsync(member, boardId, now);
 
-        await ApplyAsync(member, member.SetCardFields(boardId, cardId, now.AddSeconds(-5), new JsonObject { ["done"] = true }));
+        await member.ApplyAllAsync(member.SetCardFields(boardId, cardId, now.AddSeconds(-5), new JsonObject { ["done"] = true }));
         var afterDone = await SharedScopeQueries.ReadCardAsync(fixture.Api, cardId);
-        await ApplyAsync(owner, owner.SetCardFields(boardId, cardId, now.AddSeconds(-4), new JsonObject { ["text"] = "oat milk" }));
+        await owner.ApplyAllAsync(owner.SetCardFields(boardId, cardId, now.AddSeconds(-4), new JsonObject { ["text"] = "oat milk" }));
         var afterText = await SharedScopeQueries.ReadCardAsync(fixture.Api, cardId);
-        await ApplyAsync(member, member.SetCardFields(boardId, cardId, now.AddSeconds(-3), new JsonObject { ["done"] = false }));
+        await member.ApplyAllAsync(member.SetCardFields(boardId, cardId, now.AddSeconds(-3), new JsonObject { ["done"] = false }));
         var afterUndone = await SharedScopeQueries.ReadCardAsync(fixture.Api, cardId);
 
         var createdAt = now.AddSeconds(-10);
@@ -591,7 +591,7 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         var creatorBeforeChange = (await SharedScopeQueries.ReadCardAsync(fixture.Api, cardId))?.CreatedByMemberId;
         var member = await SyncTestDevice.SignInAsync(fixture.Api);
         var memberId = await JoinAsync(member, boardId, now);
-        await ApplyAsync(member, member.SetCardFields(boardId, cardId, now.AddSeconds(-10), new JsonObject { ["text"] = "changed" }));
+        await member.ApplyAllAsync(member.SetCardFields(boardId, cardId, now.AddSeconds(-10), new JsonObject { ["text"] = "changed" }));
         var otherDevice = owner.OtherDevice();
 
         var otherDeviceResponse = await otherDevice.SyncAllAsync();
@@ -612,8 +612,8 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         var now = fixture.Api.TimeProvider.GetUtcNow();
         var boardId = Guid.NewGuid();
         var cardId = Guid.NewGuid();
-        await ApplyAsync(owner, owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
-        await ApplyAsync(owner, owner.CreateCard(boardId, cardId, now.AddSeconds(-10), "milk"));
+        await owner.ApplyAllAsync(owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        await owner.ApplyAllAsync(owner.CreateCard(boardId, cardId, now.AddSeconds(-10), "milk"));
         var ownerMemberId = await ReadOwnerMemberIdAsync(boardId);
         var member = await SyncTestDevice.SignInAsync(fixture.Api);
         var memberId = await JoinAsync(member, boardId, now);
@@ -638,16 +638,15 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         var now = fixture.Api.TimeProvider.GetUtcNow();
         var boardId = Guid.NewGuid();
         Guid[] cardIds = [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()];
-        await ApplyAsync(owner, owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
-        await ApplyAsync(
-            owner,
+        await owner.ApplyAllAsync(owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        await owner.ApplyAllAsync(
             owner.CreateCard(boardId, cardIds[0], now.AddSeconds(-20), "milk"),
             owner.CreateCard(boardId, cardIds[1], now.AddSeconds(-20), "bread"),
             owner.SetCardFields(boardId, cardIds[1], now.AddSeconds(-15), new JsonObject { ["done"] = true })
         );
         var member = await SyncTestDevice.SignInAsync(fixture.Api);
         await JoinAsync(member, boardId, now);
-        await ApplyAsync(member, member.CreateCard(boardId, cardIds[2], now.AddSeconds(-10), "butter"));
+        await member.ApplyAllAsync(member.CreateCard(boardId, cardIds[2], now.AddSeconds(-10), "butter"));
         var delete = owner.DeleteBoard(boardId, now);
 
         var response = await owner.SyncAllAsync(delete);
@@ -673,13 +672,13 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         await CreateBoardWithCardAsync(owner, boardId, cardId, now);
         var member = await SyncTestDevice.SignInAsync(fixture.Api);
         await JoinAsync(member, boardId, now);
-        await ApplyAsync(member, member.SetCardFields(boardId, cardId, now.AddSeconds(-10), new JsonObject { ["text"] = "changed" }));
+        await member.ApplyAllAsync(member.SetCardFields(boardId, cardId, now.AddSeconds(-10), new JsonObject { ["text"] = "changed" }));
         await owner.SyncAllAsync();
-        await ApplyAsync(owner, owner.DeleteCard(boardId, cardId, now));
+        await owner.ApplyAllAsync(owner.DeleteCard(boardId, cardId, now));
         await member.SyncAllAsync();
         var otherMemberDevice = member.OtherDevice();
         await otherMemberDevice.SyncAllAsync();
-        await ApplyAsync(owner, owner.DeleteBoard(boardId, now));
+        await owner.ApplyAllAsync(owner.DeleteBoard(boardId, now));
 
         await member.SyncAllAsync();
 
@@ -705,18 +704,18 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         var now = fixture.Api.TimeProvider.GetUtcNow();
         var foreignBoardId = Guid.NewGuid();
         var cardId = Guid.NewGuid();
-        await ApplyAsync(owner, owner.CreateBoard(foreignBoardId, now.AddSeconds(-30), "board"));
-        await ApplyAsync(owner, owner.CreateCard(foreignBoardId, cardId, now.AddSeconds(-20), "secret"));
+        await owner.ApplyAllAsync(owner.CreateBoard(foreignBoardId, now.AddSeconds(-30), "board"));
+        await owner.ApplyAllAsync(owner.CreateCard(foreignBoardId, cardId, now.AddSeconds(-20), "secret"));
         var ownerMemberId = await ReadOwnerMemberIdAsync(foreignBoardId);
         var isTombstoned = scenario == "tombstonedRecord";
         if (isTombstoned)
         {
-            await ApplyAsync(owner, owner.DeleteCard(foreignBoardId, cardId, now.AddSeconds(-10)));
+            await owner.ApplyAllAsync(owner.DeleteCard(foreignBoardId, cardId, now.AddSeconds(-10)));
         }
 
         var other = await SyncTestDevice.SignInAsync(fixture.Api);
         var ownBoardId = Guid.NewGuid();
-        await ApplyAsync(other, other.CreateBoard(ownBoardId, now.AddSeconds(-30), "board"));
+        await other.ApplyAllAsync(other.CreateBoard(ownBoardId, now.AddSeconds(-30), "board"));
         var command = scenario switch
         {
             "liveRecord" => other.SetCardFields(ownBoardId, cardId, now, new JsonObject { ["text"] = "x" }),
@@ -766,16 +765,10 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         Assert.Equal(((Guid?)devices[winner].AccountId, "owner"), (entry.AccountId, entry.Role));
     }
 
-    private static async Task ApplyAsync(SyncTestDevice device, params JsonObject[] commands)
-    {
-        var response = await device.SyncAllAsync(commands);
-        Assert.Equal(commands.Select(command => new SyncCommandResult(SyncTestCommands.GetId(command), "applied")), response.Results);
-    }
-
     private static async Task CreateBoardWithCardAsync(SyncTestDevice owner, Guid boardId, Guid cardId, DateTimeOffset now)
     {
-        await ApplyAsync(owner, owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
-        await ApplyAsync(owner, owner.CreateCard(boardId, cardId, now.AddSeconds(-20), "milk"));
+        await owner.ApplyAllAsync(owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        await owner.ApplyAllAsync(owner.CreateCard(boardId, cardId, now.AddSeconds(-20), "milk"));
     }
 
     private async Task<Guid> ReadOwnerMemberIdAsync(Guid boardId) =>

@@ -317,53 +317,116 @@ public class SyncEndpointsChangeTests(SyncApiFixture fixture) : IClassFixture<Sy
         Assert.Equal(expectedDeletions, block.DeletedRecords);
     }
 
-    [Fact]
-    public async Task Sync_ManyWritersAndContinuousReader_ReaderMissesNoChange()
+    [Theory]
+    [InlineData(4, false)]
+    [InlineData(5, true)]
+    public async Task Sync_DeletionsAboveThreshold_OtherMemberGetsFullState(int deletions, bool expectedFullState)
+    {
+        const int cardLimit = 3;
+        var connectionString = fixture.CreateDatabaseConnectionString();
+        await using var api = await ApiHost.StartAsync(
+            connectionString,
+            new Dictionary<string, string?> { ["Sync:DataTypes:testCard:MaxRecordsPerScope"] = $"{cardLimit}" },
+            testDataTypes: true
+        );
+        var owner = await SyncTestDevice.SignInAsync(api);
+        var now = api.TimeProvider.GetUtcNow();
+        var boardId = Guid.NewGuid();
+        await owner.ApplyAllAsync(owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        var member = await SyncTestDevice.SignInAsync(api);
+        await new DatabaseAdministration(connectionString).InsertMemberEntryAsync(boardId, member.AccountId, now.AddMilliseconds(1));
+        await member.SyncAllAsync();
+        var cardIds = Enumerable.Range(0, deletions).Select(_ => Guid.NewGuid()).ToArray();
+        foreach (var chunk in cardIds.Chunk(cardLimit))
+        {
+            await owner.ApplyAllAsync([
+                .. chunk.Select(cardId => owner.CreateCard(boardId, cardId, now, "card")),
+                .. chunk.Select(cardId => owner.DeleteCard(boardId, cardId, now)),
+            ]);
+        }
+
+        var response = await member.SyncAllAsync();
+
+        var block = Assert.Single(response.Scopes, block => block.ScopeId == boardId);
+        Assert.Equal(expectedFullState, block.FullState);
+        Guid[] expectedRecordIds = expectedFullState ? [boardId] : [];
+        Assert.Equal(expectedRecordIds, block.Records.Select(record => record.Id));
+        IEnumerable<SyncDeletedRecord> expectedDeletions = expectedFullState
+            ? []
+            : cardIds.Select(cardId => new SyncDeletedRecord(TestCardType.DataTypeName, cardId));
+        Assert.Equal(expectedDeletions, block.DeletedRecords);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Sync_ManyWritersAndContinuousReader_ReaderMissesNoChange(bool sharedScope)
     {
         var reader = await SyncTestDevice.SignInAsync(fixture.Api);
         var now = fixture.Api.TimeProvider.GetUtcNow();
         var readerCopy = new Dictionary<Guid, JsonElement>();
+        var scopeId = reader.PersonalScopeId;
+        if (sharedScope)
+        {
+            scopeId = Guid.NewGuid();
+            Apply(readerCopy, await reader.SyncAllAsync(reader.CreateBoard(scopeId, now, "board")), scopeId);
+        }
 
-        var writing = Task.WhenAll(Enumerable.Range(0, 10).Select(_ => WriteRoundsAsync(reader.OtherDevice(), now)));
+        var writing = Task.WhenAll(Enumerable.Range(0, 10).Select(_ => WriteRoundsAsync(reader.OtherDevice(), now, scopeId)));
         while (!writing.IsCompleted)
         {
-            Apply(readerCopy, await reader.SyncAsync());
+            Apply(readerCopy, await ReadAsync(reader), scopeId);
         }
 
         await writing;
-        Apply(readerCopy, await reader.SyncAsync());
+        Apply(readerCopy, await ReadAsync(reader), scopeId);
 
-        var expectedRecords = Assert.Single((await reader.OtherDevice().SyncAsync()).Scopes).Records;
+        var expectedRecords = Assert.Single((await ReadAsync(reader.OtherDevice())).Scopes, block => block.ScopeId == scopeId).Records;
         Assert.Equal(expectedRecords.Select(record => record.Id).Order(), readerCopy.Keys.Order());
         Assert.All(expectedRecords, record => Assert.True(JsonElement.DeepEquals(record.Fields, readerCopy[record.Id])));
+
+        Task<SyncResponse> ReadAsync(SyncTestDevice device) => sharedScope ? device.SyncAllAsync() : device.SyncAsync();
     }
 
-    private static async Task WriteRoundsAsync(SyncTestDevice writer, DateTimeOffset now)
+    private static async Task WriteRoundsAsync(SyncTestDevice writer, DateTimeOffset now, Guid scopeId)
     {
-        var noteIds = new List<Guid>();
+        var isPersonalScope = scopeId == writer.PersonalScopeId;
+        var recordIds = new List<Guid>();
         for (var round = 1; round <= 4; round++)
         {
-            var noteId = Guid.NewGuid();
-            List<JsonObject> commands = [writer.CreateNote(noteId, now, $"note of round {round}")];
-            if (noteIds.Count > 0)
+            var recordId = Guid.NewGuid();
+            List<JsonObject> commands =
+            [
+                isPersonalScope
+                    ? writer.CreateNote(recordId, now, $"note of round {round}")
+                    : writer.CreateCard(scopeId, recordId, now, $"card of round {round}"),
+            ];
+            if (recordIds.Count > 0)
             {
-                commands.Add(writer.SetNoteFields(noteIds[^1], now, SyncTestCommands.TitleFields($"changed in round {round}")));
+                var changedText = $"changed in round {round}";
+                commands.Add(
+                    isPersonalScope
+                        ? writer.SetNoteFields(recordIds[^1], now, SyncTestCommands.TitleFields(changedText))
+                        : writer.SetCardFields(scopeId, recordIds[^1], now, new JsonObject { ["text"] = changedText })
+                );
             }
 
             if (round == 3)
             {
-                commands.Add(writer.DeleteNote(noteIds[0], now));
+                commands.Add(isPersonalScope ? writer.DeleteNote(recordIds[0], now) : writer.DeleteCard(scopeId, recordIds[0], now));
             }
 
-            noteIds.Add(noteId);
-            var response = await writer.SyncAsync([.. commands]);
+            recordIds.Add(recordId);
+            var response = isPersonalScope
+                ? await writer.SyncAsync([.. commands])
+                : await writer.SyncAsync(SyncTestDevice.AllDataTypes, [.. commands]);
             Assert.All(response.Results, result => Assert.Equal("applied", result.Status));
         }
     }
 
-    private static void Apply(Dictionary<Guid, JsonElement> copy, SyncResponse response)
+    private static void Apply(Dictionary<Guid, JsonElement> copy, SyncResponse response, Guid scopeId)
     {
-        foreach (var block in response.Scopes)
+        foreach (var block in response.Scopes.Where(block => block.ScopeId == scopeId))
         {
             if (block.FullState)
             {

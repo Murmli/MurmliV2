@@ -5,6 +5,8 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Murmli.Backend.Api.Tests.Infrastructure;
 using Murmli.Backend.Data.Identity;
+using Murmli.Backend.Data.Sync;
+using Murmli.Backend.Sync.Protocol;
 
 namespace Murmli.Backend.Api.Tests.Users;
 
@@ -104,6 +106,59 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
         Assert.Equal(
             new Dictionary<string, string> { ["userId"] = authUserId },
             JsonSerializer.Deserialize<Dictionary<string, string>>(request.Body, JsonSerializerOptions.Web)
+        );
+    }
+
+    [Fact]
+    public async Task DeleteMe_WithOwnedSharedScopeAndForeignMembership_DeletesOwnScopesAndDetachesForeignEntry()
+    {
+        await using var api = await ApiHost.StartAsync(connectionString, testDataTypes: true);
+        var now = api.TimeProvider.GetUtcNow();
+        var deletedUser = await SyncTestDevice.SignInAsync(api);
+        var otherUser = await SyncTestDevice.SignInAsync(api);
+        var ownBoardId = Guid.NewGuid();
+        var cardId = Guid.NewGuid();
+        var foreignBoardId = Guid.NewGuid();
+        await deletedUser.ApplyAllAsync(deletedUser.CreateBoard(ownBoardId, now.AddSeconds(-30), "board"));
+        await deletedUser.ApplyAllAsync(deletedUser.CreateCard(ownBoardId, cardId, now.AddSeconds(-20), "milk"));
+        await otherUser.ApplyAllAsync(otherUser.CreateBoard(foreignBoardId, now.AddSeconds(-30), "board"));
+        var otherOwnerEntryId = Assert.Single(await SharedScopeQueries.ReadMemberEntriesAsync(api, foreignBoardId)).Id;
+        var administration = new DatabaseAdministration(connectionString);
+        await administration.InsertMemberEntryAsync(ownBoardId, otherUser.AccountId, now.AddMilliseconds(1));
+        var deletedUserEntryId = await administration.InsertMemberEntryAsync(foreignBoardId, deletedUser.AccountId, now.AddMilliseconds(1));
+
+        var statusCode = await DeleteMeAsync(api, TestTokens.Create(deletedUser.AuthUserId));
+
+        Assert.Equal(HttpStatusCode.NoContent, statusCode);
+        Assert.Equal(otherUser.AccountId, Assert.Single(await ReadUsersAsync(api)).Id);
+        Assert.False(
+            await api.QueryDatabaseAsync(context =>
+                context
+                    .Set<SyncScope>()
+                    .AnyAsync(scope => scope.OwnerAccountId == deletedUser.AccountId, TestContext.Current.CancellationToken)
+            )
+        );
+        Assert.Empty(await SharedScopeQueries.ReadMemberEntriesAsync(api, ownBoardId));
+        Assert.Null(await SharedScopeQueries.ReadCardAsync(api, cardId));
+        Assert.NotNull(await SharedScopeQueries.ReadScopeAsync(api, foreignBoardId));
+        Assert.Equal(
+            new (Guid, Guid?, string, SyncMemberState)[]
+            {
+                (otherOwnerEntryId, otherUser.AccountId, "owner", SyncMemberState.Active),
+                (deletedUserEntryId, null, "member", SyncMemberState.Active),
+            },
+            (await SharedScopeQueries.ReadMemberEntriesAsync(api, foreignBoardId)).Select(entry =>
+                (entry.Id, entry.AccountId, entry.Role, entry.State)
+            )
+        );
+        var foreignBlock = Assert.Single((await otherUser.SyncAllAsync()).Scopes, block => block.ScopeId == foreignBoardId);
+        Assert.Equal(
+            new[]
+            {
+                new SyncMember(otherOwnerEntryId, "", "owner", "active", true),
+                new SyncMember(deletedUserEntryId, "", "member", "active", false),
+            },
+            foreignBlock.Members
         );
     }
 

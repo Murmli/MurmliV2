@@ -116,6 +116,12 @@ internal sealed class SyncTestDevice
         return await ReadAsync(response);
     }
 
+    public async Task ApplyAllAsync(params JsonObject[] commands)
+    {
+        var response = await SyncAllAsync(commands);
+        Assert.Equal(commands.Select(command => new SyncCommandResult(SyncTestCommands.GetId(command), "applied")), response.Results);
+    }
+
     public async Task ApplyOnOtherDeviceAsync(params JsonObject[] commands)
     {
         var response = await OtherDevice().SyncAsync(commands);
