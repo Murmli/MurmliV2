@@ -486,7 +486,14 @@ public class UserEndpointsTests(PostgresFixture postgres) : IClassFixture<Postgr
         Assert.Empty(await ReadUsersAsync(api));
         Assert.Null(await SharedScopeQueries.ReadScopeAsync(api, boardId));
         Assert.Null(await SharedScopeQueries.ReadScopeAsync(api, device.PersonalScopeId));
-        Assert.Empty(await TestNoteQueries.ReadProcessedCommandsAsync(api, device.AccountId));
+        Assert.Equal(
+            0,
+            await api.QueryDatabaseAsync(context =>
+                context
+                    .Set<ProcessedSyncCommand>()
+                    .CountAsync(command => command.AccountId == device.AccountId, TestContext.Current.CancellationToken)
+            )
+        );
         Assert.Single(api.AuthService.Requests);
         Assert.Equal(
             api.TimeProvider.GetUtcNow(),

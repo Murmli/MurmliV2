@@ -63,7 +63,8 @@ public class SyncCleanupServiceTests(PostgresFixture postgres) : IClassFixture<P
         Assert.Equal(LogLevel.Information, completed.LogLevel);
         var attributes = completed.Attributes!.ToDictionary();
         Assert.Equal(2, attributes["RemovedTombstoneCount"]);
-        Assert.Equal(2, attributes["RemovedProcessedCommandCount"]);
+        // Includes the create of the first list from the sign-in
+        Assert.Equal(3, attributes["RemovedProcessedCommandCount"]);
         Assert.Equal(0, attributes["RemovedRecordCount"]);
         Assert.IsType<long>(attributes["DurationMilliseconds"]);
         Assert.DoesNotContain(logRecords, logRecord => logRecord.EventId.Name is SkippedEvent or FailedEvent);
@@ -228,8 +229,9 @@ public class SyncCleanupServiceTests(PostgresFixture postgres) : IClassFixture<P
         }
 
         Assert.Equal(new SyncCommandResult(SyncTestCommands.GetId(create), expectedStatus, expectedReason), Assert.Single((await resend).Results));
+        // Includes the create of the first list from the sign-in
         Assert.Equal(
-            1,
+            2,
             Assert.Single(logRecords, logRecord => logRecord.EventId.Name == CompletedEvent).Attributes!.ToDictionary()["RemovedProcessedCommandCount"]
         );
     }

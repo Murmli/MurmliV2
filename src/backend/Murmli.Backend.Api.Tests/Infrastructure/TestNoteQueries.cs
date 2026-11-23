@@ -25,7 +25,7 @@ internal static class TestNoteQueries
             context
                 .Set<ProcessedSyncCommand>()
                 .AsNoTracking()
-                .Where(command => command.AccountId == accountId)
+                .Where(command => command.AccountId == accountId && command.DataType != SyncTestDevice.ShoppingListDataType)
                 .ToListAsync(TestContext.Current.CancellationToken)
         );
 }

@@ -8,11 +8,18 @@ using Murmli.Backend.Data.Identity;
 using Murmli.Backend.Data.Sync;
 using Murmli.Backend.Sync.Configuration;
 using Murmli.Backend.Sync.Extensions;
+using Murmli.Backend.Sync.Writing;
 using Npgsql;
 
 namespace Murmli.Backend.Sync.Accounts;
 
-public sealed class SyncAccountLifecycle(MurmliDbContext context, TimeProvider timeProvider, IOptions<SyncOptions> options)
+public sealed class SyncAccountLifecycle(
+    MurmliDbContext context,
+    SyncServerWriter writer,
+    IEnumerable<ISyncAccountBootstrapContributor> bootstrapContributors,
+    TimeProvider timeProvider,
+    IOptions<SyncOptions> options
+)
 {
     private string? OwnerForeignKeyName =>
         context
@@ -61,12 +68,14 @@ public sealed class SyncAccountLifecycle(MurmliDbContext context, TimeProvider t
         var personalScopeId = Guid.NewGuid();
         var epoch = RandomNumberGenerator.GetInt32(int.MinValue, int.MaxValue);
         var now = timeProvider.GetUtcNowInMilliseconds();
+        var bootstrapCommands = bootstrapContributors.SelectMany(contributor => contributor.CreateCommands(accountId)).ToList();
         try
         {
             return await context
                 .Database.CreateExecutionStrategy()
                 .ExecuteInTransactionAsync(
-                    attemptCancellationToken => InsertPersonalScopeAsync(accountId, personalScopeId, epoch, now, attemptCancellationToken),
+                    attemptCancellationToken =>
+                        InsertPersonalScopeAsync(accountId, personalScopeId, epoch, now, bootstrapCommands, attemptCancellationToken),
                     // A replay after an ambiguous commit finds the scope and returns Existing
                     _ => Task.FromResult(false),
                     IsolationLevel.ReadCommitted,
@@ -85,6 +94,7 @@ public sealed class SyncAccountLifecycle(MurmliDbContext context, TimeProvider t
         Guid personalScopeId,
         int epoch,
         DateTimeOffset now,
+        IReadOnlyList<SyncServerCommand> bootstrapCommands,
         CancellationToken cancellationToken
     )
     {
@@ -103,6 +113,11 @@ public sealed class SyncAccountLifecycle(MurmliDbContext context, TimeProvider t
         );
         if (inserted == 1)
         {
+            foreach (var command in bootstrapCommands)
+            {
+                await writer.WriteInCurrentTransactionAsync(command, cancellationToken);
+            }
+
             return SyncBootstrapResult.Created;
         }
 

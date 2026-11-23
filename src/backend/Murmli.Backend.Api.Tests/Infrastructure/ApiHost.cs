@@ -65,7 +65,8 @@ internal sealed class ApiHost : IAsyncDisposable
         FakeTimeProvider? timeProvider = null,
         bool waitingCleanupContributor = false,
         bool testCleanupContributors = false,
-        ICollection<SyncCleanupContext>? cleanupContexts = null
+        ICollection<SyncCleanupContext>? cleanupContexts = null,
+        bool invalidBootstrapContributor = false
     )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -113,6 +114,11 @@ internal sealed class ApiHost : IAsyncDisposable
         if (cleanupContexts is not null)
         {
             builder.Services.AddSingleton(cleanupContexts).AddSyncCleanupContributor<RecordingCleanupContributor>();
+        }
+
+        if (invalidBootstrapContributor)
+        {
+            builder.Services.AddSyncAccountBootstrapContributor<InvalidBootstrapContributor>();
         }
 
         if (activities is not null)

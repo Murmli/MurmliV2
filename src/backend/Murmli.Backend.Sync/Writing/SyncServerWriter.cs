@@ -67,6 +67,14 @@ public sealed partial class SyncServerWriter
         }
     }
 
+    internal async Task WriteInCurrentTransactionAsync(SyncServerCommand command, CancellationToken cancellationToken = default)
+    {
+        var input =
+            CreateInput(command)
+            ?? throw new InvalidOperationException($"The bootstrap command for the data type {command.DataType} is invalid.");
+        await unit.RunInCurrentTransactionAsync(input, cancellationToken);
+    }
+
     private SyncCommandUnitInput? CreateInput(SyncServerCommand command)
     {
         Guid? accountId;

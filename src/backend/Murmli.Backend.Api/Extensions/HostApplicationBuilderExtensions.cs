@@ -63,6 +63,7 @@ public static class HostApplicationBuilderExtensions
         builder.Services.AddSingleton(TimeProvider.System);
         builder.AddSync();
         builder.Services.AddSyncDataType<ShoppingListType>().AddSyncDataType<ShoppingListItemType>();
+        builder.Services.AddSyncAccountBootstrapContributor<FirstShoppingListContributor>();
         builder.Services.AddSingleton<SyncRateLimiter>();
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddSyncCleanupContributor<StaleAccountDeletionContributor>();

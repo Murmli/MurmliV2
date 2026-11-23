@@ -132,6 +132,24 @@ public class SyncEndpointsLimitTests(PostgresFixture postgres) : IClassFixture<P
     }
 
     [Fact]
+    public async Task Sync_CreateListAtOwnedLimit_CountsFirstListAndReportsRejectedRemoved()
+    {
+        await using var api = await StartApiAsync("Sync:DataTypes:shoppingList:MaxOwnedScopesPerAccount", "2");
+        var device = await SyncTestDevice.SignInAsync(api);
+        var now = api.TimeProvider.GetUtcNow();
+        Guid[] listIds = [Guid.NewGuid(), Guid.NewGuid()];
+
+        var response = await device.SyncShoppingAsync([.. listIds.Select(listId => device.CreateList(listId, now, "Einkauf"))]);
+
+        Assert.Equal(
+            new (string, string?)[] { ("applied", null), ("rejected", "limitExceeded") },
+            response.Results.Select(result => (result.Status, result.Reason))
+        );
+        Assert.Equal(new SyncRemovedScope(listIds[1], false), Assert.Single(response.RemovedScopes));
+        Assert.Equal(2, await SharedScopeQueries.CountOwnedScopesAsync(api, device.AccountId, SyncTestDevice.ShoppingListScopeKind));
+    }
+
+    [Fact]
     public async Task Sync_ConcurrentScopeCreationsAtLimit_DoNotExceedLimit()
     {
         var connectionString = postgres.CreateDatabaseConnectionString();

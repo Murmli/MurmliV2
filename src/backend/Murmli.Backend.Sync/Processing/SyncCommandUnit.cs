@@ -44,6 +44,9 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
         }
     }
 
+    public Task<SyncCommandOutcome> RunInCurrentTransactionAsync(SyncCommandUnitInput input, CancellationToken cancellationToken = default) =>
+        RunAttemptAsync(input, cancellationToken);
+
     private static SyncCommandOutcome Applied(SyncCommandClaim claim) => CreateOutcome(claim, SyncResultStatus.Applied, null, null);
 
     private static SyncCommandOutcome Ignored(SyncCommandClaim claim, SyncIgnoreCause cause) =>

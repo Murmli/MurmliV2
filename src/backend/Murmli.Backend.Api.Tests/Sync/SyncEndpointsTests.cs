@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Murmli.Backend.Api.Tests.Infrastructure;
 using Murmli.Backend.Api.Tests.Infrastructure.TestDataTypes;
+using Murmli.Backend.Data.ShoppingLists;
 using Murmli.Backend.Data.Sync;
 using Murmli.Backend.Sync.Protocol;
 using OpenTelemetry.Logs;
@@ -41,7 +42,10 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
             context
                 .Set<SyncScope>()
                 .AsNoTracking()
-                .SingleAsync(scope => scope.OwnerAccountId == device.AccountId, TestContext.Current.CancellationToken)
+                .SingleAsync(
+                    scope => scope.OwnerAccountId == device.AccountId && scope.Kind == SyncScope.PersonalKind,
+                    TestContext.Current.CancellationToken
+                )
         );
         var databaseIdentity = await new DatabaseAdministration(fixture.ConnectionString).ReadDatabaseIdentityAsync();
         var token = SyncTokenFormat.Decode(syncResponse.Token);
@@ -343,6 +347,47 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
     }
 
     [Fact]
+    public async Task Sync_ConcurrentFirstSyncs_CreateExactlyOneFirstList()
+    {
+        var authUserId = SyncTestDevice.CreateAuthUserId();
+        var devices = await Task.WhenAll(
+            Enumerable.Range(0, 2).Select(_ => SyncTestDevice.SignInAsync(fixture.Api, authUserId, firstSync: false))
+        );
+        var administration = new DatabaseAdministration(fixture.ConnectionString);
+        Task<SyncResponse>[] firstSyncs;
+        await using (await administration.LockScopesTableAsync())
+        {
+            firstSyncs = [.. devices.Select(device => device.SyncShoppingAsync())];
+            await administration.WaitForLockWaitersAsync(devices.Length);
+        }
+
+        var responses = await Task.WhenAll(firstSyncs);
+
+        var firstListId = Assert.Single(
+            responses
+                .Select(response => Assert.Single(response.Scopes, block => block.Kind == SyncTestDevice.ShoppingListScopeKind).ScopeId)
+                .Distinct()
+        );
+        var accountId = devices[0].AccountId;
+        Assert.Equal([firstListId], await ShoppingListQueries.ReadOwnedListIdsAsync(fixture.Api, accountId));
+        var cancellationToken = TestContext.Current.CancellationToken;
+        Assert.Equal(
+            (1, 1),
+            await fixture.Api.QueryDatabaseAsync(async context =>
+                (
+                    await context.Set<ShoppingList>().CountAsync(list => list.ScopeId == firstListId, cancellationToken),
+                    await context
+                        .Set<ProcessedSyncCommand>()
+                        .CountAsync(
+                            command => command.AccountId == accountId && command.DataType == SyncTestDevice.ShoppingListDataType,
+                            cancellationToken
+                        )
+                )
+            )
+        );
+    }
+
+    [Fact]
     public async Task Sync_AccountDeletedWhileFirstSyncWaits_ReturnsAccountGone()
     {
         var device = await SyncTestDevice.SignInAsync(fixture.Api, firstSync: false);
@@ -393,6 +438,62 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
 
         await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.Gone, TestProblemTypes.AccountGone);
         Assert.Equal(0, await SharedScopeQueries.CountOwnedScopesAsync(api, device.AccountId, SyncScope.PersonalKind));
+    }
+
+    [Fact]
+    public async Task Sync_AccountMarkedWhileFirstListIsWritten_ReturnsAccountGoneAndCreatesNothing()
+    {
+        var connectionString = fixture.CreateDatabaseConnectionString();
+        await using var api = await ApiHost.StartAsync(
+            connectionString,
+            new Dictionary<string, string?> { ["Sync:LockTimeout"] = "00:00:30" },
+            testDataTypes: true
+        );
+        var device = await SyncTestDevice.SignInAsync(api, firstSync: false);
+        api.AuthService.ResponseStatusCode = HttpStatusCode.ServiceUnavailable;
+        var administration = new DatabaseAdministration(connectionString);
+        Task<HttpResponseMessage> sync;
+        await using (await administration.LockProcessedCommandsTableAsync())
+        {
+            sync = SendBodyAsync(device, device.CreateBody());
+            await administration.WaitForLockWaitersAsync(1);
+            Assert.Equal(HttpStatusCode.BadGateway, await api.DeleteMeAsync(device.AuthUserId));
+        }
+
+        using var response = await sync;
+
+        await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.Gone, TestProblemTypes.AccountGone);
+        Assert.Equal(0, await SharedScopeQueries.CountOwnedScopesAsync(api, device.AccountId, SyncScope.PersonalKind));
+        Assert.Equal(0, await SharedScopeQueries.CountOwnedScopesAsync(api, device.AccountId, SyncTestDevice.ShoppingListScopeKind));
+        Assert.Equal(
+            0,
+            await api.QueryDatabaseAsync(context =>
+                context
+                    .Set<ProcessedSyncCommand>()
+                    .CountAsync(command => command.AccountId == device.AccountId, TestContext.Current.CancellationToken)
+            )
+        );
+    }
+
+    [Fact]
+    public async Task Sync_InvalidBootstrapCommand_FailsFirstSyncAndCreatesNothing()
+    {
+        await using var api = await ApiHost.StartAsync(fixture.CreateDatabaseConnectionString(), invalidBootstrapContributor: true);
+        var device = await SyncTestDevice.SignInAsync(api, firstSync: false);
+
+        using var response = await SendBodyAsync(device, device.CreateBody(SyncTestDevice.ShoppingDataTypes, []));
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal(0, await SharedScopeQueries.CountOwnedScopesAsync(api, device.AccountId, SyncScope.PersonalKind));
+        Assert.Equal(0, await SharedScopeQueries.CountOwnedScopesAsync(api, device.AccountId, SyncTestDevice.ShoppingListScopeKind));
+        Assert.Equal(
+            0,
+            await api.QueryDatabaseAsync(context =>
+                context
+                    .Set<ProcessedSyncCommand>()
+                    .CountAsync(command => command.AccountId == device.AccountId, TestContext.Current.CancellationToken)
+            )
+        );
     }
 
     [Fact]
