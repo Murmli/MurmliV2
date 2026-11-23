@@ -669,6 +669,50 @@ Eine Karte löscht nur der Besitzer (`MinimumRole`).
 
 Bis zu den Vorgängen an der Mitgliedschaft aus [#129](https://github.com/Murmli/MurmliV2/issues/129) legen Tests Mitgliedseinträge weiterer Konten nur über `DatabaseAdministration` an (`InsertMemberEntryAsync`, Rolle `member`, für die Prüfung der Rollen auch `readOnly` und der Zustand `former`), immer zusammen mit der Erhöhung der Version des Bereichs.
 
+### Simulationsumgebung
+
+Gegen diese Umgebung läuft die Simulation der App ([#136](https://github.com/Murmli/MurmliV2/issues/136)): ein Postgres (Testcontainers, `postgres:18`), zwei Instanzen der API an derselben Datenbank und eine Steuer-App, alles im Testprojekt der API, ohne Aspire, Node, `auth` und Azure. Start mit einem Befehl, in `src/backend` (braucht Docker): `dotnet test --project Murmli.Backend.Api.Tests --explicit only --filter-method "*ServeEnvironment_UntilCancelled_KeepsRunning"`.
+
+Der explizite Test `SyncSimulationEnvironmentTests.ServeEnvironment_UntilCancelled_KeepsRunning` schreibt nach dem Start zwei Zeilen `export …` für die Shell der Simulation und hält die Umgebung, bis Strg+C sie beendet; `dotnet test` meldet den Lauf dann als abgebrochen (Exit-Code 3), das ist erwartet. Die Zeilen gehen direkt auf die Konsole, denn Ausgaben über `ITestOutputHelper` zeigt `dotnet test` erst nach dem Ende eines Tests, auch mit `--show-live-output on`. Ohne `--explicit` (Standard `off`) überspringt `dotnet test` den Test, auch in der CI; mit `--explicit on` liefe er neben allen übrigen Tests, und der ganze Lauf wartete auf Strg+C.
+
+| Variable | Richtung | Inhalt |
+| --- | --- | --- |
+| `SYNC_SIMULATION_API_URLS` | Ausgabe | Adressen beider Instanzen (`http://127.0.0.1:<port>`), durch Komma getrennt |
+| `SYNC_SIMULATION_CONTROL_URL` | Ausgabe | Adresse der Steuer-App |
+| `SYNC_SIMULATION_RETENTION` | Eingabe, optional | `Sync:Retention` beider Instanzen als `hh:mm:ss`, Standard `01:00:00`, mindestens `00:01:00`; kürzer als ein Lauf, damit `tooOld` vorkommt |
+
+Beide Instanzen sind `ApiHost` mit den künstlichen Datentypen (Pipeline nur über `UseApi()`) und starten nacheinander: Führen zwei Sitzungen das DDL der Testtabellen gleichzeitig aus, scheitert eine mit 23505. Sie teilen eine Uhr (`FakeTimeProvider`), die beim Start auf der Echtzeit steht (auf Millisekunden gekürzt) und danach stillsteht, bis die Steuer-App sie verstellt. Anders als in den übrigen Tests gelten `Database:MaxRetryCount=10` und `Database:MaxRetryDelay=00:00:00.200`, weil Schnappschuss und Zurücksetzen die Verbindungen im Pool beenden, und die Konsole loggt wie in Azure erst ab `Warning`.
+
+Entschieden, noch nicht gebaut: `Sync:Cleanup:Enabled=false` und `Sync:Cleanup:SafetyMargin=00:05:00` in beiden Instanzen sowie `POST /cleanup` der Steuer-App (Aufräum-Lauf auf Abruf, Antwort 204); erst damit kommt bei kurzer Aufbewahrung auch die Untergrenze vor. Entfällt, sobald das Aufräumen aus [#132](https://github.com/Murmli/MurmliV2/issues/132) gebaut ist.
+
+Entschieden, noch nicht gebaut: Rate-Limits beider Instanzen weit über der Last der Simulation. Entfällt, sobald das Rate-Limit aus [#135](https://github.com/Murmli/MurmliV2/issues/135) gebaut ist.
+
+Entschieden, noch nicht gebaut: `POST /server-writes` der Steuer-App (der Server schreibt im Namen eines Kontos). Entfällt, sobald der Server als Schreiber mit der Einkaufsliste aus [#141](https://github.com/Murmli/MurmliV2/issues/141) gebaut ist.
+
+Die Steuer-App (`SyncSimulationControlApp`) ist eine eigene Web-App auf `127.0.0.1` im Testcode, nie Teil von `UseApi()`, ohne Anmeldung. Bodys sind JSON (`Content-Type: application/json`), Zeiten ganze Unix-Millisekunden. Fehler haben keinen Body.
+
+| Endpunkt | Body | Antwort |
+| --- | --- | --- |
+| `GET /environment` | – | `{ "apiUrls": [...], "serverTime": ..., "databaseIdentity": "..." }`: Adressen beider Instanzen, Uhr des Servers, aktuelle Kennung der Datenbank |
+| `POST /tokens` | `{ "subject": "user-1" }` | `{ "token": "..." }`: JWT wie aus `TestTokens` mit dem Schlüssel dieses Starts, `sub` gleich `subject`, `iat` aus der Uhr des Servers (auf Sekunden gekürzt), `nbf` und `exp` aus der Echtzeit, eine Stunde gültig; ohne `subject` 400 |
+| `POST /clock` | `{ "advanceMilliseconds": n }` oder `{ "setUnixMilliseconds": t }` | `{ "serverTime": ... }`: stellt die gemeinsame Uhr vor oder zurück, `n` darf negativ sein; beide oder keins der Felder oder ein Ziel vor 1970 oder nach dem Jahr 9999 ergeben 400 |
+| `POST /snapshots/{name}` | – | 204: beendet die Verbindungen zur Datenbank und kopiert sie per `CREATE DATABASE … TEMPLATE` nach `<datenbank>_<name>`; ein Schnappschuss gleichen Namens wird ersetzt |
+| `POST /snapshots/{name}/restore` | – | 204: ersetzt die Datenbank per `DROP DATABASE … WITH (FORCE)` und `CREATE DATABASE … TEMPLATE` durch den Schnappschuss und erneuert danach `sync.database_identity` wie ein Mensch nach dem Einspielen einer Sicherung ([database.md](database.md#abgleich)); ohne diesen Schnappschuss 404, die Datenbank bleibt unverändert |
+
+`name` hat 1 bis 25 Zeichen aus `a` bis `z`, `0` bis `9` und `_`, sonst 400. Schnappschüsse bleiben bis zum Ende der Umgebung im Container.
+
+Ein Konto legt `GET /v1/users/me` mit einem Token der Steuer-App an, vorher antwortet `/v1/sync` mit 410 `account-gone`. `DELETE /v1/users/me` löscht Konten wie in Produktion; anstelle von `auth` bestätigt `AuthServiceHttpMessageHandler` im Testcode jede Löschung. Danach legt ein Token desselben `subject` kein Konto an, solange sein `iat` (ganze Sekunden der gestellten Uhr) nicht nach dem Löschvermerk liegt, aber nur, solange es den Vermerk gibt: Die nächste Kontolöschung, gleich welchen Kontos, entfernt Vermerke, die nach der gestellten Uhr älter als 24 Stunden sind, und das Zurücksetzen auf einen Schnappschuss von vor der Löschung bringt einen Stand ohne den Vermerk zurück. Wie nach einer echten Löschung, nach der Better Auth eine neue ID vergibt, meldet sich die Simulation deshalb mit einem neuen `subject` an. Sobald die gestellte Uhr mehr als 24 Stunden nach einer Kontolöschung steht, ob nach einem großen oder nach mehreren kleinen Schritten, verwirft die Simulation außerdem jedes Token, das vor dieser Löschung für dasselbe `subject` ausgestellt wurde (in Produktion wäre es längst abgelaufen). Tokens gelten nur für die laufende Umgebung, weil der Schlüssel bei jedem Start neu entsteht, und eine Stunde in Echtzeit, unabhängig von der gestellten Uhr. Während Schnappschuss und Zurücksetzen pausiert die Simulation ihren Verkehr: Gegen die gelöschte Datenbank scheitern Anfragen ohne Wiederholung. Danach scheitert die erste Anweisung jeder Instanz an ihrer beendeten Verbindung vorübergehend, Npgsql leert den Pool, und die Execution Strategy verbindet neu.
+
+Entschieden, noch nicht gebaut: die Simulation, die gegen diese Umgebung läuft, samt Befehl für den ganzen Lauf. Entfällt, sobald die Simulation aus [#136](https://github.com/Murmli/MurmliV2/issues/136) gebaut ist.
+
+### Gegenprobe
+
+Eine Simulation, die nie scheitert, beweist nichts. Vor dem ersten Vertrauen in die Simulation und nach größeren Umbauten am Kern werden deshalb nacheinander drei Fehler am Server eingebaut; die Simulation muss jeden beim ersten Startwert finden, das Ergebnis gehört in [#136](https://github.com/Murmli/MurmliV2/issues/136). Die Fehler werden nur lokal eingebaut und nie committet:
+
+1. Geänderte Datensätze fehlen im Abruf: in `SyncDataType<TRecord>.WriteRecordsAsync` (`Murmli.Backend.Sync/DataTypes/SyncDataType.cs`) `record.Version > afterVersion` durch `record.Version > afterVersion + 1` ersetzen.
+2. Eine ältere Änderung überschreibt eine neuere: in `SyncDataType<TRecord>.ApplyChanges` die Bedingung `isNew || commandTime >= change.Group.GetChangedAt(typedRecord)` durch `true` ersetzen.
+3. Ein wiederholt gesendetes Kommando wird ein zweites Mal ausgeführt: in `SyncCommandUnit.RunAttemptAsync` (`Murmli.Backend.Sync/Processing/SyncCommandUnit.cs`) das Ergebnis von `ClaimAsync` übergehen, statt bei einer vorhandenen Kommando-ID mit `ReadAlreadyProcessedAsync` zu antworten.
+
 ## Entscheidungen
 
 | Entscheidung | Grund |
@@ -694,3 +738,6 @@ Bis zu den Vorgängen an der Mitgliedschaft aus [#129](https://github.com/Murmli
 | Mitgliedseintrag zwischen Datensatz und Konto | Datensätze nennen Personen über die Mitglieds-ID, nur der Server kennt das Konto dahinter. Beim Verlassen, Entfernen und bei der Kontolöschung ändert sich so eine Zeile je Bereich statt jedes Datensatzes, und kein Mitglied sieht die Konto-ID eines anderen, die über alle Bereiche hinweg gleich wäre. Verworfen: Konto-ID am Datensatz. |
 | Eigene Bereiche je Konto unter der Sperre des persönlichen Bereichs gezählt | Zwei gleichzeitige Anlagen überschreiten die Grenze nicht gemeinsam, und Sperren laufen immer in derselben Reihenfolge: erst der persönliche Bereich, dann genau ein weiterer. Verworfen: erst den Zielbereich sperren und den persönlichen nur bei Bedarf. |
 | „Vom eigenen Konto entfernt“ aus den angewendeten Löschungen des Wurzel-Datensatzes | Der Kern speichert jedes Kommando samt Ziel und Ergebnis ohnehin, ein partieller Index findet die Löschungen eines Kontos. Verworfen: eine eigene Tabelle gelöschter Bereiche. |
+| Steuer-App der Simulationsumgebung als eigene Web-App im Testcode | Beide Instanzen bleiben Byte für Byte die Pipeline der API, und Uhr, Tokens und Zurücksetzen brauchen in der API keinen Code, den nur Tests aufrufen ([#137](https://github.com/Murmli/MurmliV2/issues/137)). Verworfen: Steuer-Endpunkte nach `UseApi()` auf einer der Instanzen (die Instanzen unterschieden sich). |
+| Tokens der Simulation von der Steuer-App, `iat` aus der Uhr des Servers | Die Simulation braucht weder JWT-Code noch den Schlüssel. `iat` muss der gestellten Uhr folgen, weil der Löschvermerk die Uhr des Servers trägt und mit `iat` verglichen wird ([authentication.md](authentication.md)); mit `iat` aus der Echtzeit legte nach einer Kontolöschung bei zurückgestellter Uhr schon ein älteres Token das Konto wieder an, bei vorgestellter Uhr dagegen kein neues. Verworfen: den Schlüssel an die Simulation geben. |
+| Simulationsumgebung als expliziter Test im Testprojekt | Gestellte Uhr, freie Ports, kein `auth` und zwei Instanzen an einer Datenbank, gestartet mit einem Befehl. Verworfen: Ressourcen des AppHost im Run-Mode (Systemuhr, feste Ports, warten auf `auth`, Replikate hinter einem Proxy). |
