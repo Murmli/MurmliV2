@@ -61,6 +61,7 @@ public static class HostApplicationBuilderExtensions
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.AddSync();
+        builder.Services.AddSingleton<SyncRateLimiter>();
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddScoped<UserRegistry>();
         builder.Services.AddScoped<ProductSearch>();

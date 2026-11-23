@@ -39,4 +39,7 @@ public sealed class SyncOptions
 
     [ValidateObjectMembers]
     public SyncCleanupOptions Cleanup { get; set; } = new();
+
+    [ValidateObjectMembers]
+    public SyncRateLimitOptions RateLimits { get; set; } = new();
 }

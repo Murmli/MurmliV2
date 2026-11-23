@@ -78,7 +78,7 @@ public class WebApplicationExtensionsTests(PostgresFixture postgres) : IClassFix
         );
         Assert.True(sync.GetProperty("requestBody").GetProperty("content").TryGetProperty("application/json", out _));
         Assert.Equal(
-            new[] { "200", "400", "410", "413", "415", "503" },
+            new[] { "200", "400", "410", "413", "415", "429", "503" },
             sync.GetProperty("responses").EnumerateObject().Select(response => response.Name).Order(StringComparer.Ordinal)
         );
         var schemas = document.RootElement.GetProperty("components").GetProperty("schemas");

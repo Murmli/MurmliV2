@@ -83,6 +83,9 @@ internal sealed class ApiHost : IAsyncDisposable
                 ["AuthService:BaseAddress"] = "http://auth.test",
                 ["AuthService:Key"] = AuthServiceKey,
                 ["Sync:Cleanup:Enabled"] = "false",
+                ["Sync:RateLimits:DeviceRequestsPerMinute"] = "1000000",
+                ["Sync:RateLimits:AccountRequestsPerMinute"] = "1000000",
+                ["Sync:RateLimits:AccountCommandsPerHour"] = "100000000",
             }
         );
         builder.Configuration.AddInMemoryCollection(additionalConfiguration);

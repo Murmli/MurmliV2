@@ -36,6 +36,7 @@ public static class WebApplicationExtensions
             .ProducesProblem(StatusCodes.Status410Gone)
             .ProducesProblem(StatusCodes.Status413PayloadTooLarge)
             .ProducesProblem(StatusCodes.Status415UnsupportedMediaType)
+            .ProducesProblem(StatusCodes.Status429TooManyRequests)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
             .WithDescription(
                 "Processes the device's waiting commands and returns the changes since its token. The contract, the fields per data type and the problem types are described in docs/sync.md."

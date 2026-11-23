@@ -30,6 +30,7 @@ internal static class SyncEndpoints
         HttpContext httpContext,
         [FromHeader(Name = DeviceIdHeader)] string? deviceId,
         [FromServices] SyncProcessor processor,
+        [FromServices] SyncRateLimiter rateLimiter,
         [FromServices] IOptions<SyncOptions> syncOptions,
         [FromServices] IOptions<DatabaseOptions> databaseOptions
     )
@@ -48,6 +49,11 @@ internal static class SyncEndpoints
         if (!Guid.TryParseExact(deviceId, "D", out var device) || device.Version != 4)
         {
             return Problem(StatusCodes.Status400BadRequest, ProblemTypes.InvalidRequest);
+        }
+
+        if (!rateLimiter.TryAcquireRequest(account.AccountId, device, out var requestRetryAfter))
+        {
+            return new RateLimitedProblem(requestRetryAfter);
         }
 
         var options = syncOptions.Value;
@@ -78,6 +84,14 @@ internal static class SyncEndpoints
         if (request.Commands.Count > options.MaxCommandsPerRequest)
         {
             return RequestTooLarge(options);
+        }
+
+        if (
+            request.Commands.Count > 0
+            && !rateLimiter.TryAcquireCommands(account.AccountId, request.Commands.Count, out var commandRetryAfter)
+        )
+        {
+            return new RateLimitedProblem(commandRetryAfter);
         }
 
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(httpContext.RequestAborted);

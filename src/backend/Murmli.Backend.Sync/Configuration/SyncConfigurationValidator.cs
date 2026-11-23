@@ -63,6 +63,13 @@ internal sealed class SyncConfigurationValidator(IEnumerable<SyncDataType> dataT
             );
         }
 
+        if (options.RateLimits.AccountCommandsPerHour < options.MaxCommandsPerRequest)
+        {
+            errors.Add(
+                $"{SyncOptions.SectionName}:RateLimits:AccountCommandsPerHour must be at least {SyncOptions.SectionName}:MaxCommandsPerRequest."
+            );
+        }
+
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
     }
 
