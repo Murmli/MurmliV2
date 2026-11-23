@@ -1,6 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
-using Murmli.Backend.Sync.Cleanup;
 
 namespace Murmli.Backend.Api.Tests.Infrastructure.SyncSimulation;
 
@@ -41,7 +39,7 @@ internal sealed class SyncSimulationEnvironment : IAsyncDisposable
                 apiUrls,
                 timeProvider,
                 new DatabaseAdministration(connectionString),
-                apis[0].Services.GetRequiredService<SyncCleanupRunner>()
+                apis[0].Services
             );
             return new SyncSimulationEnvironment(apis, apiUrls, control);
         }

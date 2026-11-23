@@ -3,10 +3,15 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
+using Murmli.Backend.Data;
 using Murmli.Backend.Sync.Cleanup;
+using Murmli.Backend.Sync.DataTypes;
+using Murmli.Backend.Sync.Writing;
 
 namespace Murmli.Backend.Api.Tests.Infrastructure.SyncSimulation;
 
@@ -30,7 +35,7 @@ internal sealed partial class SyncSimulationControlApp : IAsyncDisposable
         IReadOnlyList<string> apiUrls,
         FakeTimeProvider timeProvider,
         DatabaseAdministration administration,
-        SyncCleanupRunner cleanupRunner
+        IServiceProvider apiServices
     )
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
@@ -94,8 +99,55 @@ internal sealed partial class SyncSimulationControlApp : IAsyncDisposable
             "/cleanup",
             async Task<NoContent> (CancellationToken cancellationToken) =>
             {
-                await cleanupRunner.RunAsync(cancellationToken);
+                await apiServices.GetRequiredService<SyncCleanupRunner>().RunAsync(cancellationToken);
                 return TypedResults.NoContent();
+            }
+        );
+        application.MapPost(
+            "/server-writes",
+            async Task<Results<Ok<SyncSimulationServerWriteResponse>, BadRequest, NotFound>> (
+                SyncSimulationServerWriteRequest request,
+                CancellationToken cancellationToken
+            ) =>
+            {
+                if (
+                    request is not
+                    {
+                        Subject: { } subject,
+                        Command: { Kind: { } kind, ScopeId: { } scopeId, DataType: { } dataType, RecordId: { } recordId } command,
+                    }
+                    || string.IsNullOrWhiteSpace(subject)
+                )
+                {
+                    return TypedResults.BadRequest();
+                }
+
+                await using var scope = apiServices.CreateAsyncScope();
+                var accountId = await scope
+                    .ServiceProvider.GetRequiredService<MurmliDbContext>()
+                    .Users.Where(user => user.AuthUserId == subject)
+                    .Select(user => (Guid?)user.Id)
+                    .SingleOrDefaultAsync(cancellationToken);
+                if (accountId is not { } onBehalfOfAccountId)
+                {
+                    return TypedResults.NotFound();
+                }
+
+                var result = await scope
+                    .ServiceProvider.GetRequiredService<SyncServerWriter>()
+                    .WriteAsync(
+                        new SyncServerCommand(
+                            Guid.NewGuid(),
+                            SyncActor.OnBehalfOf(onBehalfOfAccountId),
+                            new SyncCommandKind(kind),
+                            scopeId,
+                            dataType,
+                            recordId,
+                            command.Fields
+                        ),
+                        cancellationToken
+                    );
+                return TypedResults.Ok(new SyncSimulationServerWriteResponse(result.Status, result.Reason, result.Cause));
             }
         );
         application.MapPost(
