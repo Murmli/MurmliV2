@@ -21,10 +21,13 @@ Ohne `UserId` bleiben:
 - Der erste `GET /v1/users/me`, der das Konto anlegt: nur der Log `UserCreated` trägt die Id.
 - Kind-Spans (Npgsql, HttpClient), sie hängen über die Trace-ID am Request.
 - Logs vor der Middleware (Authentifizierung, die Abfrage der Konto-Id selbst samt `DatabaseUnavailable`, wenn sie an einer Störung der Datenbank scheitert).
+- Der Aufräum-Lauf des Abgleichs, er läuft ohne Anfrage.
 
 ### Abgleich
 
 `Murmli.Backend.Sync` loggt `SyncCommandFailed` (3002, Error mit Exception; `DeviceId`, `CommandId`, `DataType`, `CommandKind`), wenn ein einzelnes Kommando scheitert, und `SyncDatabaseUnavailable` (3003, Warning mit Exception; `Phase`: `bootstrap`, `commands` oder `changes`), wenn eine Störung der Datenbank die Anfrage mit 503 beendet. Beide tragen `UserId` aus dem Scope der `UserTelemetryMiddleware`. Inhalte von Datensätzen, Tokens und den Body loggt der Kern nie, `DataType` und `CommandKind` nur, wenn der Server sie kennt.
+
+Der Aufräum-Lauf ([sync.md](sync.md#aufbewahrung-und-aufräumen)) loggt ohne `UserId`: `SyncCleanupCompleted` (3005, Information; `DurationMilliseconds`, `RemovedTombstoneCount`, `RemovedProcessedCommandCount`, `RemovedRecordCount`) am Ende eines Laufs, auch wenn er seine Zeitgrenze erreicht, `SyncCleanupSkipped` (3006, Information), wenn ein anderer Lauf die Lease hält, und `SyncCleanupFailed` (3007, Error mit Exception), wenn ein Beitrag oder der ganze Lauf scheitert, sein Aufrufer ihn abbricht oder die Lease nicht freigegeben werden kann (dann auch nach `SyncCleanupCompleted`; die Lease läuft nach `Sync:Cleanup:LeaseDuration` ab).
 
 ## Export
 
