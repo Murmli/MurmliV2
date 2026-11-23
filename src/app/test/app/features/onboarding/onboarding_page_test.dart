@@ -17,7 +17,9 @@ import '../../../helpers/pump_app.dart';
 import '../../../helpers/sign_in_with_apple.dart';
 
 void main() {
-  final translations = AppLocale.de.buildSync().onboarding;
+  final germanTranslations = AppLocale.de.buildSync();
+  final translations = germanTranslations.onboarding;
+  final requestFailureTranslations = germanTranslations.requestFailure;
 
   final mobilePlatforms = TargetPlatformVariant({
     TargetPlatform.iOS,
@@ -297,6 +299,41 @@ void main() {
         expect(submitButton(), findsOneWidget);
       },
     );
+
+    for (final (scenario, respondFromAuth, expectedToast) in [
+      (
+        'auth being unreachable',
+        (RequestOptions request) async => throw DioException.connectionError(
+          requestOptions: request,
+          reason: 'Connection refused',
+        ),
+        requestFailureTranslations.noConnection,
+      ),
+      (
+        'auth answering with 429',
+        (RequestOptions request) async => ResponseBody.fromString('', 429),
+        requestFailureTranslations.tooManyRequests,
+      ),
+    ]) {
+      testWidgets(
+        'with the flavor local submitting the email sign-in with $scenario shows its toast instead of the sign-in failure and the form again',
+        (tester) async {
+          final container = await pumpApp(tester, flavor: Flavor.local);
+          recordAuthenticationRequests(
+            container,
+            respondFromAuth: respondFromAuth,
+          );
+          await enterCredentials(tester);
+
+          await tester.testTextInput.receiveAction(TextInputAction.done);
+          await tester.pumpAndSettle();
+
+          expect(find.widgetWithText(SnackBar, expectedToast), findsOneWidget);
+          expect(find.text(translations.signInFailed), findsNothing);
+          expect(submitButton(), findsOneWidget);
+        },
+      );
+    }
 
     testWidgets(
       'with the flavor local submitting again while the email sign-in is running disables the fields and sends no second request',

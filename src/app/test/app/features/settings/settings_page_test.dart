@@ -437,6 +437,46 @@ void main() {
       );
 
       testWidgets(
+        'confirming the deletion without a connection shows the no connection toast, no popup and keeps the account and the device data',
+        (tester) async {
+          final container = await openSettingsWithStoredPreferences(
+            tester,
+            isCrashReportingEnabled: false,
+          );
+          recordAuthenticationRequests(
+            container,
+            respondFromApi: (request) async =>
+                throw DioException.connectionError(
+                  requestOptions: request,
+                  reason: 'Connection refused',
+                ),
+          );
+
+          await confirmDeletion(tester);
+
+          expect(
+            find.widgetWithText(
+              SnackBar,
+              englishTranslations.requestFailure.noConnection,
+            ),
+            findsOneWidget,
+          );
+          expect(find.byType(AlertDialog), findsNothing);
+          expect(container.read(signedInAccountProvider), isNotNull);
+          expect(
+            await const FlutterSecureStorage().readAll(),
+            storedSession('account'),
+          );
+          expect((await reopenPreferences()).keys, {
+            PreferenceKeys.installed,
+            PreferenceKeys.crashReportingEnabled,
+            ...storedPreferencesBeforeDeletion.keys,
+          });
+          expect(find.byType(SettingsPage), findsOneWidget);
+        },
+      );
+
+      testWidgets(
         'tapping delete account again while the deletion is pending shows a progress indicator and sends no second request',
         (tester) async {
           final container = await openSettings(tester);

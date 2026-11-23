@@ -8,6 +8,7 @@ import 'package:talker/talker.dart';
 
 import 'package:app/app/core/api/api_client_provider.dart';
 import 'package:app/app/core/feedback/reported_request_failure_provider.dart';
+import 'package:app/app/core/feedback/request_failure.dart';
 import 'package:app/app/core/flavor/app_endpoints.dart';
 import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/logging/talker_provider.dart';
@@ -290,6 +291,41 @@ void main() {
         container.read(reportedRequestFailureProvider)?.supportCode,
         sentTraceId(adapter.requests.single),
       );
+    });
+
+    test('request to the API failing with 503 reports serverUnavailable with its trace id as support code', () async {
+      final adapter = RecordingHttpClientAdapter(
+        respond: (_) async => ResponseBody.fromString('', 503),
+      );
+      final apiClient = await createApiClient(adapter);
+
+      await expectLater(
+        apiClient.get<void>('/v1/example'),
+        throwsA(isA<DioException>()),
+      );
+
+      final report = container.read(reportedRequestFailureProvider);
+      expect(report?.failure, RequestFailure.serverUnavailable);
+      expect(report?.supportCode, sentTraceId(adapter.requests.single));
+    });
+
+    test('request to the API failing without a connection reports noConnection without a support code', () async {
+      final adapter = RecordingHttpClientAdapter(
+        respond: (request) async => throw DioException.connectionError(
+          requestOptions: request,
+          reason: 'Connection refused',
+        ),
+      );
+      final apiClient = await createApiClient(adapter);
+
+      await expectLater(
+        apiClient.get<void>('/v1/example'),
+        throwsA(isA<DioException>()),
+      );
+
+      final report = container.read(reportedRequestFailureProvider);
+      expect(report?.failure, RequestFailure.noConnection);
+      expect(report?.supportCode, isNull);
     });
 
     test('failed request to the API sends nothing to Sentry', () async {

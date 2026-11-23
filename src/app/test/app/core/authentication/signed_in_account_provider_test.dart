@@ -15,6 +15,7 @@ import 'package:talker/talker.dart';
 import 'package:app/app/core/api/api_client_provider.dart';
 import 'package:app/app/core/authentication/signed_in_account_provider.dart';
 import 'package:app/app/core/feedback/reported_request_failure_provider.dart';
+import 'package:app/app/core/feedback/request_failure.dart';
 import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/logging/talker_provider.dart';
 import 'package:app/app/core/storage/preference_keys.dart';
@@ -158,11 +159,12 @@ void main() {
       );
     }
 
-    for (final (scenario, respondFromAuth, expectedResult) in [
+    for (final (scenario, respondFromAuth, expectedResult, expectedFailure) in [
       (
         'auth rejecting the identity token',
         (RequestOptions request) async => ResponseBody.fromString('', 401),
         SignInResult.failed,
+        null,
       ),
       (
         'auth answering without set-auth-token',
@@ -170,6 +172,7 @@ void main() {
             ? jsonResponse({'token': 'unsigned-session-token'})
             : await respondAsAuth(request),
         SignInResult.failed,
+        null,
       ),
       (
         'a failed token request',
@@ -177,10 +180,11 @@ void main() {
             ? ResponseBody.fromString('', 500)
             : await respondAsAuth(request),
         SignInResult.requestFailed,
+        RequestFailure.serverError,
       ),
     ]) {
       test(
-        'signInWithApple with $scenario returns ${expectedResult.name} without a request to the API, stays signed out and logs a warning without tokens',
+        'signInWithApple with $scenario returns ${expectedResult.name}, reports ${expectedFailure?.name ?? 'no failure'}, sends no request to the API, stays signed out and logs a warning without tokens',
         () async {
           installFakeSignInWithApple();
           final requests = recordAuthenticationRequests(
@@ -191,6 +195,10 @@ void main() {
           final result = await signInWithApple();
 
           expect(result, expectedResult);
+          expect(
+            container.read(reportedRequestFailureProvider)?.failure,
+            expectedFailure,
+          );
           expect(requests.api.requests, isEmpty);
           expect(container.read(signedInAccountProvider), isNull);
           final log = container.read(talkerProvider).history.single;
@@ -389,31 +397,50 @@ void main() {
       );
     });
 
-    for (final (scenario, respondFromAuth, expectedResult) in [
+    for (final (scenario, respondFromAuth, expectedResult, expectedFailure) in [
       (
         'auth rejecting the credentials with 401',
         (RequestOptions request) async => ResponseBody.fromString('', 401),
         SignInResult.invalidCredentials,
+        null,
       ),
       (
         'auth rejecting a malformed email with 400',
         (RequestOptions request) async => ResponseBody.fromString('', 400),
         SignInResult.invalidCredentials,
+        null,
       ),
       (
         'auth failing with 500',
         (RequestOptions request) async => ResponseBody.fromString('', 500),
         SignInResult.requestFailed,
+        RequestFailure.serverError,
+      ),
+      (
+        'auth answering with 429',
+        (RequestOptions request) async => ResponseBody.fromString('', 429),
+        SignInResult.requestFailed,
+        RequestFailure.tooManyRequests,
+      ),
+      (
+        'auth being unreachable',
+        (RequestOptions request) async => throw DioException.connectionError(
+          requestOptions: request,
+          reason: 'Connection refused',
+        ),
+        SignInResult.requestFailed,
+        RequestFailure.noConnection,
       ),
       (
         'auth answering without set-auth-token',
         (RequestOptions request) async =>
             jsonResponse({'token': 'unsigned-session-token'}),
         SignInResult.failed,
+        null,
       ),
     ]) {
       test(
-        'signInWithEmail with $scenario returns ${expectedResult.name} without a request to the API, stays signed out and logs a warning without email and password',
+        'signInWithEmail with $scenario returns ${expectedResult.name}, reports ${expectedFailure?.name ?? 'no failure'}, sends no request to the API, stays signed out and logs a warning without email and password',
         () async {
           final requests = recordAuthenticationRequests(
             container,
@@ -423,6 +450,10 @@ void main() {
           final result = await signInWithEmail();
 
           expect(result, expectedResult);
+          expect(
+            container.read(reportedRequestFailureProvider)?.failure,
+            expectedFailure,
+          );
           expect(requests.api.requests, isEmpty);
           expect(container.read(signedInAccountProvider), isNull);
           final log = container.read(talkerProvider).history.single;
