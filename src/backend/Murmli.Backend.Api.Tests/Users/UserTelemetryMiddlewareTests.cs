@@ -4,7 +4,9 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Murmli.Backend.Api.Tests.Infrastructure;
 using Npgsql;
@@ -159,6 +161,103 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
         Assert.All(logRecords, logRecord => Assert.DoesNotContain(AuthUserId, Describe(logRecord)));
     }
 
+    [Fact]
+    public async Task InvokeAsync_RequestsOnSameDay_WritesLastRequestOnce()
+    {
+        DateOnly? lastRequestOnAfterCreation;
+        DateOnly? lastRequestOnAfterNextDay;
+        ActivityTraceId[] traceIds;
+        await using (var api = await StartApiAsync())
+        {
+            await api.GetMeAsync(AuthUserId);
+            lastRequestOnAfterCreation = await ReadLastRequestOnAsync(api);
+            var sameDayTraceId = await SendAsync(api, HttpMethod.Get, ProductSearchPath, TestTokens.Create(AuthUserId), HttpStatusCode.OK);
+            api.TimeProvider.Advance(TimeSpan.FromDays(1));
+            var nextDayTraceId = await SendAsync(api, HttpMethod.Get, ProductSearchPath, TestTokens.Create(AuthUserId), HttpStatusCode.OK);
+            var nextDayAgainTraceId = await SendAsync(api, HttpMethod.Get, ProductSearchPath, TestTokens.Create(AuthUserId), HttpStatusCode.OK);
+            lastRequestOnAfterNextDay = await ReadLastRequestOnAsync(api);
+            traceIds = [sameDayTraceId, nextDayTraceId, nextDayAgainTraceId];
+        }
+
+        Assert.Equal(new DateOnly(2026, 1, 1), lastRequestOnAfterCreation);
+        Assert.Equal(new DateOnly(2026, 1, 2), lastRequestOnAfterNextDay);
+        Assert.Equal([0, 1, 0], traceIds.Select(CountLastRequestUpdates));
+    }
+
+    [Fact]
+    public async Task InvokeAsync_AccountWithoutLastRequest_WritesTodayOnce()
+    {
+        DateOnly? lastRequestOn;
+        ActivityTraceId[] traceIds;
+        await using (var api = await StartApiAsync())
+        {
+            var userId = await api.GetMeAsync(AuthUserId);
+            await new DatabaseAdministration(connectionString).ClearLastRequestAsync(userId);
+            var firstTraceId = await SendAsync(api, HttpMethod.Get, ProductSearchPath, TestTokens.Create(AuthUserId), HttpStatusCode.OK);
+            var secondTraceId = await SendAsync(api, HttpMethod.Get, ProductSearchPath, TestTokens.Create(AuthUserId), HttpStatusCode.OK);
+            lastRequestOn = await ReadLastRequestOnAsync(api);
+            traceIds = [firstTraceId, secondTraceId];
+        }
+
+        Assert.Equal(new DateOnly(2026, 1, 1), lastRequestOn);
+        Assert.Equal([1, 0], traceIds.Select(CountLastRequestUpdates));
+    }
+
+    [Fact]
+    public async Task InvokeAsync_LastRequestWrittenMeanwhile_DoesNotOverwrite()
+    {
+        await using var api = await StartApiAsync();
+        var userId = await api.GetMeAsync(AuthUserId);
+        api.TimeProvider.Advance(TimeSpan.FromDays(1));
+        var administration = new DatabaseAdministration(connectionString);
+        Task<ActivityTraceId> request;
+        await using (var update = await administration.BeginLastRequestUpdateAsync(userId, new DateOnly(2026, 1, 3)))
+        {
+            request = SendAsync(api, HttpMethod.Get, ProductSearchPath, TestTokens.Create(AuthUserId), HttpStatusCode.OK);
+            await administration.WaitForLockWaitersAsync(1);
+            await update.CommitAsync();
+        }
+
+        await request;
+
+        Assert.Equal(new DateOnly(2026, 1, 3), await ReadLastRequestOnAsync(api));
+    }
+
+    [Fact]
+    public async Task InvokeAsync_DatabaseUnavailableDuringLastRequestUpdate_ReturnsServiceUnavailable()
+    {
+        var traceId = ActivityTraceId.CreateRandom();
+        Guid userId;
+        await using (var setup = await ApiHost.StartAsync(connectionString))
+        {
+            userId = await setup.GetMeAsync(AuthUserId);
+        }
+
+        await using (
+            var api = await ApiHost.StartAsync(
+                connectionString + ";Command Timeout=1",
+                new Dictionary<string, string?> { ["Database:MaxRetryDelay"] = "00:00:00.100" },
+                activities: activities,
+                logRecords: logRecords
+            )
+        )
+        {
+            api.TimeProvider.Advance(TimeSpan.FromDays(1));
+            await using (await new DatabaseAdministration(connectionString).BeginLastRequestUpdateAsync(userId, new DateOnly(2026, 1, 2)))
+            {
+                using var response = await SendAsync(api, HttpMethod.Get, ProductSearchPath, TestTokens.Create(AuthUserId), traceId);
+
+                Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+                var problem = await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+                Assert.Equal(TestProblemTypes.ServiceUnavailable, problem.GetProperty("type").GetString());
+            }
+        }
+
+        var unavailableLog = Assert.Single(GetLogRecords(traceId), logRecord => logRecord.EventId.Name == "DatabaseUnavailable");
+        Assert.IsType<RetryLimitExceededException>(unavailableLog.Exception);
+        Assert.Equal(3, CountLastRequestUpdates(traceId));
+    }
+
     private Task<ApiHost> StartApiAsync(IReadOnlyDictionary<string, string?>? additionalConfiguration = null, bool mapFailingEndpoint = false) =>
         ApiHost.StartAsync(connectionString, additionalConfiguration, mapFailingEndpoint, activities, logRecords);
 
@@ -212,6 +311,23 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
             await terminateCommand.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
         }
     }
+
+    private static Task<DateOnly?> ReadLastRequestOnAsync(ApiHost api) =>
+        api.QueryDatabaseAsync(context =>
+            context
+                .Users.Where(user => user.AuthUserId == AuthUserId)
+                .Select(user => user.LastRequestOn)
+                .SingleAsync(TestContext.Current.CancellationToken)
+        );
+
+    private int CountLastRequestUpdates(ActivityTraceId traceId) =>
+        activities.Count(activity =>
+            activity.Source.Name == "Npgsql"
+            && activity.TraceId == traceId
+            && activity.GetTagItem("db.query.text") is string queryText
+            && queryText.StartsWith("UPDATE identity.users", StringComparison.Ordinal)
+            && queryText.Contains("last_request_on", StringComparison.Ordinal)
+        );
 
     private Activity GetRequestActivity(ActivityTraceId traceId) =>
         Assert.Single(activities, activity => activity.Source.Name == "Microsoft.AspNetCore" && activity.TraceId == traceId);

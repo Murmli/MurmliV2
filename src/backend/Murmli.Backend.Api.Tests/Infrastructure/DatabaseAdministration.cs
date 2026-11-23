@@ -71,6 +71,9 @@ internal sealed class DatabaseAdministration(string connectionString)
             ("expiresAt", expiresAt)
         );
 
+    public Task ClearLastRequestAsync(Guid userId) =>
+        UpdateSingleRowAsync("UPDATE identity.users SET last_request_on = NULL WHERE id = @target", ("target", userId));
+
     public async Task<Guid> InsertMemberEntryAsync(
         Guid scopeId,
         Guid accountId,
@@ -118,8 +121,14 @@ internal sealed class DatabaseAdministration(string connectionString)
 
     public Task<HeldTransaction> LockNotesTableAsync() => HoldAsync("LOCK TABLE synctest.notes IN SHARE MODE", target: null);
 
+    public Task<HeldTransaction> LockDatabaseIdentityTableAsync() =>
+        HoldAsync("LOCK TABLE sync.database_identity IN ACCESS EXCLUSIVE MODE", target: null);
+
     public Task<HeldTransaction> BeginUserDeletionAsync(Guid userId) =>
         HoldAsync("DELETE FROM identity.users WHERE id = @target RETURNING id", userId);
+
+    public Task<HeldTransaction> BeginLastRequestUpdateAsync(Guid userId, DateOnly lastRequestOn) =>
+        HoldAsync("UPDATE identity.users SET last_request_on = @lastRequestOn WHERE id = @target RETURNING id", userId, ("lastRequestOn", lastRequestOn));
 
     public async Task WaitForLockWaitersAsync(int count)
     {
@@ -179,7 +188,7 @@ internal sealed class DatabaseAdministration(string connectionString)
         await ExecuteSingleRowAsync(connection, transaction: null, sql, parameters);
     }
 
-    private async Task<HeldTransaction> HoldAsync(string sql, Guid? target)
+    private async Task<HeldTransaction> HoldAsync(string sql, Guid? target, params (string Name, object Value)[] parameters)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var connection = new NpgsqlConnection(connectionStringBuilder.ConnectionString);
@@ -188,6 +197,11 @@ internal sealed class DatabaseAdministration(string connectionString)
             await connection.OpenAsync(cancellationToken);
             var transaction = await connection.BeginTransactionAsync(cancellationToken);
             await using var command = new NpgsqlCommand(sql, connection, transaction);
+            foreach (var (name, value) in parameters)
+            {
+                command.Parameters.AddWithValue(name, value);
+            }
+
             if (target is { } targetId)
             {
                 command.Parameters.AddWithValue("target", targetId);

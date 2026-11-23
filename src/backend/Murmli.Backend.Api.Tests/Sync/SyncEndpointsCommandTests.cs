@@ -567,6 +567,48 @@ public class SyncEndpointsCommandTests(SyncApiFixture fixture) : IClassFixture<S
         );
     }
 
+    [Fact]
+    public async Task Sync_AccountMarkedWhileCommandWaits_ReturnsAccountGone()
+    {
+        var logRecords = new List<LogRecord>();
+        var traceId = ActivityTraceId.CreateRandom();
+        var connectionString = fixture.CreateDatabaseConnectionString();
+        await using (var api = await ApiHost.StartAsync(connectionString, logRecords: logRecords, testDataTypes: true))
+        {
+            var device = await SyncTestDevice.SignInAsync(api);
+            var now = api.TimeProvider.GetUtcNow();
+            var boardId = Guid.NewGuid();
+            await device.ApplyAllAsync(device.CreateBoard(boardId, now, "board"));
+            var otherDevice = device.OtherDevice();
+            await otherDevice.SyncAllAsync();
+            var rename = otherDevice.SetBoardTitle(boardId, now, "renamed");
+            api.AuthService.ResponseStatusCode = HttpStatusCode.ServiceUnavailable;
+            var administration = new DatabaseAdministration(connectionString);
+            Task<HttpResponseMessage> sync;
+            await using (await administration.LockProcessedCommandsTableAsync())
+            {
+                sync = otherDevice.SendAsync(
+                    JsonContent.Create(otherDevice.CreateBody(SyncTestDevice.AllDataTypes, [rename])),
+                    otherDevice.DeviceId.ToString(),
+                    TestTelemetry.CreateTraceParent(traceId)
+                );
+                await administration.WaitForLockWaitersAsync(1);
+                Assert.Equal(HttpStatusCode.BadGateway, await api.DeleteMeAsync(device.AuthUserId));
+            }
+
+            using var response = await sync;
+
+            await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.Gone, TestProblemTypes.AccountGone);
+        }
+
+        Assert.DoesNotContain(
+            logRecords,
+            logRecord =>
+                logRecord.TraceId == traceId
+                && (logRecord.EventId.Name == "SyncCommandFailed" || logRecord.EventId.Name == "SyncDatabaseUnavailable")
+        );
+    }
+
     [Theory]
     [InlineData("timeMissing")]
     [InlineData("idMalformed")]

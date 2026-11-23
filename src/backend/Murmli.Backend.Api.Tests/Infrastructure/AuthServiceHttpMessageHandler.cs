@@ -11,6 +11,8 @@ internal sealed class AuthServiceHttpMessageHandler : HttpMessageHandler
 
     public Exception? TransportFailure { get; set; }
 
+    public string? FailingAuthUserId { get; set; }
+
     public IReadOnlyCollection<AuthServiceRequest> Requests => requests;
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -22,6 +24,11 @@ internal sealed class AuthServiceHttpMessageHandler : HttpMessageHandler
         if (TransportFailure is not null)
         {
             throw TransportFailure;
+        }
+
+        if (FailingAuthUserId is not null && body is not null && body.Contains(FailingAuthUserId, StringComparison.Ordinal))
+        {
+            return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
         }
 
         return new HttpResponseMessage(ResponseStatusCode);

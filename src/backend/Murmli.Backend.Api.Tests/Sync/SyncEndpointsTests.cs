@@ -361,6 +361,66 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
     }
 
     [Fact]
+    public async Task Sync_AccountBeingDeleted_ReturnsAccountGoneBeforeOtherChecks()
+    {
+        await using var api = await ApiHost.StartAsync(fixture.CreateDatabaseConnectionString(), testDataTypes: true);
+        var device = await SyncTestDevice.SignInAsync(api);
+        api.AuthService.ResponseStatusCode = HttpStatusCode.ServiceUnavailable;
+        Assert.Equal(HttpStatusCode.BadGateway, await api.DeleteMeAsync(device.AuthUserId));
+
+        using var response = await device.SendAsync(JsonContent.Create(device.CreateBody()), InvalidDeviceId);
+
+        await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.Gone, TestProblemTypes.AccountGone);
+    }
+
+    [Fact]
+    public async Task Sync_AccountMarkedWhileFirstSyncWaits_CreatesNoPersonalScope()
+    {
+        var connectionString = fixture.CreateDatabaseConnectionString();
+        await using var api = await ApiHost.StartAsync(connectionString, testDataTypes: true);
+        var device = await SyncTestDevice.SignInAsync(api, firstSync: false);
+        api.AuthService.ResponseStatusCode = HttpStatusCode.ServiceUnavailable;
+        var administration = new DatabaseAdministration(connectionString);
+        Task<HttpResponseMessage> sync;
+        await using (await administration.LockScopesTableAsync())
+        {
+            sync = SendBodyAsync(device, device.CreateBody());
+            await administration.WaitForLockWaitersAsync(1);
+            Assert.Equal(HttpStatusCode.BadGateway, await api.DeleteMeAsync(device.AuthUserId));
+        }
+
+        using var response = await sync;
+
+        await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.Gone, TestProblemTypes.AccountGone);
+        Assert.Equal(0, await SharedScopeQueries.CountOwnedScopesAsync(api, device.AccountId, SyncScope.PersonalKind));
+    }
+
+    [Fact]
+    public async Task Sync_AccountMarkedBeforeHeads_ReturnsAccountGoneWithoutProcessingCommands()
+    {
+        var connectionString = fixture.CreateDatabaseConnectionString();
+        await using var api = await ApiHost.StartAsync(connectionString, testDataTypes: true);
+        var device = await SyncTestDevice.SignInAsync(api);
+        var noteId = Guid.NewGuid();
+        var create = device.CreateNote(noteId, api.TimeProvider.GetUtcNow(), "note");
+        api.AuthService.ResponseStatusCode = HttpStatusCode.ServiceUnavailable;
+        var administration = new DatabaseAdministration(connectionString);
+        Task<HttpResponseMessage> sync;
+        await using (await administration.LockDatabaseIdentityTableAsync())
+        {
+            sync = SendBodyAsync(device, device.CreateBody(create));
+            await administration.WaitForLockWaitersAsync(1);
+            Assert.Equal(HttpStatusCode.BadGateway, await api.DeleteMeAsync(device.AuthUserId));
+        }
+
+        using var response = await sync;
+
+        await SyncTestDevice.AssertProblemAsync(response, HttpStatusCode.Gone, TestProblemTypes.AccountGone);
+        Assert.Null(await TestNoteQueries.ReadTitleAsync(api, noteId));
+        Assert.Empty(await TestNoteQueries.ReadProcessedCommandsAsync(api, device.AccountId));
+    }
+
+    [Fact]
     public async Task Sync_UnknownAccount_ReturnsAccountGone()
     {
         var device = SyncTestDevice.WithoutAccount(fixture.Api);

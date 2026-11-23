@@ -173,6 +173,14 @@ internal sealed class ApiHost : IAsyncDisposable
         return Assert.IsType<UserResponse>(user).Id;
     }
 
+    public async Task<HttpStatusCode> DeleteMeAsync(string authUserId)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, "/v1/users/me");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", TestTokens.Create(authUserId));
+        using var response = await HttpClient.SendAsync(request, TestContext.Current.CancellationToken);
+        return response.StatusCode;
+    }
+
     public async Task<T> QueryDatabaseAsync<T>(Func<MurmliDbContext, Task<T>> query)
     {
         await using var scope = application.Services.CreateAsyncScope();
