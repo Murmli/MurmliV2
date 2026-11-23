@@ -85,7 +85,7 @@ Siehe [`auth`](telemetry.md#auth). Akzeptierte Ausnahme: Mit `Telemetry:RecordSe
 ## Tests
 
 - `TestTokens` signieren mit zufälligem symmetrischem Schlüssel über `SigningKeys` statt `MetadataAddress` (echter Prüfpfad ohne Metadatenabruf), `exp` und `nbf` aus der Systemuhr, die JwtBearer statt des `FakeTimeProvider` von `ApiHost` nutzt.
-- Span-Listener von `ApiHost` sind prozessweit, die Liste enthält auch Spans paralleler Hosts und ist erst nach Entsorgen des Hosts vollständig: danach auswerten, gefiltert per eigener Trace-ID im `traceparent`.
+- Spans und Metriken von `ApiHost` auswerten: [telemetry.md](telemetry.md#tests).
 - Tests einer Collection in `Murmli.Backend.Aspire.Tests` teilen eine `AppHostFixture`, damit Aspires npm-Installer nie parallel läuft.
 
 ## Entscheidungen
