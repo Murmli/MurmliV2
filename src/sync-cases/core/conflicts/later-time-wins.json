@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "id": "core/conflicts/later-time-wins",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/122 Je Feld gewinnt die spätere Zeit",
+  "dataTypes": ["testNote"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [
+    { "device": "phone", "kind": "create", "dataType": "testNote", "scope": "$personal", "record": "note", "at": -60000, "fields": { "title": "original" } }
+  ],
+  "race": [
+    { "label": "older", "device": "phone", "kind": "setFields", "dataType": "testNote", "scope": "$personal", "record": "note", "at": -2000, "fields": { "title": "older" } },
+    { "label": "newer", "device": "tablet", "kind": "setFields", "dataType": "testNote", "scope": "$personal", "record": "note", "at": -1000, "fields": { "title": "newer" } }
+  ],
+  "expect": {
+    "results": { "older": { "status": "applied" }, "newer": { "status": "applied" } },
+    "records": [ { "dataType": "testNote", "record": "note", "fields": { "title": "newer" } } ],
+    "absent": []
+  },
+  "expectByOrder": {
+    "newer>older": { "results": { "older": { "status": "ignored", "cause": "lostToNewer" }, "newer": { "status": "applied" } } }
+  }
+}

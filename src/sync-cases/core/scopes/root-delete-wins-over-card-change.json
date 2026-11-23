@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "id": "core/scopes/root-delete-wins-over-card-change",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/122 Löscht der Besitzer den Wurzel-Datensatz, ist der Bereich mit allen Datensätzen weg",
+  "dataTypes": ["testBoard", "testCard"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [
+    { "device": "phone", "kind": "create", "dataType": "testBoard", "scope": "board", "record": "board", "at": -60000, "fields": { "title": "Groceries" } },
+    { "device": "phone", "kind": "create", "dataType": "testCard", "scope": "board", "record": "card", "at": -50000, "fields": { "text": "milk" } }
+  ],
+  "race": [
+    { "label": "delete", "device": "phone", "kind": "delete", "dataType": "testBoard", "scope": "board", "record": "board", "at": -2000 },
+    { "label": "change", "device": "tablet", "kind": "setFields", "dataType": "testCard", "scope": "board", "record": "card", "at": -1000, "fields": { "text": "oat milk" } }
+  ],
+  "expect": {
+    "results": { "delete": { "status": "applied" }, "change": { "status": "applied" } },
+    "records": [],
+    "absent": [ { "dataType": "testBoard", "record": "board" }, { "dataType": "testCard", "record": "card" } ]
+  },
+  "expectByOrder": {
+    "delete>change": { "results": { "delete": { "status": "applied" }, "change": { "status": "rejected", "reason": "noAccess" } } }
+  }
+}

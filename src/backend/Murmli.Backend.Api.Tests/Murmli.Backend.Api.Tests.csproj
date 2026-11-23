@@ -24,6 +24,10 @@
     </ItemGroup>
 
     <ItemGroup>
+        <None Include="..\..\sync-cases\**\*.json" LinkBase="Fixtures\SyncCases" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
         <Using Include="Xunit" />
     </ItemGroup>
 

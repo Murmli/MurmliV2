@@ -1,0 +1,18 @@
+{
+  "format": 1,
+  "id": "core/creation/set-fields-without-target-is-ignored",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/122 setFields und delete ohne Ziel legen nie einen Datensatz an",
+  "dataTypes": ["testNote"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [],
+  "race": [
+    { "label": "change", "device": "phone", "kind": "setFields", "dataType": "testNote", "scope": "$personal", "record": "note", "at": -2000, "fields": { "title": "changed" } },
+    { "label": "delete", "device": "tablet", "kind": "delete", "dataType": "testNote", "scope": "$personal", "record": "note", "at": -1000 }
+  ],
+  "expect": {
+    "results": { "change": { "status": "ignored", "cause": "targetDeleted" }, "delete": { "status": "ignored", "cause": "targetDeleted" } },
+    "records": [],
+    "absent": [ { "dataType": "testNote", "record": "note" } ]
+  },
+  "expectByOrder": {}
+}

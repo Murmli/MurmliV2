@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "id": "core/conflicts/same-time-later-processed-wins",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/122 Bei gleicher Zeit gewinnt das später verarbeitete Kommando",
+  "dataTypes": ["testNote"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [
+    { "device": "phone", "kind": "create", "dataType": "testNote", "scope": "$personal", "record": "note", "at": -60000, "fields": { "title": "original" } }
+  ],
+  "race": [
+    { "label": "phone", "device": "phone", "kind": "setFields", "dataType": "testNote", "scope": "$personal", "record": "note", "at": -1000, "fields": { "title": "phone" } },
+    { "label": "tablet", "device": "tablet", "kind": "setFields", "dataType": "testNote", "scope": "$personal", "record": "note", "at": -1000, "fields": { "title": "tablet" } }
+  ],
+  "expect": {
+    "results": { "phone": { "status": "applied" }, "tablet": { "status": "applied" } },
+    "records": [ { "dataType": "testNote", "record": "note", "fields": { "title": "tablet" } } ],
+    "absent": []
+  },
+  "expectByOrder": {
+    "tablet>phone": { "records": [ { "dataType": "testNote", "record": "note", "fields": { "title": "phone" } } ] }
+  }
+}
