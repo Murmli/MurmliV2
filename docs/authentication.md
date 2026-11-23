@@ -60,7 +60,7 @@ Was die App anbietet: [app.md](app.md#anmeldung).
 `DELETE /v1/users/me` antwortet 204, wenn alles gelöscht ist. Die Schritte laufen ohne gemeinsame Transaktion, jeder ist wiederholbar: Scheitert einer, kann sich der Nutzer weiter anmelden und erneut löschen, auch mit demselben Token.
 
 1. Löschvermerk (Better-Auth-ID, Zeitpunkt) schreiben.
-2. Konto in `identity.users` löschen, Nutzerdaten folgen per `ON DELETE CASCADE`, die abgeglichenen Daten über ihren Bereich (`sync.scopes`) und die verarbeiteten Kommandos (`sync.processed_commands`).
+2. Konto in `identity.users` löschen, Nutzerdaten folgen per `ON DELETE CASCADE`, die abgeglichenen Daten über ihren Bereich (`sync.scopes`, samt Datensätzen und Mitgliedseinträgen eigener geteilter Bereiche) und die verarbeiteten Kommandos (`sync.processed_commands`). Mitgliedseinträge des Kontos in fremden Bereichen verlieren per `ON DELETE SET NULL` nur ihre Verbindung zum Konto ([#131](https://github.com/Murmli/MurmliV2/issues/131)); vor dem Teilen gibt es keine.
 3. Vermerke älter als 24 Stunden löschen (weit über die rund 20 Minuten JWT-Gültigkeit).
 4. Nutzer in `auth` löschen (`POST /service/delete-user`, Timeout 10 s, ID im Body, damit sie nicht in Logs der HttpClientFactory und im HttpClient-Span landet). Kein 2xx, Timeout oder Verbindungsfehler ergeben 502, geloggt nur Statuscode bzw. Exception (`AuthUserDeletionFailed`), nie der Antwort-Body. `auth` antwortet auch für unbekannte IDs 204.
 
