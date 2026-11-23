@@ -17,7 +17,15 @@ internal sealed class SyncTestDevice
 
     private const string ResponseContentType = "application/json; charset=utf-8";
 
+    public const string ShoppingListDataType = "shoppingList";
+
+    public const string ShoppingListItemDataType = "shoppingListItem";
+
+    public const string ShoppingListScopeKind = "shoppingList";
+
     public static readonly string[] AllDataTypes = [TestNoteType.DataTypeName, TestBoardType.DataTypeName, TestCardType.DataTypeName];
+
+    public static readonly string[] ShoppingDataTypes = [ShoppingListDataType, ShoppingListItemDataType];
 
     private static readonly JsonSerializerOptions ResponseSerializerOptions = new(JsonSerializerOptions.Strict)
     {
@@ -104,11 +112,16 @@ internal sealed class SyncTestDevice
         return problem;
     }
 
+    public static JsonObject ItemFields(string name, string category = "dairy", string language = "de") =>
+        new() { ["name"] = name, ["category"] = category, ["language"] = language };
+
     public SyncTestDevice OtherDevice(ApiHost? otherApi = null) => new(otherApi ?? api, AuthUserId, AccountId, personalScopeId);
 
     public Task<SyncResponse> SyncAsync(params JsonObject[] commands) => SyncAsync([TestNoteType.DataTypeName], commands);
 
     public Task<SyncResponse> SyncAllAsync(params JsonObject[] commands) => SyncAsync(AllDataTypes, commands);
+
+    public Task<SyncResponse> SyncShoppingAsync(params JsonObject[] commands) => SyncAsync(ShoppingDataTypes, commands);
 
     public async Task<SyncResponse> SyncAsync(IReadOnlyList<string> dataTypes, IReadOnlyList<JsonObject> commands)
     {
@@ -214,6 +227,18 @@ internal sealed class SyncTestDevice
 
     public JsonObject DeleteCard(Guid boardId, Guid cardId, DateTimeOffset time) =>
         CreateCommand("delete", TestCardType.DataTypeName, boardId, cardId, time, fields: null);
+
+    public JsonObject CreateList(Guid listId, DateTimeOffset time, string name) =>
+        CreateCommand("create", ShoppingListDataType, listId, listId, time, new JsonObject { ["name"] = name });
+
+    public JsonObject DeleteList(Guid listId, DateTimeOffset time) =>
+        CreateCommand("delete", ShoppingListDataType, listId, listId, time, fields: null);
+
+    public JsonObject CreateItem(Guid listId, Guid itemId, DateTimeOffset time, JsonObject fields) =>
+        CreateCommand("create", ShoppingListItemDataType, listId, itemId, time, fields.DeepClone().AsObject());
+
+    public JsonObject SetItemFields(Guid listId, Guid itemId, DateTimeOffset time, JsonObject fields) =>
+        CreateCommand("setFields", ShoppingListItemDataType, listId, itemId, time, fields.DeepClone().AsObject());
 
     public JsonObject CreateCommand(string kind, string dataType, Guid scopeId, Guid recordId, DateTimeOffset time, JsonObject? fields)
     {

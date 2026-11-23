@@ -1,0 +1,4 @@
+{
+  "categories": ["bakery", "bakingAndCooking", "beverages", "brothsAndSauces", "cannedGoods", "cerealsAndMuesli", "dairy", "frozen", "fruits", "grainsAndPasta", "householdGoods", "meatAndFish", "miscellaneous", "nuts", "personalCare", "petFood", "refrigerated", "snacks", "spices", "sweets", "vegetables", "vinegarAndOils"],
+  "units": ["can", "gram", "kilogram", "liter", "milliliter", "package", "piece", "pinch", "slice", "tablespoon", "teaspoon"]
+}

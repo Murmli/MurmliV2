@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.JsonWebTokens;
 using Murmli.Backend.Api.AuthService;
 using Murmli.Backend.Api.Database;
 using Murmli.Backend.Api.Products;
+using Murmli.Backend.Api.ShoppingLists;
 using Murmli.Backend.Api.Sync;
 using Murmli.Backend.Api.Users;
 using Murmli.Backend.Data.Extensions;
@@ -61,6 +62,7 @@ public static class HostApplicationBuilderExtensions
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.AddSync();
+        builder.Services.AddSyncDataType<ShoppingListType>().AddSyncDataType<ShoppingListItemType>();
         builder.Services.AddSingleton<SyncRateLimiter>();
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddSyncCleanupContributor<StaleAccountDeletionContributor>();

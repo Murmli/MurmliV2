@@ -72,6 +72,28 @@ public class SyncEndpointsLimitTests(PostgresFixture postgres) : IClassFixture<P
     }
 
     [Fact]
+    public async Task Sync_CreateItemAtRecordLimit_RejectedLimitExceeded()
+    {
+        await using var api = await StartApiAsync("Sync:DataTypes:shoppingListItem:MaxRecordsPerScope", "2");
+        var device = await SyncTestDevice.SignInAsync(api);
+        var now = api.TimeProvider.GetUtcNow();
+        var listId = Guid.NewGuid();
+        await device.SyncShoppingAsync(device.CreateList(listId, now.AddSeconds(-60), "Einkauf"));
+
+        var response = await device.SyncShoppingAsync(
+            device.CreateItem(listId, Guid.NewGuid(), now, SyncTestDevice.ItemFields("Milch")),
+            device.CreateItem(listId, Guid.NewGuid(), now, SyncTestDevice.ItemFields("Brot")),
+            device.CreateItem(listId, Guid.NewGuid(), now, SyncTestDevice.ItemFields("Butter"))
+        );
+
+        Assert.Equal(
+            new (string, string?)[] { ("applied", null), ("applied", null), ("rejected", "limitExceeded") },
+            response.Results.Select(result => (result.Status, result.Reason))
+        );
+        Assert.Equal(2, await ShoppingListQueries.CountItemsAsync(api, listId));
+    }
+
+    [Fact]
     public async Task Sync_ConcurrentCreatesAtRecordLimit_DoNotExceedLimit()
     {
         await using var api = await StartApiAsync("Sync:DataTypes:testNote:MaxRecordsPerScope", "3");
