@@ -154,6 +154,14 @@ internal sealed class SyncTestDevice
 
     public JsonObject CreateBody(params JsonObject[] commands) => CreateBody([TestNoteType.DataTypeName], commands);
 
+    public JsonObject CreateBody(IReadOnlyList<string> dataTypes, IReadOnlyList<JsonObject> commands) =>
+        new()
+        {
+            ["token"] = Token,
+            ["dataTypes"] = new JsonArray([.. dataTypes.Select(dataType => JsonValue.Create(dataType))]),
+            ["commands"] = new JsonArray([.. commands.Select(command => command.DeepClone())]),
+        };
+
     public JsonObject CreateNote(
         Guid noteId,
         DateTimeOffset time,
@@ -215,14 +223,6 @@ internal sealed class SyncTestDevice
 
         return command;
     }
-
-    private JsonObject CreateBody(IReadOnlyList<string> dataTypes, IReadOnlyList<JsonObject> commands) =>
-        new()
-        {
-            ["token"] = Token,
-            ["dataTypes"] = new JsonArray([.. dataTypes.Select(dataType => JsonValue.Create(dataType))]),
-            ["commands"] = new JsonArray([.. commands.Select(command => command.DeepClone())]),
-        };
 
     private async Task<SyncResponse> ReadAsync(HttpResponseMessage response)
     {

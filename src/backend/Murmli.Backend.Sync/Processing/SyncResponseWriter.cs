@@ -64,10 +64,21 @@ internal sealed class SyncResponseWriter : IDisposable
         Json.WriteEndObject();
     }
 
-    public void WriteScopeEnd()
+    public void WriteScopeEnd(IReadOnlyList<SyncMember> members)
     {
         Json.WriteEndArray();
         Json.WriteStartArray("members");
+        foreach (var member in members)
+        {
+            Json.WriteStartObject();
+            Json.WriteString("memberId", member.MemberId);
+            Json.WriteString("name", member.Name);
+            Json.WriteString("role", member.Role);
+            Json.WriteString("state", member.State);
+            Json.WriteBoolean("isOwn", member.IsOwn);
+            Json.WriteEndObject();
+        }
+
         Json.WriteEndArray();
         Json.WriteEndObject();
         // With gzip the writer holds at most one uncompressed block; without gzip, a flush per block would let the response buffer grow to twice the body
@@ -78,7 +89,7 @@ internal sealed class SyncResponseWriter : IDisposable
     }
 
     public SyncOutcome.Completed WriteEnd(
-        IReadOnlyList<Guid> removedScopeIds,
+        IReadOnlyList<SyncRemovedScope> removedScopes,
         bool coversAllScopes,
         IReadOnlyList<SyncScopeHead> heads,
         DateTimeOffset serverTime
@@ -86,11 +97,11 @@ internal sealed class SyncResponseWriter : IDisposable
     {
         Json.WriteEndArray();
         Json.WriteStartArray("removedScopes");
-        foreach (var scopeId in removedScopeIds)
+        foreach (var removedScope in removedScopes)
         {
             Json.WriteStartObject();
-            Json.WriteString("scopeId", scopeId);
-            Json.WriteBoolean("removedByOwnAccount", false);
+            Json.WriteString("scopeId", removedScope.ScopeId);
+            Json.WriteBoolean("removedByOwnAccount", removedScope.RemovedByOwnAccount);
             Json.WriteEndObject();
         }
 

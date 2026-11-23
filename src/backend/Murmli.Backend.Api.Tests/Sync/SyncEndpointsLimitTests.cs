@@ -101,6 +101,7 @@ public class SyncEndpointsLimitTests(PostgresFixture postgres) : IClassFixture<P
             new (string, string?)[] { ("applied", null), ("applied", null), ("rejected", "limitExceeded") },
             response.Results.Select(result => (result.Status, result.Reason))
         );
+        Assert.Equal(new SyncRemovedScope(boardIds[2], false), Assert.Single(response.RemovedScopes));
         Assert.Equal(2, ownedScopeCountAtLimit);
         Assert.Equal(new[] { "applied", "applied" }, afterDelete.Results.Select(result => result.Status));
         Assert.Equal(2, await SharedScopeQueries.CountOwnedScopesAsync(api, device.AccountId, TestBoardType.ScopeKindName));

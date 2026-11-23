@@ -71,7 +71,7 @@ public sealed partial class SyncProcessor
         try
         {
             var heads = await changeReader.ReadHeadsAsync(caller.AccountId, cancellationToken);
-            if (heads.Count == 0)
+            if (!SyncChangeReader.HasPersonalScope(heads))
             {
                 phase = BootstrapPhase;
                 if (await lifecycle.EnsurePersonalScopeAsync(caller.AccountId, cancellationToken) == SyncBootstrapResult.AccountGone)
@@ -81,17 +81,18 @@ public sealed partial class SyncProcessor
 
                 phase = ChangesPhase;
                 heads = await changeReader.ReadHeadsAsync(caller.AccountId, cancellationToken);
-                if (heads.Count == 0)
+                if (!SyncChangeReader.HasPersonalScope(heads))
                 {
                     return new SyncOutcome.AccountGone();
                 }
             }
 
-            if (request.Commands.Count == 0 && token is not null && changeReader.IsUnchanged(token, heads))
+            var visibleHeads = SyncChangeReader.GetVisibleHeads(heads, listed);
+            if (request.Commands.Count == 0 && token is not null && changeReader.IsUnchanged(token, visibleHeads))
             {
                 using var response = new SyncResponseWriter(new MemoryStream(), options, SyncResponseEncoding.Identity);
                 response.WriteStart([]);
-                return response.WriteEnd([], false, heads, timeProvider.GetUtcNowInMilliseconds());
+                return response.WriteEnd([], false, visibleHeads, timeProvider.GetUtcNowInMilliseconds());
             }
 
             phase = CommandsPhase;

@@ -1,12 +1,50 @@
+using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Murmli.Backend.Api.Tests.Infrastructure;
 using Murmli.Backend.Api.Tests.Infrastructure.TestDataTypes;
+using Murmli.Backend.Data.Sync;
 using Murmli.Backend.Sync.Protocol;
 
 namespace Murmli.Backend.Api.Tests.Sync;
 
 public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<SyncApiFixture>
 {
+    [Fact]
+    public async Task Sync_RootCreate_CreatesScopeWithOwnerEntry()
+    {
+        var device = await SyncTestDevice.SignInAsync(fixture.Api);
+        var boardId = Guid.NewGuid();
+        var create = device.CreateBoard(boardId, fixture.Api.TimeProvider.GetUtcNow(), "board");
+
+        var response = await device.SyncAllAsync(create);
+
+        Assert.Equal(new SyncCommandResult(SyncTestCommands.GetId(create), "applied"), Assert.Single(response.Results));
+        var block = Assert.Single(response.Scopes);
+        Assert.Equal((boardId, TestBoardType.ScopeKindName, true), (block.ScopeId, block.Kind, block.FullState));
+        var record = Assert.Single(block.Records);
+        Assert.Equal((TestBoardType.DataTypeName, boardId, """{"title":"board"}"""), (record.DataType, record.Id, record.Fields.GetRawText()));
+        Assert.Empty(block.DeletedRecords);
+        var member = Assert.Single(block.Members);
+        Assert.Equal(new SyncMember(member.MemberId, "", "owner", "active", true), member);
+        var scope = await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId);
+        Assert.NotNull(scope);
+        var tokenScopes = SyncTokenFormat.Decode(response.Token).Scopes;
+        Assert.Equal(
+            new[] { device.PersonalScopeId, boardId }.OrderBy(scopeId => scopeId.ToString(), StringComparer.Ordinal),
+            tokenScopes.Select(tokenScope => tokenScope.ScopeId)
+        );
+        Assert.Equal((boardId, scope.Epoch, 1L), Assert.Single(tokenScopes, tokenScope => tokenScope.ScopeId == boardId));
+        Assert.Equal(
+            (TestBoardType.ScopeKindName, device.AccountId, 1L, 0L),
+            (scope.Kind, scope.OwnerAccountId, scope.Version, scope.TombstoneFloor)
+        );
+        var entry = Assert.Single(await SharedScopeQueries.ReadMemberEntriesAsync(fixture.Api, boardId));
+        Assert.Equal(
+            (member.MemberId, (Guid?)device.AccountId, "", "owner", SyncMemberState.Active),
+            (entry.Id, entry.AccountId, entry.Name, entry.Role, entry.State)
+        );
+    }
+
     [Fact]
     public async Task Sync_RootCommandWithRecordIdOtherThanScopeId_RejectedInvalid()
     {
@@ -27,6 +65,7 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         Assert.Equal(new SyncCommandResult(SyncTestCommands.GetId(create), "rejected", "invalid"), Assert.Single(response.Results));
         Assert.Null(await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId));
         Assert.Null(await SharedScopeQueries.ReadScopeAsync(fixture.Api, recordId));
+        Assert.Equal(new SyncRemovedScope(boardId, false), Assert.Single(response.RemovedScopes));
     }
 
     [Theory]
@@ -56,40 +95,134 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
             _ => throw new ArgumentOutOfRangeException(nameof(commandName), commandName, null),
         };
 
-        var response = await other.SyncAllAsync(command);
+        using var httpResponse = await other.SendAsync(
+            JsonContent.Create(other.CreateBody(SyncTestDevice.AllDataTypes, [command])),
+            other.DeviceId.ToString()
+        );
 
+        var body = await SyncTestDevice.ReadBodyAsync(httpResponse, compressed: false);
+        var response = SyncTestDevice.DeserializeResponse(body);
         Assert.Equal(new SyncCommandResult(SyncTestCommands.GetId(command), "rejected", "noAccess"), Assert.Single(response.Results));
+        Assert.DoesNotContain(response.Scopes, block => block.ScopeId == boardId);
+        Assert.Equal(new SyncRemovedScope(boardId, false), Assert.Single(response.RemovedScopes));
+        Assert.DoesNotContain("milk", body, StringComparison.Ordinal);
         Assert.Equal(versionBefore, (await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId))?.Version);
         Assert.Equal("milk", (await SharedScopeQueries.ReadCardAsync(fixture.Api, cardId))?.Text);
         Assert.Equal("board", await SharedScopeQueries.ReadBoardTitleAsync(fixture.Api, boardId));
         Assert.Equal(1, await SharedScopeQueries.CountCardsAsync(fixture.Api, boardId));
         Assert.Equal(0, await SharedScopeQueries.CountOwnedScopesAsync(fixture.Api, other.AccountId, TestBoardType.ScopeKindName));
+        Assert.Empty((await owner.SyncAllAsync()).Scopes);
     }
 
     [Theory]
-    [InlineData("member", "active", "applied", null)]
-    [InlineData("readOnly", "active", "rejected", "noAccess")]
-    [InlineData("member", "former", "rejected", "noAccess")]
-    public async Task Sync_CommandFromMemberEntry_DecidesByRoleAndState(string role, string state, string expectedStatus, string? expectedReason)
+    [InlineData("member", "active", "applied", null, true)]
+    [InlineData("readOnly", "active", "rejected", "noAccess", true)]
+    [InlineData("member", "former", "rejected", "noAccess", false)]
+    public async Task Sync_CommandFromMemberEntry_DecidesByRoleAndState(
+        string role,
+        string state,
+        string expectedStatus,
+        string? expectedReason,
+        bool visibleToMember
+    )
     {
         var owner = await SyncTestDevice.SignInAsync(fixture.Api);
         var now = fixture.Api.TimeProvider.GetUtcNow();
         var boardId = Guid.NewGuid();
+        var cardId = Guid.NewGuid();
         await ApplyAsync(owner, owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        var ownerMemberId = await ReadOwnerMemberIdAsync(boardId);
         var member = await SyncTestDevice.SignInAsync(fixture.Api);
-        await new DatabaseAdministration(fixture.ConnectionString).InsertMemberEntryAsync(
+        var memberId = await new DatabaseAdministration(fixture.ConnectionString).InsertMemberEntryAsync(
             boardId,
             member.AccountId,
             now.AddMilliseconds(1),
             role,
             state
         );
-        var create = member.CreateCard(boardId, Guid.NewGuid(), now, "bread");
+        var create = member.CreateCard(boardId, cardId, now, "bread");
 
         var response = await member.SyncAllAsync(create);
 
         Assert.Equal(new SyncCommandResult(SyncTestCommands.GetId(create), expectedStatus, expectedReason), Assert.Single(response.Results));
+        if (visibleToMember)
+        {
+            var block = Assert.Single(response.Scopes, block => block.ScopeId == boardId);
+            Assert.True(block.FullState);
+            Assert.Equal(
+                new[] { new SyncMember(ownerMemberId, "", "owner", "active", false), new SyncMember(memberId, "", role, state, true) },
+                block.Members
+            );
+            Assert.Equal(
+                expectedStatus == "applied"
+                    ? new[] { (TestBoardType.DataTypeName, boardId), (TestCardType.DataTypeName, cardId) }
+                    : new[] { (TestBoardType.DataTypeName, boardId) },
+                block.Records.Select(record => (record.DataType, record.Id))
+            );
+            Assert.Empty(block.DeletedRecords);
+            Assert.Empty(response.RemovedScopes);
+        }
+        else
+        {
+            Assert.DoesNotContain(response.Scopes, block => block.ScopeId == boardId);
+            Assert.Equal(new SyncRemovedScope(boardId, false), Assert.Single(response.RemovedScopes));
+        }
+
         Assert.Equal(expectedStatus == "applied" ? 1 : 0, await SharedScopeQueries.CountCardsAsync(fixture.Api, boardId));
+        Assert.Equal(
+            new[] { new SyncMember(ownerMemberId, "", "owner", "active", true), new SyncMember(memberId, "", role, state, false) },
+            Assert.Single((await owner.SyncAllAsync()).Scopes, block => block.ScopeId == boardId).Members
+        );
+    }
+
+    [Fact]
+    public async Task Sync_ForeignScope_NeverReturned()
+    {
+        var owner = await SyncTestDevice.SignInAsync(fixture.Api);
+        var boardId = Guid.NewGuid();
+        await ApplyAsync(owner, owner.CreateBoard(boardId, fixture.Api.TimeProvider.GetUtcNow(), "board"));
+        var ownerBoardEntry = Assert.Single(SyncTokenFormat.Decode(owner.Token!).Scopes, tokenScope => tokenScope.ScopeId == boardId);
+        var other = await SyncTestDevice.SignInAsync(fixture.Api, firstSync: false);
+
+        var withoutToken = await other.SyncAllAsync();
+        var otherToken = SyncTokenFormat.Decode(withoutToken.Token);
+        var personalEntry = Assert.Single(otherToken.Scopes);
+        other.Token = SyncTokenFormat.Encode(
+            otherToken.DatabaseIdentity,
+            [.. new[] { personalEntry, ownerBoardEntry }.OrderBy(tokenScope => tokenScope.ScopeId.ToString(), StringComparer.Ordinal)]
+        );
+        var withForgedToken = await other.SyncAllAsync();
+
+        Assert.Equal(other.PersonalScopeId, Assert.Single(withoutToken.Scopes).ScopeId);
+        Assert.True(withoutToken.CoversAllScopes);
+        Assert.Equal(other.PersonalScopeId, personalEntry.ScopeId);
+        Assert.DoesNotContain(withForgedToken.Scopes, block => block.ScopeId == boardId);
+        Assert.Equal(new SyncRemovedScope(boardId, false), Assert.Single(withForgedToken.RemovedScopes));
+        Assert.Equal(other.PersonalScopeId, Assert.Single(SyncTokenFormat.Decode(withForgedToken.Token).Scopes).ScopeId);
+    }
+
+    [Fact]
+    public async Task Sync_ScopeOfUnlistedKind_NeitherSentNorReportedRemoved()
+    {
+        var device = await SyncTestDevice.SignInAsync(fixture.Api);
+        var boardId = Guid.NewGuid();
+        await ApplyAsync(device, device.CreateBoard(boardId, fixture.Api.TimeProvider.GetUtcNow(), "board"));
+
+        var notesOnly = await device.SyncAsync();
+        var notesOnlyUnchanged = await device.SyncAsync();
+        var allDataTypes = await device.SyncAllAsync();
+
+        Assert.All(
+            new[] { notesOnly, notesOnlyUnchanged },
+            response =>
+            {
+                Assert.Empty(response.Scopes);
+                Assert.Empty(response.RemovedScopes);
+                Assert.Equal(device.PersonalScopeId, Assert.Single(SyncTokenFormat.Decode(response.Token).Scopes).ScopeId);
+            }
+        );
+        var block = Assert.Single(allDataTypes.Scopes);
+        Assert.Equal((boardId, true), (block.ScopeId, block.FullState));
     }
 
     [Theory]
@@ -119,6 +252,7 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         Assert.Equal(new SyncCommandResult(SyncTestCommands.GetId(command), "rejected", "noAccess"), Assert.Single(response.Results));
         Assert.Null(await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId));
         Assert.Null(await SharedScopeQueries.ReadCardAsync(fixture.Api, command["recordId"]!.GetValue<Guid>()));
+        Assert.Equal(new SyncRemovedScope(boardId, false), Assert.Single(response.RemovedScopes));
     }
 
     [Theory]
@@ -147,6 +281,27 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         Assert.Null(await SharedScopeQueries.ReadCardAsync(fixture.Api, cardId));
         Assert.Null(await TestNoteQueries.ReadTitleAsync(fixture.Api, noteId));
         Assert.Equal(1, (await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId))?.Version);
+    }
+
+    [Fact]
+    public async Task Sync_SeveralScopes_OrdersPersonalScopeFirstThenByScopeId()
+    {
+        var device = await SyncTestDevice.SignInAsync(fixture.Api);
+        var now = fixture.Api.TimeProvider.GetUtcNow();
+        var boardSortingBeforePersonalScope = new Guid($"00000000{Guid.NewGuid().ToString()[8..]}");
+        Guid[] boardIds = [boardSortingBeforePersonalScope, Guid.NewGuid(), Guid.NewGuid()];
+        await ApplyAsync(device, [.. boardIds.Select(boardId => device.CreateBoard(boardId, now, "board"))]);
+
+        var response = await device.OtherDevice().SyncAllAsync();
+
+        Assert.Equal(
+            new[] { device.PersonalScopeId }.Concat(boardIds.OrderBy(boardId => boardId.ToString(), StringComparer.Ordinal)),
+            response.Scopes.Select(block => block.ScopeId)
+        );
+        Assert.Equal(
+            boardIds.Append(device.PersonalScopeId).OrderBy(scopeId => scopeId.ToString(), StringComparer.Ordinal),
+            SyncTokenFormat.Decode(response.Token).Scopes.Select(tokenScope => tokenScope.ScopeId)
+        );
     }
 
     [Fact]
@@ -189,6 +344,150 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         Assert.Equal(1, cardCountAfterMemberDelete);
         Assert.Equal(new SyncCommandResult(SyncTestCommands.GetId(ownerDelete), "applied"), ownerResult);
         Assert.Equal(0, await SharedScopeQueries.CountCardsAsync(fixture.Api, boardId));
+    }
+
+    [Theory]
+    [InlineData("memberDelete")]
+    [InlineData("memberDeleteResent")]
+    [InlineData("ownerDeleteAheadOfClock")]
+    public async Task Sync_RootDeleteNotApplied_IncludesFullScopeState(string scenario)
+    {
+        var owner = await SyncTestDevice.SignInAsync(fixture.Api);
+        var now = fixture.Api.TimeProvider.GetUtcNow();
+        var boardId = Guid.NewGuid();
+        var cardId = Guid.NewGuid();
+        await CreateBoardWithCardAsync(owner, boardId, cardId, now);
+        var ownerMemberId = await ReadOwnerMemberIdAsync(boardId);
+        var member = await SyncTestDevice.SignInAsync(fixture.Api);
+        var memberId = await JoinAsync(member, boardId, now);
+        var isOwnerSender = scenario == "ownerDeleteAheadOfClock";
+        var sender = isOwnerSender ? owner : member;
+        var delete = isOwnerSender ? owner.DeleteBoard(boardId, now.AddMinutes(6)) : member.DeleteBoard(boardId, now);
+        var expectedResult = scenario switch
+        {
+            "memberDelete" => new SyncCommandResult(SyncTestCommands.GetId(delete), "rejected", "noAccess"),
+            "memberDeleteResent" => new SyncCommandResult(
+                SyncTestCommands.GetId(delete),
+                "alreadyProcessed",
+                Original: new SyncOriginalResult("rejected", "noAccess")
+            ),
+            "ownerDeleteAheadOfClock" => new SyncCommandResult(SyncTestCommands.GetId(delete), "rejected", "clockAhead"),
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null),
+        };
+        if (scenario == "memberDeleteResent")
+        {
+            await member.SyncAllAsync(delete);
+        }
+
+        var response = await sender.SyncAllAsync(delete);
+
+        Assert.Equal(expectedResult, Assert.Single(response.Results));
+        var block = Assert.Single(response.Scopes, block => block.ScopeId == boardId);
+        Assert.True(block.FullState);
+        Assert.Equal(
+            new[] { (TestBoardType.DataTypeName, boardId), (TestCardType.DataTypeName, cardId) },
+            block.Records.Select(record => (record.DataType, record.Id))
+        );
+        Assert.Empty(block.DeletedRecords);
+        Assert.Equal(
+            new[]
+            {
+                new SyncMember(ownerMemberId, "", "owner", "active", isOwnerSender),
+                new SyncMember(memberId, "", "member", "active", !isOwnerSender),
+            },
+            block.Members
+        );
+        Assert.NotNull(await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId));
+    }
+
+    [Fact]
+    public async Task Sync_ScopeDeletedOnOneDevice_ReportedRemovedByOwnAccountOnOther()
+    {
+        var device = await SyncTestDevice.SignInAsync(fixture.Api);
+        var now = fixture.Api.TimeProvider.GetUtcNow();
+        var boardId = Guid.NewGuid();
+        var cardId = Guid.NewGuid();
+        await CreateBoardWithCardAsync(device, boardId, cardId, now);
+        var otherDevice = device.OtherDevice();
+        await otherDevice.SyncAllAsync();
+        var delete = device.DeleteBoard(boardId, now);
+
+        var response = await device.SyncAllAsync(delete);
+        var otherDeviceResponse = await otherDevice.SyncAllAsync();
+
+        Assert.Equal(new SyncCommandResult(SyncTestCommands.GetId(delete), "applied"), Assert.Single(response.Results));
+        Assert.DoesNotContain(response.Scopes, block => block.ScopeId == boardId);
+        Assert.Equal(new SyncRemovedScope(boardId, true), Assert.Single(response.RemovedScopes));
+        Assert.DoesNotContain(otherDeviceResponse.Scopes, block => block.ScopeId == boardId);
+        Assert.Equal(new SyncRemovedScope(boardId, true), Assert.Single(otherDeviceResponse.RemovedScopes));
+        Assert.DoesNotContain(SyncTokenFormat.Decode(otherDeviceResponse.Token).Scopes, tokenScope => tokenScope.ScopeId == boardId);
+        Assert.Null(await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId));
+        Assert.Empty(await SharedScopeQueries.ReadMemberEntriesAsync(fixture.Api, boardId));
+        Assert.Null(await SharedScopeQueries.ReadCardAsync(fixture.Api, cardId));
+        var processed = Assert.Single(
+            await TestNoteQueries.ReadProcessedCommandsAsync(fixture.Api, device.AccountId),
+            command => command.CommandId == SyncTestCommands.GetId(delete)
+        );
+        Assert.Equal((SyncResultStatus.Applied, boardId, boardId), (processed.Status, processed.RecordId, processed.ScopeId));
+    }
+
+    [Fact]
+    public async Task Sync_ScopeDeletedByOwner_ReportedRemovedNotByOwnAccountToMember()
+    {
+        var owner = await SyncTestDevice.SignInAsync(fixture.Api);
+        var now = fixture.Api.TimeProvider.GetUtcNow();
+        var boardId = Guid.NewGuid();
+        await ApplyAsync(owner, owner.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        var member = await SyncTestDevice.SignInAsync(fixture.Api);
+        await JoinAsync(member, boardId, now);
+        await ApplyAsync(member, member.SetBoardTitle(boardId, now.AddSeconds(-10), "renamed"));
+        var memberDelete = member.DeleteBoard(boardId, now);
+        var memberDeleteResponse = await member.SyncAllAsync(memberDelete);
+        await ApplyAsync(owner, owner.DeleteBoard(boardId, now));
+
+        var response = await member.SyncAllAsync();
+
+        Assert.Equal(
+            new SyncCommandResult(SyncTestCommands.GetId(memberDelete), "rejected", "noAccess"),
+            Assert.Single(memberDeleteResponse.Results)
+        );
+        Assert.Equal(new SyncRemovedScope(boardId, false), Assert.Single(response.RemovedScopes));
+        Assert.DoesNotContain(response.Scopes, block => block.ScopeId == boardId);
+    }
+
+    [Fact]
+    public async Task Sync_ScopeDeletedBeforeOtherDeviceKnewIt_ReportedRemoved()
+    {
+        var device = await SyncTestDevice.SignInAsync(fixture.Api);
+        var tokenBeforeBoard = device.Token;
+        var now = fixture.Api.TimeProvider.GetUtcNow();
+        var boardId = Guid.NewGuid();
+        await ApplyAsync(device, device.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        await ApplyAsync(device, device.DeleteBoard(boardId, now));
+        var otherDevice = device.OtherDevice();
+        otherDevice.Token = tokenBeforeBoard;
+        var create = otherDevice.CreateCard(boardId, Guid.NewGuid(), now, "late");
+
+        var response = await otherDevice.SyncAllAsync(create);
+
+        Assert.Equal(new SyncCommandResult(SyncTestCommands.GetId(create), "rejected", "noAccess"), Assert.Single(response.Results));
+        Assert.Equal(new SyncRemovedScope(boardId, true), Assert.Single(response.RemovedScopes));
+        Assert.DoesNotContain(response.Scopes, block => block.ScopeId == boardId);
+    }
+
+    [Fact]
+    public async Task Sync_FailedRootCreateOfNewScope_NotReportedRemoved()
+    {
+        var device = await SyncTestDevice.SignInAsync(fixture.Api);
+        var boardId = Guid.NewGuid();
+        var create = device.CreateBoard(boardId, fixture.Api.TimeProvider.GetUtcNow(), TestBoardType.FailingTitle);
+
+        var response = await device.SyncAllAsync(create);
+
+        Assert.Equal(new SyncCommandResult(SyncTestCommands.GetId(create), "failed"), Assert.Single(response.Results));
+        Assert.Empty(response.RemovedScopes);
+        Assert.DoesNotContain(response.Scopes, block => block.ScopeId == boardId);
+        Assert.Null(await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId));
     }
 
     [Theory]
@@ -280,6 +579,8 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
             ("other", ownerMemberId, now.AddSeconds(-10), memberId),
             (card?.Text, card?.CreatedByMemberId, card?.CreatedAt, card?.ChangedByMemberId)
         );
+        var record = Assert.Single(Assert.Single(response.Scopes, block => block.ScopeId == boardId).Records, record => record.Id == cardId);
+        Assert.Equal(now.AddSeconds(-10).ToUnixTimeMilliseconds(), record.Fields.GetProperty("createdAt").GetInt64());
     }
 
     [Fact]
@@ -335,6 +636,8 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         var winner = Assert.Single(Enumerable.Range(0, devices.Length), index => results[index].Status == "applied");
         var loser = 1 - winner;
         Assert.Equal(("rejected", "noAccess"), (results[loser].Status, results[loser].Reason));
+        Assert.DoesNotContain(responses[loser].Scopes, block => block.ScopeId == boardId);
+        Assert.Equal(new SyncRemovedScope(boardId, false), Assert.Single(responses[loser].RemovedScopes));
         Assert.Equal(devices[winner].AccountId, (await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId))?.OwnerAccountId);
         var entry = Assert.Single(await SharedScopeQueries.ReadMemberEntriesAsync(fixture.Api, boardId));
         Assert.Equal(((Guid?)devices[winner].AccountId, "owner"), (entry.AccountId, entry.Role));

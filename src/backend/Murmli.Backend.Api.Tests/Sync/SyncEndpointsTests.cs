@@ -269,8 +269,10 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
         Assert.Equal(expected.RemovedScopeIds.Select(scopeId => new SyncRemovedScope(scopeId, false)), syncResponse.RemovedScopes);
     }
 
-    [Fact]
-    public async Task Sync_NoChanges_AnswersWithOneStatementAfterAccountLookup()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Sync_NoChanges_AnswersWithOneStatementAfterAccountLookup(bool withSharedScope)
     {
         var activities = new List<Activity>();
         var traceId = ActivityTraceId.CreateRandom();
@@ -279,9 +281,14 @@ public class SyncEndpointsTests(SyncApiFixture fixture) : IClassFixture<SyncApiF
         )
         {
             var device = await SyncTestDevice.SignInAsync(api);
+            if (withSharedScope)
+            {
+                var create = await device.SyncAllAsync(device.CreateBoard(Guid.NewGuid(), api.TimeProvider.GetUtcNow(), "board"));
+                Assert.Equal("applied", Assert.Single(create.Results).Status);
+            }
 
             using var response = await device.SendAsync(
-                JsonContent.Create(device.CreateBody()),
+                JsonContent.Create(withSharedScope ? device.CreateBody(SyncTestDevice.AllDataTypes, []) : device.CreateBody()),
                 device.DeviceId.ToString(),
                 TestTelemetry.CreateTraceParent(traceId)
             );

@@ -17,19 +17,42 @@ internal sealed class SyncChangeReader(
     IOptions<SyncOptions> options
 )
 {
-    public async Task<IReadOnlyList<SyncScopeHead>> ReadHeadsAsync(Guid accountId, CancellationToken cancellationToken = default) =>
-        await context
+    public static bool HasPersonalScope(IReadOnlyList<SyncScopeHead> heads) => heads.Count > 0 && heads[0].Kind == SyncScope.PersonalKind;
+
+    public static IReadOnlyList<SyncScopeHead> GetVisibleHeads(IReadOnlyList<SyncScopeHead> heads, IReadOnlyList<SyncDataType> listed)
+    {
+        var visibleKinds = listed.Where(dataType => dataType.IsScopeRoot).Select(dataType => dataType.ScopeKind).ToArray();
+        return [.. heads.Where(head => head.Kind == SyncScope.PersonalKind || visibleKinds.Contains(head.Kind, StringComparer.Ordinal))];
+    }
+
+    public async Task<IReadOnlyList<SyncScopeHead>> ReadHeadsAsync(Guid accountId, CancellationToken cancellationToken = default)
+    {
+        var personal = context
             .Set<SyncScope>()
             .Where(scope => scope.OwnerAccountId == accountId && scope.Kind == SyncScope.PersonalKind)
-            .Select(scope => new SyncScopeHead(
-                scope.Id,
-                scope.Kind,
-                scope.Version,
-                scope.Epoch,
-                scope.TombstoneFloor,
+            .Select(scope => new { scope.Id, scope.Kind, scope.Version, scope.Epoch, scope.TombstoneFloor });
+        var shared = context
+            .Set<SyncMemberEntry>()
+            .Where(entry => entry.AccountId == accountId && entry.State == SyncMemberState.Active)
+            .Join(
+                context.Set<SyncScope>(),
+                entry => entry.ScopeId,
+                scope => scope.Id,
+                (entry, scope) => new { scope.Id, scope.Kind, scope.Version, scope.Epoch, scope.TombstoneFloor }
+            );
+        var heads = await personal
+            .Concat(shared)
+            .Select(head => new SyncScopeHead(
+                head.Id,
+                head.Kind,
+                head.Version,
+                head.Epoch,
+                head.TombstoneFloor,
                 context.Set<DatabaseIdentity>().Select(identity => identity.Value).First()
             ))
             .ToListAsync(cancellationToken);
+        return [.. heads.OrderBy(head => head.Kind != SyncScope.PersonalKind).ThenBy(head => head.Id, BigEndianGuidComparer.Instance)];
+    }
 
     public bool IsUnchanged(SyncToken token, IReadOnlyList<SyncScopeHead> heads) =>
         token.Scopes.Count == heads.Count
@@ -96,10 +119,12 @@ internal sealed class SyncChangeReader(
     private static List<Guid> GetRemovedScopeIds(
         IReadOnlyList<SyncTokenScope> tokenScopes,
         IReadOnlyList<SyncCommandOutcome> outcomes,
-        Dictionary<Guid, long?> knownVersions
+        IReadOnlySet<Guid> presentScopeIds
     )
     {
         var targetScopeIds = outcomes
+            // The device keeps and resends failed and accepted commands, so their target scopes must stay on it
+            .Where(outcome => outcome.Status != SyncResultStatus.Failed && outcome.Status != SyncResultStatus.Accepted)
             .Select(outcome => outcome.Target)
             .OfType<SyncCommandTarget>()
             .Select(target => target.ScopeId)
@@ -117,7 +142,7 @@ internal sealed class SyncChangeReader(
                     && BigEndianGuidComparer.Instance.Compare(tokenScopes[tokenIndex].ScopeId, targetScopeIds[targetIndex]) <= 0
                 );
             var scopeId = takesToken ? tokenScopes[tokenIndex++].ScopeId : targetScopeIds[targetIndex++];
-            if (!knownVersions.ContainsKey(scopeId) && (removedScopeIds.Count == 0 || removedScopeIds[^1] != scopeId))
+            if (!presentScopeIds.Contains(scopeId) && (removedScopeIds.Count == 0 || removedScopeIds[^1] != scopeId))
             {
                 removedScopeIds.Add(scopeId);
             }
@@ -125,6 +150,11 @@ internal sealed class SyncChangeReader(
 
         return removedScopeIds;
     }
+
+    private static bool IsRootDeleteNotApplied(SyncScopeHead head, IReadOnlyList<SyncCommandOutcome> outcomes) =>
+        outcomes.Any(outcome =>
+            outcome.Status != SyncResultStatus.Applied && outcome.Target is { IsRootDelete: true } target && target.ScopeId == head.Id
+        );
 
     private async Task<SyncOutcome> ReadSnapshotAsync(
         Guid accountId,
@@ -140,18 +170,19 @@ internal sealed class SyncChangeReader(
         stream.SetLength(0);
         await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
         var heads = await ReadHeadsAsync(accountId, cancellationToken);
-        if (heads.Count == 0)
+        if (!HasPersonalScope(heads))
         {
             return new SyncOutcome.AccountGone();
         }
 
+        var visibleHeads = GetVisibleHeads(heads, listed);
         var coversAllScopes = token is null || token.DatabaseIdentity != heads[0].DatabaseIdentity;
         var tokenScopes = coversAllScopes ? [] : token!.Scopes;
         var listedNames = listed.Select(dataType => dataType.Name).ToArray();
         var knownVersions = new Dictionary<Guid, long?>();
-        foreach (var head in heads)
+        foreach (var head in visibleHeads)
         {
-            var knownVersion = GetKnownVersion(head, tokenScopes);
+            var knownVersion = IsRootDeleteNotApplied(head, outcomes) ? null : GetKnownVersion(head, tokenScopes);
             if (knownVersion < head.Version && await HasTooManyDeletionsAsync(head, knownVersion.Value, listedNames, cancellationToken))
             {
                 knownVersion = null;
@@ -160,7 +191,7 @@ internal sealed class SyncChangeReader(
             knownVersions.Add(head.Id, knownVersion);
         }
 
-        var includedTargets = heads.ToDictionary(head => head.Id, _ => new List<SyncCommandTarget>());
+        var includedTargets = visibleHeads.ToDictionary(head => head.Id, _ => new List<SyncCommandTarget>());
         foreach (var outcome in outcomes)
         {
             if (
@@ -175,9 +206,17 @@ internal sealed class SyncChangeReader(
             }
         }
 
-        var removedScopeIds = GetRemovedScopeIds(token?.Scopes ?? [], outcomes, knownVersions);
+        var removedScopeIds = GetRemovedScopeIds(token?.Scopes ?? [], outcomes, heads.Select(head => head.Id).ToHashSet());
+        var ownRootDeleteScopeIds = removedScopeIds.Count == 0 ? [] : await ReadOwnRootDeleteScopeIdsAsync(accountId, removedScopeIds, cancellationToken);
+        IReadOnlyList<SyncRemovedScope> removedScopes =
+        [
+            .. removedScopeIds.Select(scopeId => new SyncRemovedScope(
+                scopeId,
+                Array.BinarySearch(ownRootDeleteScopeIds, scopeId, BigEndianGuidComparer.Instance) >= 0
+            )),
+        ];
 
-        // Deltas stay uncompressed against BREACH (docs/sync.md "Kompression")
+        // Responses without a full state stay uncompressed against BREACH (docs/sync.md "Kompression")
         using var response = new SyncResponseWriter(
             stream,
             options.Value,
@@ -185,14 +224,45 @@ internal sealed class SyncChangeReader(
         );
 
         response.WriteStart(outcomes);
-        foreach (var head in heads)
+        foreach (var head in visibleHeads)
         {
-            await WriteScopeAsync(response, head, knownVersions[head.Id], includedTargets[head.Id], listed, listedNames, cancellationToken);
+            await WriteScopeAsync(
+                response,
+                accountId,
+                head,
+                knownVersions[head.Id],
+                includedTargets[head.Id],
+                listed,
+                listedNames,
+                cancellationToken
+            );
         }
 
-        var completed = response.WriteEnd(removedScopeIds, coversAllScopes, heads, timeProvider.GetUtcNowInMilliseconds());
+        var completed = response.WriteEnd(removedScopes, coversAllScopes, visibleHeads, timeProvider.GetUtcNowInMilliseconds());
         await transaction.CommitAsync(cancellationToken);
         return completed;
+    }
+
+    private async Task<Guid[]> ReadOwnRootDeleteScopeIdsAsync(
+        Guid accountId,
+        List<Guid> removedScopeIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var scopeIds = removedScopeIds.ToArray();
+        var ownRootDeletes = await context
+            .Set<ProcessedSyncCommand>()
+            .Where(command =>
+                command.AccountId == accountId
+                // Literals, so the partial index ix_processed_commands_root_deletes applies
+                && command.Kind == EF.Constant(SyncCommandKind.Delete.Key)
+                && command.Status == SyncResultStatus.Applied
+                && command.RecordId == command.ScopeId
+                && scopeIds.Contains(command.ScopeId)
+            )
+            .Select(command => command.ScopeId)
+            .ToListAsync(cancellationToken);
+        return ownRootDeletes.Order(BigEndianGuidComparer.Instance).ToArray();
     }
 
     private async Task<bool> HasTooManyDeletionsAsync(
@@ -213,6 +283,7 @@ internal sealed class SyncChangeReader(
 
     private async Task WriteScopeAsync(
         SyncResponseWriter response,
+        Guid accountId,
         SyncScopeHead head,
         long? knownVersion,
         List<SyncCommandTarget> includedTargets,
@@ -271,6 +342,25 @@ internal sealed class SyncChangeReader(
             }
         }
 
-        response.WriteScopeEnd();
+        response.WriteScopeEnd(head.Kind == SyncScope.PersonalKind ? [] : await ReadMembersAsync(head.Id, accountId, cancellationToken));
+    }
+
+    private async Task<IReadOnlyList<SyncMember>> ReadMembersAsync(Guid scopeId, Guid accountId, CancellationToken cancellationToken)
+    {
+        var rows = await context
+            .Set<SyncMemberEntry>()
+            .Where(entry => entry.ScopeId == scopeId)
+            .OrderBy(entry => entry.CreatedAt)
+            .ThenBy(entry => entry.Id)
+            .Select(entry => new
+            {
+                entry.Id,
+                entry.Name,
+                entry.Role,
+                entry.State,
+                IsOwn = entry.AccountId == accountId,
+            })
+            .ToListAsync(cancellationToken);
+        return [.. rows.Select(row => new SyncMember(row.Id, row.Name, row.Role, row.State.Key, row.IsOwn))];
     }
 }
