@@ -14,5 +14,7 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(user => user.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(user => user.AuthUserId).HasColumnName("auth_user_id");
         builder.Property(user => user.CreatedAt).HasColumnName("created_at");
+        builder.Property(user => user.DeletionStartedAt).HasColumnName("deletion_started_at");
+        builder.Property(user => user.LastRequestOn).HasColumnName("last_request_on");
     }
 }

@@ -65,6 +65,14 @@ namespace Murmli.Backend.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTimeOffset?>("DeletionStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deletion_started_at");
+
+                    b.Property<DateOnly?>("LastRequestOn")
+                        .HasColumnType("date")
+                        .HasColumnName("last_request_on");
+
                     b.HasKey("Id")
                         .HasName("pk_users");
 
