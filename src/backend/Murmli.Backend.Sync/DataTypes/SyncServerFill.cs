@@ -4,6 +4,7 @@ public enum SyncServerFill
 {
     None,
     CommandTimeOnCreate,
+    CommandTimeOnApply,
     ActingMemberOnCreate,
     ActingMemberOnApply,
 }

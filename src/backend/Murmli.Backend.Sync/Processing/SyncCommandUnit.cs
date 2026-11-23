@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -14,6 +15,8 @@ namespace Murmli.Backend.Sync.Processing;
 
 internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegistry registry, IOptions<SyncOptions> options)
 {
+    private static readonly IReadOnlySet<string> NoAppliedProperties = FrozenSet<string>.Empty;
+
     private readonly string lockTimeout = options.Value.GetLockTimeoutSetting();
 
     private string? AccountForeignKeyName =>
@@ -355,12 +358,23 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
             return (Ignored(claim, SyncIgnoreCause.LostToNewer), false);
         }
 
-        if (command.Kind != SyncCommandKind.Delete && !dataType.ApplyChanges(record, command.Changes!, claim.Time, isNew))
+        var appliedProperties = NoAppliedProperties;
+        if (command.Kind != SyncCommandKind.Delete)
         {
-            return (Ignored(claim, SyncIgnoreCause.LostToNewer), false);
+            appliedProperties = dataType.ApplyChanges(record, command.Changes!, claim.Time, isNew);
+            if (appliedProperties.Count == 0)
+            {
+                return (Ignored(claim, SyncIgnoreCause.LostToNewer), false);
+            }
         }
 
-        if (GetRuleOutcome(claim, dataType.EvaluateRules(record, actingMemberId)) is { } ruleOutcome)
+        var ruleInput = new SyncRuleInput(
+            actingMemberId,
+            input.Now,
+            appliedProperties,
+            isNew ? null : propertyName => context.Entry(record).Property(propertyName).OriginalValue
+        );
+        if (GetRuleOutcome(claim, dataType.EvaluateRules(record, ruleInput)) is { } ruleOutcome)
         {
             return (ruleOutcome, false);
         }
@@ -405,8 +419,11 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
 
         var seed = input.ScopeSeed!;
         var record = dataType.CreateRecord(claim.RecordId, claim.ScopeId);
-        dataType.ApplyChanges(record, command.Changes!, claim.Time, isNew: true);
-        if (GetRuleOutcome(claim, dataType.EvaluateRules(record, seed.OwnerMemberId)) is { } ruleOutcome)
+        var appliedProperties = dataType.ApplyChanges(record, command.Changes!, claim.Time, isNew: true);
+        if (
+            GetRuleOutcome(claim, dataType.EvaluateRules(record, new SyncRuleInput(seed.OwnerMemberId, input.Now, appliedProperties, ReadOriginal: null)))
+            is { } ruleOutcome
+        )
         {
             return (ruleOutcome, false);
         }

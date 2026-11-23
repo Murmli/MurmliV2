@@ -31,9 +31,9 @@ public abstract class SyncDataType
 
     internal abstract SyncRecord CreateRecord(Guid recordId, Guid scopeId);
 
-    internal abstract bool ApplyChanges(SyncRecord record, SyncFieldChanges changes, DateTimeOffset commandTime, bool isNew);
+    internal abstract IReadOnlySet<string> ApplyChanges(SyncRecord record, SyncFieldChanges changes, DateTimeOffset commandTime, bool isNew);
 
-    internal abstract SyncRuleDecision EvaluateRules(SyncRecord record, Guid? actingMemberId);
+    internal abstract SyncRuleDecision EvaluateRules(SyncRecord record, SyncRuleInput input);
 
     internal abstract void ApplyFills(SyncRecord record, bool isNew, DateTimeOffset commandTime, Guid? actingMemberId, bool isSystemWrite);
 
@@ -103,7 +103,7 @@ public abstract class SyncDataType<TRecord> : SyncDataType
             errors.Add($"The data type {DisplayName} binds the property {propertyName} more than once.");
         }
 
-        var deviceFields = Layout.Groups.SelectMany(group => group.Fields).ToList();
+        var deviceFields = Layout.Groups.SelectMany(group => group.Fields).Concat(Layout.CreateOnlyFields.Values).ToList();
         foreach (var field in deviceFields.Where(field => !field.HasDefaultOnCreate && !field.IsRequiredOnCreate))
         {
             errors.Add($"The field '{field.Name}' of the data type {DisplayName} has no default on create, so it must be RequiredOnCreate.");
@@ -118,7 +118,7 @@ public abstract class SyncDataType<TRecord> : SyncDataType
         {
             var fillTypeName = field.Fill switch
             {
-                SyncServerFill.CommandTimeOnCreate when field.ValueType != typeof(DateTimeOffset) => "DateTimeOffset",
+                SyncServerFill.CommandTimeOnCreate or SyncServerFill.CommandTimeOnApply when field.ValueType != typeof(DateTimeOffset) => "DateTimeOffset",
                 SyncServerFill.ActingMemberOnCreate or SyncServerFill.ActingMemberOnApply when field.ValueType != typeof(Guid?) => "Guid?",
                 _ => null,
             };
@@ -129,10 +129,10 @@ public abstract class SyncDataType<TRecord> : SyncDataType
                 );
             }
 
-            if (!field.HasDefaultOnCreate && field.Fill != SyncServerFill.CommandTimeOnCreate)
+            if (!field.HasDefaultOnCreate && field.Fill is not (SyncServerFill.CommandTimeOnCreate or SyncServerFill.CommandTimeOnApply))
             {
                 errors.Add(
-                    $"The server field '{field.Name}' of the data type {DisplayName} has no default on create, so it needs the fill CommandTimeOnCreate."
+                    $"The server field '{field.Name}' of the data type {DisplayName} has no default on create, so it needs the fill CommandTimeOnCreate or CommandTimeOnApply."
                 );
             }
         }
@@ -193,6 +193,7 @@ public abstract class SyncDataType<TRecord> : SyncDataType
                 !member.TryGetReadableName(out var name)
                 || !(
                     Layout.DeviceFields.TryGetValue(name, out var field)
+                    || (kind == SyncCommandKind.Create && Layout.CreateOnlyFields.TryGetValue(name, out field))
                     || (isServerWrite && Layout.WritableServerFields.TryGetValue(name, out field))
                 )
                 || assignments.ContainsKey(field)
@@ -232,10 +233,10 @@ public abstract class SyncDataType<TRecord> : SyncDataType
             groupChanges.Add(new SyncGroupChange<TRecord>(group, [.. group.Fields.Select(field => assignments[field])]));
         }
 
-        return new SyncFieldChanges<TRecord>(
-            groupChanges,
-            [.. Layout.ServerFields.Where(assignments.ContainsKey).Select(field => assignments[field])]
-        );
+        return new SyncFieldChanges<TRecord>(groupChanges, AssignmentsOf(Layout.CreateOnlyFields.Values), AssignmentsOf(Layout.ServerFields));
+
+        List<SyncFieldAssignment<TRecord>> AssignmentsOf(IEnumerable<SyncField<TRecord>> declaredFields) =>
+            [.. declaredFields.Where(assignments.ContainsKey).Select(field => new SyncFieldAssignment<TRecord>(field, assignments[field]))];
     }
 
     internal sealed override async Task<SyncRecord?> FindTrackedAsync(
@@ -258,11 +259,11 @@ public abstract class SyncDataType<TRecord> : SyncDataType
         return record;
     }
 
-    internal sealed override bool ApplyChanges(SyncRecord record, SyncFieldChanges changes, DateTimeOffset commandTime, bool isNew)
+    internal sealed override IReadOnlySet<string> ApplyChanges(SyncRecord record, SyncFieldChanges changes, DateTimeOffset commandTime, bool isNew)
     {
         var typedRecord = (TRecord)record;
         var typedChanges = (SyncFieldChanges<TRecord>)changes;
-        var applied = false;
+        var appliedProperties = new HashSet<string>(StringComparer.Ordinal);
         foreach (var change in typedChanges.Groups)
         {
             if (isNew || commandTime >= change.Group.GetChangedAt(typedRecord))
@@ -273,31 +274,38 @@ public abstract class SyncDataType<TRecord> : SyncDataType
                 }
 
                 change.Group.SetChangedAt(typedRecord, commandTime);
-                applied = true;
+                appliedProperties.UnionWith(change.Group.Fields.Select(field => field.PropertyName));
             }
         }
 
         foreach (var assignment in typedChanges.ServerAssignments)
         {
-            assignment(typedRecord);
-            applied = true;
+            assignment.Apply(typedRecord);
+            appliedProperties.Add(assignment.Field.PropertyName);
         }
 
         if (!isNew)
         {
-            return applied;
+            return appliedProperties;
+        }
+
+        foreach (var assignment in typedChanges.CreateOnlyAssignments)
+        {
+            assignment.Apply(typedRecord);
         }
 
         foreach (var group in Layout.Groups)
         {
             group.SetChangedAt(typedRecord, commandTime);
+            appliedProperties.UnionWith(group.Fields.Select(field => field.PropertyName));
         }
 
-        return true;
+        appliedProperties.UnionWith(Layout.CreateOnlyFields.Values.Select(field => field.PropertyName));
+        return appliedProperties;
     }
 
-    internal sealed override SyncRuleDecision EvaluateRules(SyncRecord record, Guid? actingMemberId) =>
-        Evaluate(new SyncRuleContext<TRecord>((TRecord)record, actingMemberId));
+    internal sealed override SyncRuleDecision EvaluateRules(SyncRecord record, SyncRuleInput input) =>
+        Evaluate(new SyncRuleContext<TRecord>((TRecord)record, input));
 
     internal sealed override void ApplyFills(SyncRecord record, bool isNew, DateTimeOffset commandTime, Guid? actingMemberId, bool isSystemWrite)
     {
@@ -307,6 +315,7 @@ public abstract class SyncDataType<TRecord> : SyncDataType
             switch (field.Fill)
             {
                 case SyncServerFill.CommandTimeOnCreate when isNew:
+                case SyncServerFill.CommandTimeOnApply when isNew || !isSystemWrite:
                     field.SetFillValue(typedRecord, commandTime);
                     break;
                 case SyncServerFill.ActingMemberOnCreate when isNew:

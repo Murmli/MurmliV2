@@ -9,6 +9,7 @@ internal sealed class SyncDataTypeLayout<TRecord>
         SyncDataTypeDefinition definition,
         IReadOnlyList<SyncFieldGroup<TRecord>> groups,
         IReadOnlyList<SyncField<TRecord>> fields,
+        IReadOnlyList<SyncField<TRecord>> createOnlyFields,
         IReadOnlyList<SyncField<TRecord>> serverFields
     )
     {
@@ -23,6 +24,13 @@ internal sealed class SyncDataTypeLayout<TRecord>
         }
 
         DeviceFields = deviceFields;
+        var createOnlyFieldsByName = new Dictionary<string, SyncField<TRecord>>(StringComparer.Ordinal);
+        foreach (var field in createOnlyFields)
+        {
+            createOnlyFieldsByName.TryAdd(field.Name, field);
+        }
+
+        CreateOnlyFields = createOnlyFieldsByName;
         var writableServerFields = new Dictionary<string, SyncField<TRecord>>(StringComparer.Ordinal);
         foreach (var field in serverFields.Where(field => field.Fill == SyncServerFill.None))
         {
@@ -43,6 +51,8 @@ internal sealed class SyncDataTypeLayout<TRecord>
     public IReadOnlyList<SyncField<TRecord>> ServerFields { get; }
 
     public IReadOnlyDictionary<string, SyncField<TRecord>> DeviceFields { get; }
+
+    public IReadOnlyDictionary<string, SyncField<TRecord>> CreateOnlyFields { get; }
 
     public IReadOnlyDictionary<string, SyncField<TRecord>> WritableServerFields { get; }
 

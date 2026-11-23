@@ -10,6 +10,8 @@ public sealed class SyncDataTypeBuilder<TRecord>
 
     private readonly List<SyncField<TRecord>> declaredFields = [];
 
+    private readonly List<SyncField<TRecord>> createOnlyFields = [];
+
     private readonly List<SyncField<TRecord>> serverFields = [];
 
     private SyncDataTypeDefinition definition = new("", "", 0, null);
@@ -61,6 +63,20 @@ public sealed class SyncDataTypeBuilder<TRecord>
         declaredFields.AddRange(group.Fields);
     }
 
+    public SyncFieldBuilder CreateOnly<TValue>(string name, Expression<Func<TRecord, TValue>> value, SyncFieldType<TValue> type)
+    {
+        var field = new SyncField<TRecord, TValue>(
+            name,
+            new SyncPropertyAccessor<TRecord, TValue>(value),
+            type,
+            isSentToDevices: true,
+            SyncServerFill.None
+        );
+        declaredFields.Add(field);
+        createOnlyFields.Add(field);
+        return new SyncFieldBuilder(field.MarkRequiredOnCreate);
+    }
+
     public void ServerField<TValue>(
         string name,
         Expression<Func<TRecord, TValue>> value,
@@ -74,5 +90,5 @@ public sealed class SyncDataTypeBuilder<TRecord>
         serverFields.Add(field);
     }
 
-    internal SyncDataTypeLayout<TRecord> Build() => new(definition, [.. groups], [.. declaredFields], [.. serverFields]);
+    internal SyncDataTypeLayout<TRecord> Build() => new(definition, [.. groups], [.. declaredFields], [.. createOnlyFields], [.. serverFields]);
 }

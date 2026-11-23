@@ -80,8 +80,20 @@ public class HostApplicationBuilderExtensionsTests(PostgresFixture postgres) : I
         "The server field 'createdAt' of the data type 'misfilledTimeCard' (MisfilledTimeCardType) uses the fill CommandTimeOnCreate, which needs a property of type DateTimeOffset"
     )]
     [InlineData(
+        "commandTimeOnApplyFillTypeMismatch",
+        "The server field 'changedAt' of the data type 'misfilledChangeTimeCard' (MisfilledChangeTimeCardType) uses the fill CommandTimeOnApply, which needs a property of type DateTimeOffset"
+    )]
+    [InlineData(
         "memberReferenceOnDeviceField",
         "The field 'changedBy' of the data type 'deviceReferenceCard' (DeviceReferenceCardType) is a member reference"
+    )]
+    [InlineData(
+        "createOnlyKeyWithoutRequiredOnCreate",
+        "The field 'category' of the data type 'optionalCreateOnlyKeyCard' (OptionalCreateOnlyKeyCardType) has no default on create, so it must be RequiredOnCreate."
+    )]
+    [InlineData(
+        "emptyRejectingPatternWithoutRequiredOnCreate",
+        "The field 'text' of the data type 'optionalPatternTextCard' (OptionalPatternTextCardType) has no default on create, so it must be RequiredOnCreate."
     )]
     [InlineData(
         "timestampServerFieldWithoutFill",
@@ -180,8 +192,17 @@ public class HostApplicationBuilderExtensionsTests(PostgresFixture postgres) : I
             case "commandTimeFillTypeMismatch":
                 builder.Services.AddSyncDataType<TestBoardType>().AddSyncDataType<MisfilledTimeCardType>();
                 break;
+            case "commandTimeOnApplyFillTypeMismatch":
+                builder.Services.AddSyncDataType<TestBoardType>().AddSyncDataType<MisfilledChangeTimeCardType>();
+                break;
             case "memberReferenceOnDeviceField":
                 builder.Services.AddSyncDataType<TestBoardType>().AddSyncDataType<DeviceReferenceCardType>();
+                break;
+            case "createOnlyKeyWithoutRequiredOnCreate":
+                builder.Services.AddSyncDataType<TestBoardType>().AddSyncDataType<OptionalCreateOnlyKeyCardType>();
+                break;
+            case "emptyRejectingPatternWithoutRequiredOnCreate":
+                builder.Services.AddSyncDataType<TestBoardType>().AddSyncDataType<OptionalPatternTextCardType>();
                 break;
             case "timestampServerFieldWithoutFill":
                 builder.Services.AddSyncDataType<TestBoardType>().AddSyncDataType<UnfilledCreatedAtCardType>();
