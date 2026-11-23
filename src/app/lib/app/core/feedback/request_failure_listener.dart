@@ -27,7 +27,13 @@ class RequestFailureListener extends HookConsumerWidget {
       }
       final failure = report.failure;
       if (failure.isTransient) {
-        showToast(navigatorContext, _toastMessageOf(failure, navigatorContext));
+        final (:message, :icon) = _toastOf(failure, navigatorContext);
+        showToast(
+          navigatorContext,
+          message,
+          tone: ToastTone.warning,
+          icon: icon,
+        );
         return;
       }
       if (isPopupOpen.value) {
@@ -55,12 +61,24 @@ bool _isAppVisible() => switch (WidgetsBinding.instance.lifecycleState) {
   AppLifecycleState.resumed || AppLifecycleState.inactive || null => true,
 };
 
-String _toastMessageOf(RequestFailure failure, BuildContext context) {
+({String message, IconData icon}) _toastOf(
+  RequestFailure failure,
+  BuildContext context,
+) {
   final translations = context.t.requestFailure;
   return switch (failure) {
-    RequestFailure.noConnection => translations.noConnection,
-    RequestFailure.serverUnavailable => translations.serverUnavailable,
-    RequestFailure.tooManyRequests => translations.tooManyRequests,
+    RequestFailure.noConnection => (
+      message: translations.noConnection,
+      icon: Icons.wifi_off_rounded,
+    ),
+    RequestFailure.serverUnavailable => (
+      message: translations.serverUnavailable,
+      icon: Icons.cloud_off_rounded,
+    ),
+    RequestFailure.tooManyRequests => (
+      message: translations.tooManyRequests,
+      icon: Icons.hourglass_empty_rounded,
+    ),
     RequestFailure.unauthorized ||
     RequestFailure.forbidden ||
     RequestFailure.notFound ||

@@ -83,10 +83,15 @@ Future<void> _signIn(
       await context.router.replaceAll([const HomeRoute()]);
     case SignInResult.failed:
       isSigningIn.value = false;
-      showToast(context, translations.signInFailed);
+      showToast(context, translations.signInFailed, tone: ToastTone.error);
     case SignInResult.invalidCredentials:
       isSigningIn.value = false;
-      showToast(context, translations.emailSignIn.invalidCredentials);
+      showToast(
+        context,
+        translations.emailSignIn.invalidCredentials,
+        tone: ToastTone.error,
+        icon: Icons.lock_outline_rounded,
+      );
     case SignInResult.canceled || SignInResult.requestFailed:
       isSigningIn.value = false;
   }

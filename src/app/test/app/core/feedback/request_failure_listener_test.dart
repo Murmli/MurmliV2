@@ -58,16 +58,18 @@ void main() {
   ) async => ResponseBody.fromString('', 503);
 
   group('RequestFailureListener', () {
-    for (final (scenario, respond, expectedToast) in [
+    for (final (scenario, respond, expectedToast, expectedIcon) in [
       (
         'without a connection',
         respondWithoutConnection,
         translations.noConnection,
+        Icons.wifi_off_rounded,
       ),
       (
         'with 503',
         respondWithServiceUnavailable,
         translations.serverUnavailable,
+        Icons.cloud_off_rounded,
       ),
     ]) {
       testWidgets(
@@ -78,6 +80,7 @@ void main() {
           await failRequest(tester);
 
           expect(find.widgetWithText(SnackBar, expectedToast), findsOneWidget);
+          expect(find.widgetWithIcon(SnackBar, expectedIcon), findsOneWidget);
           expect(find.byType(AlertDialog), findsNothing);
         },
       );

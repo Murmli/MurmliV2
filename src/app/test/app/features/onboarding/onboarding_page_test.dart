@@ -295,6 +295,10 @@ void main() {
           ),
           findsOneWidget,
         );
+        expect(
+          find.widgetWithIcon(SnackBar, Icons.lock_outline_rounded),
+          findsOneWidget,
+        );
         expect(emailField(), findsOneWidget);
         expect(submitButton(), findsOneWidget);
       },

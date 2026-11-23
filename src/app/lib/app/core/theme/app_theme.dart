@@ -137,6 +137,14 @@ abstract final class AppTheme {
       ),
       snackBarTheme: const SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: EdgeInsets.fromLTRB(
+          AppSpacing.space16,
+          0,
+          AppSpacing.space16,
+          AppSpacing.space8,
+        ),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: colors.inkTertiary,
