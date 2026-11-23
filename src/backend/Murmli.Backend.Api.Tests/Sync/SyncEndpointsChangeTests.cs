@@ -2,9 +2,11 @@ using System.Buffers.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Murmli.Backend.Api.Tests.Infrastructure;
 using Murmli.Backend.Api.Tests.Infrastructure.TestDataTypes;
 using Murmli.Backend.Data.Sync;
+using Murmli.Backend.Sync.Cleanup;
 using Murmli.Backend.Sync.Protocol;
 
 namespace Murmli.Backend.Api.Tests.Sync;
@@ -14,6 +16,8 @@ public class SyncEndpointsChangeTests(SyncApiFixture fixture) : IClassFixture<Sy
     private const string OriginalTitle = "original";
 
     private const string OriginalFields = """{"title":"original","color":null,"weight":null,"pinned":false}""";
+
+    private static readonly TimeSpan PastRetention = TimeSpan.FromDays(45) + TimeSpan.FromMinutes(1);
 
     [Theory]
     [InlineData("lostToNewer")]
@@ -258,6 +262,60 @@ public class SyncEndpointsChangeTests(SyncApiFixture fixture) : IClassFixture<Sy
         Assert.Equal(expected.DeletedIds, response.Scopes.SelectMany(block => block.DeletedRecords).Select(deletion => deletion.Id));
         Assert.Equal(expected.RemovedScopeIds.Select(scopeId => new SyncRemovedScope(scopeId, false)), response.RemovedScopes);
         Assert.Equal(await ReadCurrentTokenAsync(device.PersonalScopeId), response.Token);
+    }
+
+    [Fact]
+    public async Task Sync_TokenBelowFloor_GetsFullStateWithoutDeletedRecords()
+    {
+        await using var api = await ApiHost.StartAsync(fixture.CreateDatabaseConnectionString(), testDataTypes: true);
+        var writer = await SyncTestDevice.SignInAsync(api);
+        var now = api.TimeProvider.GetUtcNow();
+        var keptNoteId = Guid.NewGuid();
+        var deletedNoteId = Guid.NewGuid();
+        await writer.SyncAsync(writer.CreateNote(keptNoteId, now, "kept"), writer.CreateNote(deletedNoteId, now, "deleted"));
+        var reader = writer.OtherDevice();
+        await reader.SyncAsync();
+        await writer.SyncAsync(writer.DeleteNote(deletedNoteId, now));
+        api.TimeProvider.Advance(PastRetention);
+        await api.Services.GetRequiredService<SyncCleanupRunner>().RunAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(3, (await SharedScopeQueries.ReadScopeAsync(api, writer.PersonalScopeId))!.TombstoneFloor);
+
+        var response = await reader.SyncAsync();
+
+        Assert.False(response.CoversAllScopes);
+        var block = Assert.Single(response.Scopes);
+        Assert.True(block.FullState);
+        Assert.Equal([keptNoteId], block.Records.Select(record => record.Id));
+        Assert.Empty(block.DeletedRecords);
+    }
+
+    [Fact]
+    public async Task Sync_TokenAboveFloor_GetsDeltaWithDeletions()
+    {
+        await using var api = await ApiHost.StartAsync(fixture.CreateDatabaseConnectionString(), testDataTypes: true);
+        var writer = await SyncTestDevice.SignInAsync(api);
+        var now = api.TimeProvider.GetUtcNow();
+        var expiredNoteId = Guid.NewGuid();
+        var laterDeletedNoteId = Guid.NewGuid();
+        await writer.SyncAsync(
+            writer.CreateNote(expiredNoteId, now, "expired"),
+            writer.CreateNote(laterDeletedNoteId, now, "later deleted"),
+            writer.DeleteNote(expiredNoteId, now),
+            writer.CreateNote(Guid.NewGuid(), now, "kept")
+        );
+        var reader = writer.OtherDevice();
+        await reader.SyncAsync();
+        api.TimeProvider.Advance(PastRetention);
+        await writer.SyncAsync(writer.DeleteNote(laterDeletedNoteId, api.TimeProvider.GetUtcNow()));
+        await api.Services.GetRequiredService<SyncCleanupRunner>().RunAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(3, (await SharedScopeQueries.ReadScopeAsync(api, writer.PersonalScopeId))!.TombstoneFloor);
+
+        var response = await reader.SyncAsync();
+
+        var block = Assert.Single(response.Scopes);
+        Assert.False(block.FullState);
+        Assert.Empty(block.Records);
+        Assert.Equal([new SyncDeletedRecord(TestNoteType.DataTypeName, laterDeletedNoteId)], block.DeletedRecords);
     }
 
     [Fact]

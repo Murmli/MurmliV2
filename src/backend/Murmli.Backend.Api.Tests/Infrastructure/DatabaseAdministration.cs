@@ -64,6 +64,13 @@ internal sealed class DatabaseAdministration(string connectionString)
     public Task RaiseTombstoneFloorAsync(Guid scopeId, long floor) =>
         UpdateSingleRowAsync("UPDATE sync.scopes SET tombstone_floor = @floor WHERE id = @target", ("floor", floor), ("target", scopeId));
 
+    public Task HoldCleanupLeaseAsync(DateTimeOffset expiresAt) =>
+        UpdateSingleRowAsync(
+            "UPDATE sync.cleanup_lease SET holder = @holder, expires_at = @expiresAt WHERE singleton",
+            ("holder", Guid.NewGuid()),
+            ("expiresAt", expiresAt)
+        );
+
     public async Task<Guid> InsertMemberEntryAsync(
         Guid scopeId,
         Guid accountId,

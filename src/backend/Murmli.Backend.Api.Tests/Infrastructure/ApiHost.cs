@@ -17,6 +17,7 @@ using Murmli.Backend.Api.Tests.Infrastructure.TestDataTypes;
 using Murmli.Backend.Api.Users;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Extensions;
+using Murmli.Backend.Sync.Cleanup;
 using Murmli.Backend.Sync.Extensions;
 using Murmli.Backend.Telemetry.Extensions;
 using OpenTelemetry.Logs;
@@ -50,6 +51,8 @@ internal sealed class ApiHost : IAsyncDisposable
 
     public AuthServiceHttpMessageHandler AuthService { get; }
 
+    public IServiceProvider Services => application.Services;
+
     public static async Task<ApiHost> StartAsync(
         string connectionString,
         IReadOnlyDictionary<string, string?>? additionalConfiguration = null,
@@ -58,7 +61,9 @@ internal sealed class ApiHost : IAsyncDisposable
         ICollection<LogRecord>? logRecords = null,
         bool mapExplicitlyAuthorizedEndpoint = false,
         bool testDataTypes = false,
-        FakeTimeProvider? timeProvider = null
+        FakeTimeProvider? timeProvider = null,
+        bool testCleanupContributors = false,
+        ICollection<SyncCleanupContext>? cleanupContexts = null
     )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -88,6 +93,16 @@ internal sealed class ApiHost : IAsyncDisposable
                 options.ReplaceService<IModelCustomizer, SyncTestModelCustomizer>()
             );
             builder.Services.AddSyncDataType<TestNoteType>().AddSyncDataType<TestBoardType>().AddSyncDataType<TestCardType>();
+        }
+
+        if (testCleanupContributors)
+        {
+            builder.Services.AddSyncCleanupContributor<ThrowingCleanupContributor>().AddSyncCleanupContributor<ConstantCleanupContributor>();
+        }
+
+        if (cleanupContexts is not null)
+        {
+            builder.Services.AddSingleton(cleanupContexts).AddSyncCleanupContributor<RecordingCleanupContributor>();
         }
 
         if (activities is not null)

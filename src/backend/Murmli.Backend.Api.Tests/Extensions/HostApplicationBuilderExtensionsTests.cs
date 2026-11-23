@@ -131,6 +131,21 @@ public class HostApplicationBuilderExtensionsTests(PostgresFixture postgres) : I
         Assert.Contains(nameof(SyncOptions.FullStateCompressionLevel), exception.Message);
     }
 
+    [Theory]
+    [InlineData("Sync:Cleanup:SafetyMargin", "00:04:59", "Sync:Cleanup:SafetyMargin must be at least Sync:ClockAheadTolerance plus Sync:RequestDeadline.")]
+    [InlineData("Sync:Cleanup:SafetyMargin", "00:05:44", "Sync:Cleanup:SafetyMargin must be at least Sync:ClockAheadTolerance plus Sync:RequestDeadline.")]
+    [InlineData("Sync:Cleanup:LeaseDuration", "00:01:59", "LeaseDuration")]
+    public async Task AddApi_SyncCleanupOptionInvalid_FailsOptionsValidation(string key, string value, string expectedError)
+    {
+        await using var application = CreateApiBuilder(new Dictionary<string, string?> { [key] = value }).Build();
+
+        var exception = Assert.Throws<OptionsValidationException>(() =>
+            application.Services.GetRequiredService<IOptions<SyncOptions>>().Value
+        );
+
+        Assert.Contains(expectedError, exception.Message);
+    }
+
     private static WebApplicationBuilder CreateApiBuilder(IReadOnlyDictionary<string, string?>? configuration = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
