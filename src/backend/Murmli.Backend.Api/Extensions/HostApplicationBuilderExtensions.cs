@@ -64,9 +64,15 @@ public static class HostApplicationBuilderExtensions
         builder.AddSync();
         builder.Services.AddSyncDataType<ShoppingListType>().AddSyncDataType<ShoppingListItemType>();
         builder.Services.AddSyncAccountBootstrapContributor<FirstShoppingListContributor>();
+        builder
+            .Services.AddOptions<ShoppingListOptions>()
+            .BindConfiguration(ShoppingListOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
         builder.Services.AddSingleton<SyncRateLimiter>();
         builder.Services.AddHostedService<SyncCleanupService>();
         builder.Services.AddSyncCleanupContributor<StaleAccountDeletionContributor>();
+        builder.Services.AddSyncCleanupContributor<CheckedItemsCleanupContributor>();
         builder.Services.AddScoped<UserRegistry>();
         builder.Services.AddScoped<ProductSearch>();
     }

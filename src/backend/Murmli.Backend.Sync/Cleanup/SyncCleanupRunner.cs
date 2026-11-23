@@ -11,7 +11,6 @@ using Murmli.Backend.Data.Sync;
 using Murmli.Backend.Sync.Configuration;
 using Murmli.Backend.Sync.DataTypes;
 using Murmli.Backend.Sync.Extensions;
-using Npgsql;
 
 namespace Murmli.Backend.Sync.Cleanup;
 
@@ -93,14 +92,6 @@ public sealed partial class SyncCleanupRunner(
                 cancellationToken
             ) == 1;
 
-    private static bool IsLockTimeout(Exception exception) =>
-        exception switch
-        {
-            PostgresException { SqlState: PostgresErrorCodes.LockNotAvailable } => true,
-            { InnerException: { } innerException } => IsLockTimeout(innerException),
-            _ => false,
-        };
-
     private async Task RunContributorsAsync(
         IServiceProvider services,
         SyncCleanupContext cleanupContext,
@@ -152,7 +143,7 @@ public sealed partial class SyncCleanupRunner(
                 {
                     removed.Tombstones += await RemoveScopeTombstonesAsync(context, scopeId, cutoff, batchSize, cancellationToken);
                 }
-                catch (Exception exception) when (IsLockTimeout(exception))
+                catch (Exception exception) when (exception.IsLockTimeout())
                 {
                     skippedScopeIds.Add(scopeId);
                 }

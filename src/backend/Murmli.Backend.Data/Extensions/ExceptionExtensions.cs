@@ -13,4 +13,12 @@ public static class ExceptionExtensions
             DbUpdateException { InnerException: { } innerException } => innerException.IsDatabaseDisturbance(),
             _ => false,
         };
+
+    public static bool IsLockTimeout(this Exception exception) =>
+        exception switch
+        {
+            PostgresException { SqlState: PostgresErrorCodes.LockNotAvailable } => true,
+            { InnerException: { } innerException } => innerException.IsLockTimeout(),
+            _ => false,
+        };
 }

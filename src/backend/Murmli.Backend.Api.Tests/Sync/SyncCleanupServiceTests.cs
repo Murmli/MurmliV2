@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,7 +29,7 @@ public class SyncCleanupServiceTests(PostgresFixture postgres) : IClassFixture<P
 
     private static readonly TimeSpan ClockAheadTolerance = TimeSpan.FromMinutes(5);
 
-    public static TheoryData<int> CancelledStatements => [.. Enumerable.Range(1, 17)];
+    public static TheoryData<int> CancelledStatements => [.. Enumerable.Range(1, 18)];
 
     [Theory]
     [InlineData(1)]
@@ -426,6 +427,52 @@ public class SyncCleanupServiceTests(PostgresFixture postgres) : IClassFixture<P
         await RunCleanupAsync(api);
 
         Assert.Equal(new SyncCleanupContext(start + TimeSpan.FromMilliseconds(1), 7), Assert.Single(cleanupContexts));
+    }
+
+    [Fact]
+    public async Task RunAsync_CancelledDuringCheckedItemsPass_HasCompletedStaleAccountDeletions()
+    {
+        var connectionString = postgres.CreateDatabaseConnectionString();
+        await using var api = await ApiHost.StartAsync(connectionString);
+        var device = await SyncTestDevice.SignInAsync(api);
+        var now = api.TimeProvider.GetUtcNow();
+        var listId = Guid.NewGuid();
+        var checkedItemFields = SyncTestDevice.ItemFields("Milch");
+        checkedItemFields["checked"] = true;
+        var created = await device.SyncShoppingAsync(
+            device.CreateList(listId, now, "Einkauf"),
+            device.CreateItem(listId, Guid.NewGuid(), now, checkedItemFields)
+        );
+        Assert.All(created.Results, result => Assert.Equal("applied", result.Status));
+        var staleAuthUserId = SyncTestDevice.CreateAuthUserId();
+        var staleAccountId = await api.GetMeAsync(staleAuthUserId);
+        api.AuthService.ResponseStatusCode = HttpStatusCode.ServiceUnavailable;
+        Assert.Equal(HttpStatusCode.BadGateway, await api.DeleteMeAsync(staleAuthUserId));
+        api.AuthService.ResponseStatusCode = HttpStatusCode.NoContent;
+        api.TimeProvider.Advance(TimeSpan.FromDays(30) + TimeSpan.FromMilliseconds(1));
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+
+        using (
+            ListenToStatements(
+                connectionString,
+                activity =>
+                {
+                    if (activity.GetTagItem("db.query.text") is string queryText && queryText.Contains("FROM shopping.items", StringComparison.Ordinal))
+                    {
+                        cancellation.Cancel();
+                    }
+                }
+            )
+        )
+        {
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                api.Services.GetRequiredService<SyncCleanupRunner>().RunAsync(cancellation.Token)
+            );
+        }
+
+        Assert.False(
+            await api.QueryDatabaseAsync(context => context.Users.AnyAsync(user => user.Id == staleAccountId, TestContext.Current.CancellationToken))
+        );
     }
 
     [Fact]

@@ -150,6 +150,30 @@ public class HostApplicationBuilderExtensionsTests(PostgresFixture postgres) : I
         Assert.Contains(expectedError, exception.Message);
     }
 
+    [Fact]
+    public async Task AddApi_ShoppingListOptionInvalid_FailsStartupValidation()
+    {
+        await using var application = CreateApiBuilder(
+                new Dictionary<string, string?>
+                {
+                    ["ShoppingLists:CheckedItemRetention"] = "00:00:59",
+                    ["AuthService:BaseAddress"] = "http://auth.test",
+                    ["AuthService:Key"] = ApiHost.AuthServiceKey,
+                }
+            )
+            .Build();
+
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(async () =>
+        {
+            foreach (var startupValidator in application.Services.GetServices<IAsyncStartupValidator>())
+            {
+                await startupValidator.ValidateAsync(TestContext.Current.CancellationToken);
+            }
+        });
+
+        Assert.Contains("CheckedItemRetention", exception.Message);
+    }
+
     private static WebApplicationBuilder CreateApiBuilder(IReadOnlyDictionary<string, string?>? configuration = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
