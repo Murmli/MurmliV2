@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "id": "shopping/items/create-on-existing-id-keeps-language",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/122 create auf eine vorhandene ID wirkt wie setFields; Felder, die nur beim Anlegen gelten, bleiben",
+  "dataTypes": ["shoppingList", "shoppingListItem"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [
+    { "device": "phone", "kind": "create", "dataType": "shoppingList", "scope": "list", "record": "list", "at": -60000, "fields": { "name": "Einkauf" } },
+    { "device": "phone", "kind": "create", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -50000, "fields": { "name": "Milch", "category": "dairy", "language": "de" } }
+  ],
+  "race": [
+    { "label": "recreate", "device": "phone", "kind": "create", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -2000, "fields": { "name": "Milch", "category": "dairy", "language": "en" } },
+    { "label": "check", "device": "tablet", "kind": "setFields", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -1000, "fields": { "checked": true } }
+  ],
+  "expect": {
+    "results": { "recreate": { "status": "applied" }, "check": { "status": "applied" } },
+    "records": [ { "dataType": "shoppingListItem", "record": "milk", "fields": { "language": "de", "checked": true } } ],
+    "absent": []
+  },
+  "expectByOrder": {}
+}

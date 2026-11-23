@@ -17,10 +17,13 @@ public class SyncEndpointsCaseCollectionTests(SyncApiFixture fixture) : IClassFi
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
+    private static readonly string[] CaseAreas = ["core", "shopping"];
+
     public static TheoryData<string> CaseFiles =>
         new(
-            Directory
-                .EnumerateFiles(Path.Combine(CasesDirectory, "core"), "*.json", SearchOption.AllDirectories)
+            CaseAreas
+                .SelectMany(area => Directory.EnumerateDirectories(Path.Combine(CasesDirectory, area)))
+                .SelectMany(topic => Directory.EnumerateFiles(topic, "*.json", SearchOption.AllDirectories))
                 .Select(path => Path.GetRelativePath(CasesDirectory, path).Replace(Path.DirectorySeparatorChar, '/'))
                 .Order(StringComparer.Ordinal)
         );

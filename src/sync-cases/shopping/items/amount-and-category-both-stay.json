@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "id": "shopping/items/amount-and-category-both-stay",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/141 Ändert A die Menge und B die Kategorie, bleibt beides (51)",
+  "dataTypes": ["shoppingList", "shoppingListItem"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [
+    { "device": "phone", "kind": "create", "dataType": "shoppingList", "scope": "list", "record": "list", "at": -60000, "fields": { "name": "Einkauf" } },
+    { "device": "phone", "kind": "create", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -50000, "fields": { "name": "Milch", "category": "dairy", "language": "de" } }
+  ],
+  "race": [
+    { "label": "amount", "device": "phone", "kind": "setFields", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -2000, "fields": { "quantity": 2, "unit": "liter" } },
+    { "label": "category", "device": "tablet", "kind": "setFields", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -1000, "fields": { "category": "beverages" } }
+  ],
+  "expect": {
+    "results": { "amount": { "status": "applied" }, "category": { "status": "applied" } },
+    "records": [ { "dataType": "shoppingListItem", "record": "milk", "fields": { "quantity": 2, "unit": "liter", "category": "beverages" } } ],
+    "absent": []
+  },
+  "expectByOrder": {}
+}

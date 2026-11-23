@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "id": "shopping/items/same-item-added-twice-creates-two",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/141 Tragen zwei Geräte dasselbe ein, entstehen zwei Datensätze (54a)",
+  "dataTypes": ["shoppingList", "shoppingListItem"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [
+    { "device": "phone", "kind": "create", "dataType": "shoppingList", "scope": "list", "record": "list", "at": -60000, "fields": { "name": "Einkauf" } }
+  ],
+  "race": [
+    { "label": "fromPhone", "device": "phone", "kind": "create", "dataType": "shoppingListItem", "scope": "list", "record": "milkFromPhone", "at": -2000, "fields": { "name": "Milch", "category": "dairy", "language": "de" } },
+    { "label": "fromTablet", "device": "tablet", "kind": "create", "dataType": "shoppingListItem", "scope": "list", "record": "milkFromTablet", "at": -1000, "fields": { "name": "Milch", "category": "dairy", "language": "de" } }
+  ],
+  "expect": {
+    "results": { "fromPhone": { "status": "applied" }, "fromTablet": { "status": "applied" } },
+    "records": [ { "dataType": "shoppingListItem", "record": "milkFromPhone", "fields": { "name": "Milch" } }, { "dataType": "shoppingListItem", "record": "milkFromTablet", "fields": { "name": "Milch" } } ],
+    "absent": []
+  },
+  "expectByOrder": {}
+}

@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "id": "shopping/lists/delete-list-wins-over-item-change",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/141 Liste löschen: Sie ist danach für alle weg (27)",
+  "dataTypes": ["shoppingList", "shoppingListItem"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [
+    { "device": "phone", "kind": "create", "dataType": "shoppingList", "scope": "list", "record": "list", "at": -60000, "fields": { "name": "Einkauf" } },
+    { "device": "phone", "kind": "create", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -50000, "fields": { "name": "Milch", "category": "dairy", "language": "de" } }
+  ],
+  "race": [
+    { "label": "delete", "device": "phone", "kind": "delete", "dataType": "shoppingList", "scope": "list", "record": "list", "at": -2000 },
+    { "label": "check", "device": "tablet", "kind": "setFields", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -1000, "fields": { "checked": true } }
+  ],
+  "expect": {
+    "results": { "delete": { "status": "applied" }, "check": { "status": "applied" } },
+    "records": [],
+    "absent": [ { "dataType": "shoppingList", "record": "list" }, { "dataType": "shoppingListItem", "record": "milk" } ]
+  },
+  "expectByOrder": {
+    "delete>check": { "results": { "delete": { "status": "applied" }, "check": { "status": "rejected", "reason": "noAccess" } } }
+  }
+}

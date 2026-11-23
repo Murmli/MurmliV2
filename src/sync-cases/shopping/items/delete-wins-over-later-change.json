@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "id": "shopping/items/delete-wins-over-later-change",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/141 Gelöscht bleibt gelöscht, spätere Änderungen verfallen (53)",
+  "dataTypes": ["shoppingList", "shoppingListItem"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [
+    { "device": "phone", "kind": "create", "dataType": "shoppingList", "scope": "list", "record": "list", "at": -60000, "fields": { "name": "Einkauf" } },
+    { "device": "phone", "kind": "create", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -50000, "fields": { "name": "Milch", "category": "dairy", "language": "de" } }
+  ],
+  "race": [
+    { "label": "delete", "device": "phone", "kind": "delete", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -2000 },
+    { "label": "rename", "device": "tablet", "kind": "setFields", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -1000, "fields": { "name": "Vollmilch" } }
+  ],
+  "expect": {
+    "results": { "delete": { "status": "applied" }, "rename": { "status": "applied" } },
+    "records": [],
+    "absent": [ { "dataType": "shoppingListItem", "record": "milk" } ]
+  },
+  "expectByOrder": {
+    "delete>rename": { "results": { "delete": { "status": "applied" }, "rename": { "status": "ignored", "cause": "targetDeleted" } } }
+  }
+}
