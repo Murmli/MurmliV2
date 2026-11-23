@@ -4,9 +4,11 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Murmli.Backend.Api.Tests.Infrastructure;
 using Murmli.Backend.Api.Tests.Infrastructure.TestDataTypes;
+using Murmli.Backend.Sync.Cleanup;
 using Murmli.Backend.Sync.DataTypes;
 using Murmli.Backend.Sync.Protocol;
 using Murmli.Backend.Sync.Writing;
@@ -18,6 +20,8 @@ namespace Murmli.Backend.Api.Tests.Sync;
 [Collection<TelemetryCollection>]
 public class SyncEndpointsTelemetryTests(PostgresFixture postgres)
 {
+    private const string DatabaseCommandCategory = "Microsoft.EntityFrameworkCore.Database.Command";
+
     private static readonly string[] CommandTags =
     [
         "murmli.sync.command.status",
@@ -153,12 +157,7 @@ public class SyncEndpointsTelemetryTests(PostgresFixture postgres)
         Assert.Equal(device.AccountId, TestTelemetry.FindUserId(scopeRemoved));
 
         var appliedId = SyncTestCommands.GetId(applied);
-        Assert.DoesNotContain(
-            logRecords,
-            logRecord =>
-                (logRecord.FormattedMessage ?? "").Contains(appliedId.ToString(), StringComparison.Ordinal)
-                || (logRecord.Attributes ?? []).Any(attribute => Equals(attribute.Value, appliedId))
-        );
+        Assert.DoesNotContain(logRecords, logRecord => TestTelemetry.Describe(logRecord).Contains(appliedId.ToString(), StringComparison.Ordinal));
 
         var span = GetRequestSpan(activities, traceId);
         Assert.Equal(device.DeviceId.ToString(), span.GetTagItem("DeviceId"));
@@ -534,6 +533,48 @@ public class SyncEndpointsTelemetryTests(PostgresFixture postgres)
         Assert.Equal(100, logRecords.Count(logRecord => logRecord.EventId.Id == 3001));
     }
 
+    [Fact]
+    public async Task Sync_AllOperations_RecordNoContentInTelemetry()
+    {
+        var recorded = await RunAllOperationsAsync(recordSensitiveData: false);
+        string[] contentsAndSecrets = [.. recorded.Contents, .. recorded.Secrets];
+
+        Assert.All(recorded.Activities, activity => AssertCarriesNone(TestTelemetry.Describe(activity), contentsAndSecrets));
+        Assert.All(recorded.LogRecords, logRecord => AssertCarriesNone(TestTelemetry.Describe(logRecord), contentsAndSecrets));
+        Assert.All(recorded.MetricSnapshots, snapshot => AssertCarriesNone(TestTelemetry.Describe(snapshot), contentsAndSecrets));
+        Assert.Contains(recorded.LogRecords, logRecord => logRecord.CategoryName == DatabaseCommandCategory);
+        Assert.Contains(
+            recorded.LogRecords,
+            logRecord =>
+                logRecord.EventId.Name == "SyncCommandRejected"
+                && (logRecord.Attributes ?? []).Any(attribute => attribute is { Key: "DataType", Value: null })
+        );
+        var commands = TestMetrics.SumByTags(recorded.MetricSnapshots, "murmli.sync.commands", CommandTags);
+        Assert.Contains("rejected|invalid|create|unknown|device", commands.Keys);
+        Assert.Contains("rejected|invalid|unknown|testNote|device", commands.Keys);
+    }
+
+    [Fact]
+    public async Task Sync_AllOperationsWithSensitiveDataRecorded_RecordContentOnlyInDatabaseCommandLogs()
+    {
+        var recorded = await RunAllOperationsAsync(recordSensitiveData: true);
+        string[] contentsAndSecrets = [.. recorded.Contents, .. recorded.Secrets];
+
+        Assert.All(recorded.Activities, activity => AssertCarriesNone(TestTelemetry.Describe(activity), contentsAndSecrets));
+        Assert.All(recorded.MetricSnapshots, snapshot => AssertCarriesNone(TestTelemetry.Describe(snapshot), contentsAndSecrets));
+        Assert.All(
+            recorded.LogRecords.Where(logRecord => logRecord.CategoryName != DatabaseCommandCategory),
+            logRecord => AssertCarriesNone(TestTelemetry.Describe(logRecord), contentsAndSecrets)
+        );
+        Assert.All(recorded.LogRecords, logRecord => AssertCarriesNone(TestTelemetry.Describe(logRecord), recorded.Secrets));
+        Assert.Contains(
+            recorded.LogRecords,
+            logRecord =>
+                logRecord.CategoryName == DatabaseCommandCategory
+                && TestTelemetry.Describe(logRecord).Contains(recorded.Marker, StringComparison.Ordinal)
+        );
+    }
+
     private static Dictionary<string, string?> GetRejectionConfiguration(string condition) =>
         condition switch
         {
@@ -674,4 +715,139 @@ public class SyncEndpointsTelemetryTests(PostgresFixture postgres)
                 throw new ArgumentOutOfRangeException(nameof(condition), condition, "The theory has no full-state condition with this name.");
         }
     }
+
+    private async Task<RecordedTelemetry> RunAllOperationsAsync(bool recordSensitiveData)
+    {
+        var connectionString = postgres.CreateDatabaseConnectionString();
+        var activities = new List<Activity>();
+        var logRecords = new List<LogRecord>();
+        var metricSnapshots = new List<MetricSnapshot>();
+        var marker = $"marker{Guid.NewGuid():N}";
+        var noteId = Guid.NewGuid();
+        var boardId = Guid.NewGuid();
+        var cardId = Guid.NewGuid();
+        var listId = Guid.NewGuid();
+        var itemId = Guid.NewGuid();
+        await using var api = await ApiHost.StartAsync(
+            connectionString,
+            new Dictionary<string, string?> { ["Telemetry:RecordSensitiveData"] = recordSensitiveData ? "true" : "false" },
+            activities: activities,
+            logRecords: logRecords,
+            testDataTypes: true,
+            metricSnapshots: metricSnapshots
+        );
+
+        var owner = await SyncTestDevice.SignInAsync(api);
+        var member = await SyncTestDevice.SignInAsync(api);
+        var now = api.TimeProvider.GetUtcNow();
+        await owner.ApplyAllAsync(
+            owner.CreateNote(noteId, now, marker),
+            owner.CreateBoard(boardId, now, marker),
+            owner.CreateCard(boardId, cardId, now, marker)
+        );
+        await new DatabaseAdministration(connectionString).InsertMemberEntryAsync(boardId, member.AccountId, now, name: marker);
+
+        using var memberHttpResponse = await member.SendAsync(
+            JsonContent.Create(member.CreateBody(SyncTestDevice.AllDataTypes, [])),
+            member.DeviceId.ToString(),
+            acceptEncoding: "gzip"
+        );
+        var memberResponse = SyncTestDevice.DeserializeResponse(await SyncTestDevice.ReadBodyAsync(memberHttpResponse, compressed: true));
+        var boardBlock = Assert.Single(memberResponse.Scopes, block => block.ScopeId == boardId);
+        Assert.True(boardBlock.FullState);
+        Assert.Contains(boardBlock.Members, boardMember => boardMember.Name == marker);
+        member.Token = memberResponse.Token;
+        await member.ApplyAllAsync(member.SetCardFields(boardId, cardId, now.AddSeconds(1), new JsonObject { ["text"] = $"{marker}b" }));
+
+        var outdatedTitle = owner.SetNoteFields(noteId, now.AddSeconds(-1), SyncTestCommands.TitleFields($"{marker}c"));
+        Assert.Equal("ignored", Assert.Single((await owner.SyncAllAsync(outdatedTitle)).Results).Status);
+
+        var tooLong = owner.CreateNote(Guid.NewGuid(), now, marker + new string('x', 100));
+        JsonObject[] invalidCommands =
+        [
+            tooLong,
+            SyncTestCommands.WithField(owner.CreateNote(Guid.NewGuid(), now, "note"), marker, "x"),
+            owner.CreateCommand("create", marker, owner.PersonalScopeId, Guid.NewGuid(), now, SyncTestCommands.TitleFields(marker)),
+            owner.CreateCommand(marker, TestNoteType.DataTypeName, owner.PersonalScopeId, Guid.NewGuid(), now, SyncTestCommands.TitleFields(marker)),
+        ];
+        Assert.Equal(
+            invalidCommands.Select(command => new SyncCommandResult(SyncTestCommands.GetId(command), "rejected", "invalid")),
+            (await owner.SyncAllAsync(invalidCommands)).Results
+        );
+        Assert.Equal("alreadyProcessed", Assert.Single((await owner.SyncAllAsync(tooLong)).Results).Status);
+        Assert.Equal(
+            "failed",
+            Assert.Single((await owner.SyncAllAsync(owner.CreateNote(Guid.NewGuid(), now, TestNoteType.FailingTitle))).Results).Status
+        );
+
+        var serverCreate = new SyncServerCommand(
+            Guid.NewGuid(),
+            SyncActor.OnBehalfOf(owner.AccountId),
+            SyncCommandKind.Create,
+            owner.PersonalScopeId,
+            TestNoteType.DataTypeName,
+            Guid.NewGuid(),
+            new Dictionary<string, JsonElement> { ["title"] = JsonSerializer.SerializeToElement(marker) }
+        );
+        Assert.Equal("applied", (await api.WriteAsServerAsync(serverCreate)).Status);
+        Assert.Equal(
+            new SyncServerWriteResult("rejected", "invalid", null),
+            await api.WriteAsServerAsync(serverCreate with { CommandId = Guid.NewGuid(), Actor = SyncActor.System, DataType = marker })
+        );
+
+        await owner.SyncShoppingAsync();
+        var shopping = await owner.SyncShoppingAsync(
+            owner.CreateList(listId, now, marker),
+            owner.CreateItem(listId, itemId, now, SyncTestDevice.ItemFields(marker)),
+            owner.SetItemFields(listId, itemId, now.AddSeconds(1), new JsonObject { ["checked"] = true })
+        );
+        Assert.Equal(["applied", "applied", "applied"], shopping.Results.Select(result => result.Status));
+
+        api.TimeProvider.Advance(TimeSpan.FromDays(31));
+        await api.Services.GetRequiredService<SyncCleanupRunner>().RunAsync(TestContext.Current.CancellationToken);
+        Assert.Contains(
+            new SyncDeletedRecord(SyncTestDevice.ShoppingListItemDataType, itemId),
+            Assert.Single((await owner.SyncShoppingAsync()).Scopes, block => block.ScopeId == listId).DeletedRecords
+        );
+
+        await owner.ApplyAllAsync(owner.DeleteBoard(boardId, api.TimeProvider.GetUtcNow()));
+        Assert.Contains(new SyncRemovedScope(boardId, false), (await member.SyncAllAsync()).RemovedScopes);
+        Assert.Equal(HttpStatusCode.NoContent, await api.DeleteMeAsync(member.AuthUserId));
+
+        owner.Token = null;
+        Assert.True((await owner.SyncAllAsync()).CoversAllScopes);
+        Assert.Contains(marker, owner.ResponseBodies[^1], StringComparison.Ordinal);
+        api.FlushMetrics();
+
+        string[] syncTokens =
+        [
+            memberResponse.Token,
+            .. owner.ResponseBodies.Concat(member.ResponseBodies).Select(body => SyncTestDevice.DeserializeResponse(body).Token),
+        ];
+        return new RecordedTelemetry(
+            marker,
+            [marker, owner.AuthUserId, member.AuthUserId],
+            ["eyJhbGci", .. syncTokens.Distinct()],
+            activities,
+            logRecords,
+            metricSnapshots
+        );
+    }
+
+    private static void AssertCarriesNone(string text, IEnumerable<string> values)
+    {
+        foreach (var value in values)
+        {
+            Assert.DoesNotContain(value, text, StringComparison.Ordinal);
+        }
+    }
+
+    private sealed record RecordedTelemetry(
+        string Marker,
+        string[] Contents,
+        string[] Secrets,
+        List<Activity> Activities,
+        List<LogRecord> LogRecords,
+        List<MetricSnapshot> MetricSnapshots
+    );
 }

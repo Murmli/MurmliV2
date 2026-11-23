@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -157,8 +156,8 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
 
         GetRequestActivity(deletionTraceId);
         Assert.Contains(logRecords, logRecord => logRecord.EventId.Name == "UserDeleted");
-        Assert.All(activities, activity => Assert.DoesNotContain(AuthUserId, Describe(activity)));
-        Assert.All(logRecords, logRecord => Assert.DoesNotContain(AuthUserId, Describe(logRecord)));
+        Assert.All(activities, activity => Assert.DoesNotContain(AuthUserId, TestTelemetry.Describe(activity)));
+        Assert.All(logRecords, logRecord => Assert.DoesNotContain(AuthUserId, TestTelemetry.Describe(logRecord)));
     }
 
     [Fact]
@@ -333,29 +332,4 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
         Assert.Single(activities, activity => activity.Source.Name == "Microsoft.AspNetCore" && activity.TraceId == traceId);
 
     private IEnumerable<LogRecord> GetLogRecords(ActivityTraceId traceId) => logRecords.Where(logRecord => logRecord.TraceId == traceId);
-
-    private static string Describe(Activity activity) =>
-        string.Join(
-            '\n',
-            [
-                activity.DisplayName,
-                activity.StatusDescription,
-                .. activity.TagObjects.Select(Describe),
-                .. activity.Events.SelectMany(activityEvent => activityEvent.Tags).Select(Describe),
-            ]
-        );
-
-    private static string Describe(LogRecord logRecord) =>
-        string.Join(
-            '\n',
-            [
-                logRecord.FormattedMessage,
-                .. (logRecord.Attributes ?? []).Select(Describe),
-                .. TestTelemetry.GetScopeItems(logRecord).Select(Describe),
-                logRecord.Exception?.ToString(),
-            ]
-        );
-
-    private static string Describe(KeyValuePair<string, object?> item) =>
-        $"{item.Key}={Convert.ToString(item.Value, CultureInfo.InvariantCulture)}";
 }

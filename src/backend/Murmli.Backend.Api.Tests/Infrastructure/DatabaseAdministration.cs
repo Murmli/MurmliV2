@@ -79,7 +79,8 @@ internal sealed class DatabaseAdministration(string connectionString)
         Guid accountId,
         DateTimeOffset createdAt,
         string role = "member",
-        string state = "active"
+        string state = "active",
+        string name = ""
     )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -98,11 +99,12 @@ internal sealed class DatabaseAdministration(string connectionString)
             transaction,
             """
             INSERT INTO sync.member_entries (id, scope_id, account_id, name, role, state, created_at)
-            VALUES (@id, @scope, @account, '', @role, @state, @createdAt)
+            VALUES (@id, @scope, @account, @name, @role, @state, @createdAt)
             """,
             ("id", memberId),
             ("scope", scopeId),
             ("account", accountId),
+            ("name", name),
             ("role", role),
             ("state", state),
             ("createdAt", createdAt)
