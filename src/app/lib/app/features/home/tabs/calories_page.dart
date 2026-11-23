@@ -51,6 +51,17 @@ class _FeedbackDemo extends ConsumerWidget {
         onPressed: () => unawaited(_confirm(context)),
         child: const Text('showConfirmationPopup'),
       ),
+      const SizedBox(height: AppSpacing.space12),
+      OutlinedButton(
+        onPressed: () =>
+            showToast(context, 'Something went wrong.', tone: ToastTone.error),
+        child: const Text('toast error'),
+      ),
+      const SizedBox(height: AppSpacing.space12),
+      OutlinedButton(
+        onPressed: () => showToast(context, 'Saved your changes.'),
+        child: const Text('toast info'),
+      ),
     ],
   );
 
