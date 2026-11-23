@@ -119,23 +119,15 @@ public class HostApplicationBuilderExtensionsTests(PostgresFixture postgres) : I
         Assert.Null(exception);
     }
 
-    [Fact]
-    public async Task AddApi_FullStateCompressionLevelUndefined_FailsOptionsValidation()
-    {
-        await using var application = CreateApiBuilder(new Dictionary<string, string?> { ["Sync:FullStateCompressionLevel"] = "5" }).Build();
-
-        var exception = Assert.Throws<OptionsValidationException>(() =>
-            application.Services.GetRequiredService<IOptions<SyncOptions>>().Value
-        );
-
-        Assert.Contains(nameof(SyncOptions.FullStateCompressionLevel), exception.Message);
-    }
-
     [Theory]
+    [InlineData("Sync:FullStateCompressionLevel", "5", "FullStateCompressionLevel")]
     [InlineData("Sync:Cleanup:SafetyMargin", "00:04:59", "Sync:Cleanup:SafetyMargin must be at least Sync:ClockAheadTolerance plus Sync:RequestDeadline.")]
     [InlineData("Sync:Cleanup:SafetyMargin", "00:05:44", "Sync:Cleanup:SafetyMargin must be at least Sync:ClockAheadTolerance plus Sync:RequestDeadline.")]
     [InlineData("Sync:Cleanup:LeaseDuration", "00:01:59", "LeaseDuration")]
-    public async Task AddApi_SyncCleanupOptionInvalid_FailsOptionsValidation(string key, string value, string expectedError)
+    [InlineData("Sync:RateLimits:AccountCommandsPerHour", "499", "Sync:RateLimits:AccountCommandsPerHour must be at least Sync:MaxCommandsPerRequest.")]
+    [InlineData("Sync:RateLimits:DeviceRequestsPerMinute", "0", "DeviceRequestsPerMinute")]
+    [InlineData("Sync:RateLimits:AccountRequestsPerMinute", "0", "AccountRequestsPerMinute")]
+    public async Task AddApi_SyncOptionInvalid_FailsOptionsValidation(string key, string value, string expectedError)
     {
         await using var application = CreateApiBuilder(new Dictionary<string, string?> { [key] = value }).Build();
 
