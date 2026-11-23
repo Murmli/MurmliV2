@@ -22,7 +22,7 @@ Betriebsdoku (Einrichtung, Deploy-Ablauf): [BackOffice, docs/03_Betrieb/Deployme
 
 ## Aufräumen des Abgleichs
 
-Abgelaufene Löschmarkierungen und Kommando-IDs entfernt der Hintergrunddienst `SyncCleanupService` in der API ([sync.md](sync.md#aufbewahrung-und-aufräumen)), ohne eigene Ressource. Er läuft eine Minute nach jedem Start der API und danach alle 24 Stunden, solange die Instanz läuft. In Dev, wo die API auf null Instanzen herunterfährt, läuft er also bei jedem Kaltstart und täglich nur während der Nutzung; ohne Nutzung wächst dort nichts nach. Mehrere Instanzen und die Revisionen eines Deploys stören sich nicht, die Lease in `sync.cleanup_lease` lässt höchstens einen Lauf zu. `Sync:Cleanup:Enabled=false` schaltet ihn ab; derzeit setzt keine Umgebung einen `Sync:Cleanup:*`-Wert.
+Abgelaufene Löschmarkierungen und Kommando-IDs entfernt der Hintergrunddienst `SyncCleanupService` in der API ([sync.md](sync.md#aufbewahrung-und-aufräumen)), ohne eigene Ressource; derselbe Lauf schließt hängengebliebene Kontolöschungen ab ([authentication.md](authentication.md#konto-löschen)). Er läuft eine Minute nach jedem Start der API und danach alle 24 Stunden, solange die Instanz läuft. In Dev, wo die API auf null Instanzen herunterfährt, läuft er also bei jedem Kaltstart und täglich nur während der Nutzung; ohne Nutzung wächst dort nichts nach. Mehrere Instanzen und die Revisionen eines Deploys stören sich nicht, die Lease in `sync.cleanup_lease` lässt höchstens einen Lauf zu. `Sync:Cleanup:Enabled=false` schaltet ihn ab; derzeit setzt keine Umgebung einen `Sync:Cleanup:*`-Wert.
 
 ## Sicherung einspielen
 

@@ -8,7 +8,7 @@ Quellen und Meter stehen in `AddTelemetry()`, die von `Npgsql` registrieren die 
 
 ### Konto-Id
 
-`UserTelemetryMiddleware` läuft nach Authentifizierung und Autorisierung ([api.md](api.md#pipeline)), sucht zu `sub` die eigene Id in `identity.users` und setzt sie, wenn es ein Konto gibt, als `UserId` am Request-Span und als Log-Scope für den Rest der Anfrage (auch an EF-Core-Command-Logs und `UnhandledException`). Suche in Application Insights:
+`UserTelemetryMiddleware` läuft nach Authentifizierung und Autorisierung ([api.md](api.md#pipeline)), sucht zu `sub` die eigene Id in `identity.users` (und schreibt höchstens einmal am Tag den Tag der letzten Anfrage, [authentication.md](authentication.md#datenmodell)) und setzt sie, wenn es ein Konto gibt, als `UserId` am Request-Span und als Log-Scope für den Rest der Anfrage (auch an EF-Core-Command-Logs und `UnhandledException`). Suche in Application Insights:
 
 ```kusto
 union requests, traces, exceptions
@@ -20,8 +20,8 @@ Ohne `UserId` bleiben:
 - Anfragen ohne Anmeldung oder ohne Konto (nie `GET /v1/users/me` aufgerufen, Konto gelöscht), der Produktimport und `auth`.
 - Der erste `GET /v1/users/me`, der das Konto anlegt: nur der Log `UserCreated` trägt die Id.
 - Kind-Spans (Npgsql, HttpClient), sie hängen über die Trace-ID am Request.
-- Logs vor der Middleware (Authentifizierung, die Abfrage der Konto-Id selbst samt `DatabaseUnavailable`, wenn sie an einer Störung der Datenbank scheitert).
-- Der Aufräum-Lauf des Abgleichs, er läuft ohne Anfrage.
+- Logs vor der Middleware und die ihrer eigenen Anweisungen (Authentifizierung, die Abfrage der Konto-Id und das Schreiben des Tags der letzten Anfrage samt `DatabaseUnavailable`, wenn eine davon an einer Störung der Datenbank scheitert).
+- Der Aufräum-Lauf des Abgleichs, er läuft ohne Anfrage. Ausgenommen ist das Abschließen hängengebliebener Kontolöschungen: Es loggt je Konto mit `UserId` als Log-Scope ([authentication.md](authentication.md#konto-löschen)).
 
 ### Abgleich
 
