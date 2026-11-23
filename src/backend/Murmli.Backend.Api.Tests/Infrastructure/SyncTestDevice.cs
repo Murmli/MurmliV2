@@ -26,6 +26,8 @@ internal sealed class SyncTestDevice
 
     private readonly ApiHost api;
 
+    private readonly List<string> responseBodies = [];
+
     private Guid? personalScopeId;
 
     private SyncTestDevice(ApiHost api, string authUserId, Guid accountId, Guid? personalScopeId)
@@ -43,6 +45,8 @@ internal sealed class SyncTestDevice
     public Guid DeviceId { get; } = Guid.NewGuid();
 
     public string? Token { get; set; }
+
+    public IReadOnlyList<string> ResponseBodies => responseBodies;
 
     public Guid PersonalScopeId =>
         personalScopeId ?? throw new InvalidOperationException("The device learns its personal scope only from a sync response.");
@@ -226,7 +230,9 @@ internal sealed class SyncTestDevice
 
     private async Task<SyncResponse> ReadAsync(HttpResponseMessage response)
     {
-        var syncResponse = await ReadResponseAsync(response);
+        var body = await ReadBodyAsync(response, compressed: false);
+        responseBodies.Add(body);
+        var syncResponse = DeserializeResponse(body);
         Token = syncResponse.Token;
         personalScopeId ??= syncResponse.Scopes.FirstOrDefault(scope => scope.Kind == SyncScope.PersonalKind)?.ScopeId;
         return syncResponse;

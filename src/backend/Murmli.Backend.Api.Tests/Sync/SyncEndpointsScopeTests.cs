@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Murmli.Backend.Api.Tests.Infrastructure;
 using Murmli.Backend.Api.Tests.Infrastructure.TestDataTypes;
@@ -95,17 +94,12 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
             _ => throw new ArgumentOutOfRangeException(nameof(commandName), commandName, null),
         };
 
-        using var httpResponse = await other.SendAsync(
-            JsonContent.Create(other.CreateBody(SyncTestDevice.AllDataTypes, [command])),
-            other.DeviceId.ToString()
-        );
+        var response = await other.SyncAllAsync(command);
 
-        var body = await SyncTestDevice.ReadBodyAsync(httpResponse, compressed: false);
-        var response = SyncTestDevice.DeserializeResponse(body);
         Assert.Equal(new SyncCommandResult(SyncTestCommands.GetId(command), "rejected", "noAccess"), Assert.Single(response.Results));
         Assert.DoesNotContain(response.Scopes, block => block.ScopeId == boardId);
         Assert.Equal(new SyncRemovedScope(boardId, false), Assert.Single(response.RemovedScopes));
-        Assert.DoesNotContain("milk", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("milk", other.ResponseBodies[^1], StringComparison.Ordinal);
         Assert.Equal(versionBefore, (await SharedScopeQueries.ReadScopeAsync(fixture.Api, boardId))?.Version);
         Assert.Equal("milk", (await SharedScopeQueries.ReadCardAsync(fixture.Api, cardId))?.Text);
         Assert.Equal("board", await SharedScopeQueries.ReadBoardTitleAsync(fixture.Api, boardId));
@@ -524,6 +518,34 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
     }
 
     [Fact]
+    public async Task Sync_Create_FillsChangedByWithOwnEntry()
+    {
+        var device = await SyncTestDevice.SignInAsync(fixture.Api);
+        var now = fixture.Api.TimeProvider.GetUtcNow();
+        var boardId = Guid.NewGuid();
+        var cardId = Guid.NewGuid();
+        await ApplyAsync(device, device.CreateBoard(boardId, now.AddSeconds(-30), "board"));
+        var ownerMemberId = await ReadOwnerMemberIdAsync(boardId);
+        var createdAt = now.AddSeconds(-10);
+        var create = device.CreateCard(boardId, cardId, createdAt, "milk");
+
+        var response = await device.SyncAllAsync(create);
+
+        Assert.Equal(new SyncCommandResult(SyncTestCommands.GetId(create), "applied"), Assert.Single(response.Results));
+        var record = Assert.Single(Assert.Single(response.Scopes, block => block.ScopeId == boardId).Records);
+        Assert.Equal(
+            (
+                TestCardType.DataTypeName,
+                cardId,
+                $$"""{"text":"milk","count":null,"measure":null,"done":false,"changedBy":"{{ownerMemberId}}","doneBy":null,"createdAt":{{createdAt.ToUnixTimeMilliseconds()}}}"""
+            ),
+            (record.DataType, record.Id, record.Fields.GetRawText())
+        );
+        var card = await SharedScopeQueries.ReadCardAsync(fixture.Api, cardId);
+        Assert.Equal((ownerMemberId, ownerMemberId, createdAt), (card?.ChangedByMemberId, card?.CreatedByMemberId, card?.CreatedAt));
+    }
+
+    [Fact]
     public async Task Sync_SetFieldsByMember_FillsChangedByAndDoneByWithActingEntry()
     {
         var owner = await SyncTestDevice.SignInAsync(fixture.Api);
@@ -554,6 +576,32 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
             new[] { afterDone, afterText, afterUndone }.Select(card =>
                 (card?.ChangedByMemberId, card?.DoneByMemberId, card?.CreatedByMemberId, card?.CreatedAt)
             )
+        );
+    }
+
+    [Fact]
+    public async Task Sync_Create_StoresCreatorWithoutSendingIt()
+    {
+        var owner = await SyncTestDevice.SignInAsync(fixture.Api);
+        var now = fixture.Api.TimeProvider.GetUtcNow();
+        var boardId = Guid.NewGuid();
+        var cardId = Guid.NewGuid();
+        await CreateBoardWithCardAsync(owner, boardId, cardId, now);
+        var ownerMemberId = await ReadOwnerMemberIdAsync(boardId);
+        var creatorBeforeChange = (await SharedScopeQueries.ReadCardAsync(fixture.Api, cardId))?.CreatedByMemberId;
+        var member = await SyncTestDevice.SignInAsync(fixture.Api);
+        var memberId = await JoinAsync(member, boardId, now);
+        await ApplyAsync(member, member.SetCardFields(boardId, cardId, now.AddSeconds(-10), new JsonObject { ["text"] = "changed" }));
+        var otherDevice = owner.OtherDevice();
+
+        var otherDeviceResponse = await otherDevice.SyncAllAsync();
+
+        var card = await SharedScopeQueries.ReadCardAsync(fixture.Api, cardId);
+        Assert.Equal((ownerMemberId, ownerMemberId, memberId), (creatorBeforeChange, card?.CreatedByMemberId, card?.ChangedByMemberId));
+        Assert.Contains(Assert.Single(otherDeviceResponse.Scopes, block => block.ScopeId == boardId).Records, record => record.Id == cardId);
+        Assert.All(
+            owner.ResponseBodies.Concat(member.ResponseBodies).Concat(otherDevice.ResponseBodies),
+            body => Assert.DoesNotContain("\"createdBy\"", body, StringComparison.Ordinal)
         );
     }
 
@@ -613,6 +661,81 @@ public class SyncEndpointsScopeTests(SyncApiFixture fixture) : IClassFixture<Syn
         }
 
         Assert.Null(await SharedScopeQueries.ReadBoardTitleAsync(fixture.Api, boardId));
+    }
+
+    [Fact]
+    public async Task Sync_AnyResponse_ContainsNoForeignAccountId()
+    {
+        var owner = await SyncTestDevice.SignInAsync(fixture.Api);
+        var now = fixture.Api.TimeProvider.GetUtcNow();
+        var boardId = Guid.NewGuid();
+        var cardId = Guid.NewGuid();
+        await CreateBoardWithCardAsync(owner, boardId, cardId, now);
+        var member = await SyncTestDevice.SignInAsync(fixture.Api);
+        await JoinAsync(member, boardId, now);
+        await ApplyAsync(member, member.SetCardFields(boardId, cardId, now.AddSeconds(-10), new JsonObject { ["text"] = "changed" }));
+        await owner.SyncAllAsync();
+        await ApplyAsync(owner, owner.DeleteCard(boardId, cardId, now));
+        await member.SyncAllAsync();
+        var otherMemberDevice = member.OtherDevice();
+        await otherMemberDevice.SyncAllAsync();
+        await ApplyAsync(owner, owner.DeleteBoard(boardId, now));
+
+        await member.SyncAllAsync();
+
+        Assert.All(
+            owner.ResponseBodies.Concat(member.ResponseBodies).Concat(otherMemberDevice.ResponseBodies),
+            body =>
+            {
+                foreach (var accountId in new[] { owner.AccountId, member.AccountId })
+                {
+                    Assert.DoesNotContain(accountId.ToString("D"), body, StringComparison.OrdinalIgnoreCase);
+                    Assert.DoesNotContain(accountId.ToString("N"), body, StringComparison.OrdinalIgnoreCase);
+                }
+            }
+        );
+    }
+
+    [Theory]
+    [InlineData("liveRecord")]
+    [InlineData("tombstonedRecord")]
+    public async Task Sync_ForeignRecordId_RejectedLikeNoAccessWithoutContent(string scenario)
+    {
+        var owner = await SyncTestDevice.SignInAsync(fixture.Api);
+        var now = fixture.Api.TimeProvider.GetUtcNow();
+        var foreignBoardId = Guid.NewGuid();
+        var cardId = Guid.NewGuid();
+        await ApplyAsync(owner, owner.CreateBoard(foreignBoardId, now.AddSeconds(-30), "board"));
+        await ApplyAsync(owner, owner.CreateCard(foreignBoardId, cardId, now.AddSeconds(-20), "secret"));
+        var ownerMemberId = await ReadOwnerMemberIdAsync(foreignBoardId);
+        var isTombstoned = scenario == "tombstonedRecord";
+        if (isTombstoned)
+        {
+            await ApplyAsync(owner, owner.DeleteCard(foreignBoardId, cardId, now.AddSeconds(-10)));
+        }
+
+        var other = await SyncTestDevice.SignInAsync(fixture.Api);
+        var ownBoardId = Guid.NewGuid();
+        await ApplyAsync(other, other.CreateBoard(ownBoardId, now.AddSeconds(-30), "board"));
+        var command = scenario switch
+        {
+            "liveRecord" => other.SetCardFields(ownBoardId, cardId, now, new JsonObject { ["text"] = "x" }),
+            "tombstonedRecord" => other.CreateCard(ownBoardId, cardId, now, "x"),
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null),
+        };
+
+        var response = await other.SyncAllAsync(command);
+
+        Assert.Equal(new SyncCommandResult(SyncTestCommands.GetId(command), "rejected", "noAccess"), Assert.Single(response.Results));
+        var block = Assert.Single(response.Scopes, block => block.ScopeId == ownBoardId);
+        Assert.DoesNotContain(block.Records, record => record.Id == cardId);
+        Assert.Equal(new[] { new SyncDeletedRecord(TestCardType.DataTypeName, cardId) }, block.DeletedRecords);
+        Assert.All(
+            new[] { foreignBoardId.ToString(), "secret", ownerMemberId.ToString() },
+            content => Assert.DoesNotContain(content, other.ResponseBodies[^1], StringComparison.OrdinalIgnoreCase)
+        );
+        var card = await SharedScopeQueries.ReadCardAsync(fixture.Api, cardId);
+        Assert.Equal(isTombstoned ? (null, null) : ("secret", (Guid?)foreignBoardId), (card?.Text, card?.ScopeId));
     }
 
     [Fact]
