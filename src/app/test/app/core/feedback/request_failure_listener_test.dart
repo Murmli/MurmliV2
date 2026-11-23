@@ -12,7 +12,7 @@ import '../../../helpers/http_client_adapter.dart';
 import '../../../helpers/pump_app.dart';
 
 void main() {
-  final translations = AppLocale.de.buildSync().apiError;
+  final translations = AppLocale.de.buildSync().requestFailure;
   late ProviderContainer container;
   late RecordingHttpClientAdapter adapter;
 
@@ -44,21 +44,23 @@ void main() {
     (_) {},
   );
 
-  group('ApiErrorDialogListener', () {
+  group('RequestFailureListener', () {
     testWidgets(
-      'failed request to the API shows a dialog with its trace id as support code',
+      'request to the API failing with 500 shows the server error popup with its trace id as support code',
       (tester) async {
         await pumpAppWithFailingApi(tester);
 
         await failRequest(tester);
 
         expect(find.byType(AlertDialog), findsOneWidget);
+        expect(find.text(translations.serverError.title), findsOneWidget);
+        expect(find.text(translations.serverError.message), findsOneWidget);
         expect(find.text(sentTraceId(adapter.requests.single)), findsOneWidget);
       },
     );
 
     testWidgets(
-      'further failures while the dialog is open show no second dialog',
+      'further failures while the popup is open show no second popup',
       (tester) async {
         await pumpAppWithFailingApi(tester);
 
@@ -71,7 +73,7 @@ void main() {
     );
 
     testWidgets(
-      'failure after closing the dialog shows a new dialog with the new trace id',
+      'failure after closing the popup shows a new popup with the new trace id',
       (tester) async {
         await pumpAppWithFailingApi(tester);
         await failRequest(tester);
@@ -86,7 +88,7 @@ void main() {
     );
 
     testWidgets(
-      'failure while the app is in the background shows no dialog after returning',
+      'failure while the app is in the background shows no popup after returning',
       (tester) async {
         await pumpAppWithFailingApi(tester);
         await changeLifecycleState(tester, AppLifecycleState.paused);

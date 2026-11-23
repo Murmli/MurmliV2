@@ -13,8 +13,8 @@ import 'package:sign_in_with_apple_platform_interface/sign_in_with_apple_platfor
 import 'package:talker/talker.dart';
 
 import 'package:app/app/core/api/api_client_provider.dart';
-import 'package:app/app/core/api/failed_api_request_trace_id_provider.dart';
 import 'package:app/app/core/authentication/signed_in_account_provider.dart';
+import 'package:app/app/core/feedback/reported_request_failure_provider.dart';
 import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/logging/talker_provider.dart';
 import 'package:app/app/core/storage/preference_keys.dart';
@@ -158,26 +158,29 @@ void main() {
       );
     }
 
-    for (final (scenario, respondFromAuth) in [
+    for (final (scenario, respondFromAuth, expectedResult) in [
       (
         'auth rejecting the identity token',
         (RequestOptions request) async => ResponseBody.fromString('', 401),
+        SignInResult.failed,
       ),
       (
         'auth answering without set-auth-token',
         (RequestOptions request) async => request.uri.path == socialSignInPath
             ? jsonResponse({'token': 'unsigned-session-token'})
             : await respondAsAuth(request),
+        SignInResult.failed,
       ),
       (
         'a failed token request',
         (RequestOptions request) async => request.uri.path == tokenPath
             ? ResponseBody.fromString('', 500)
             : await respondAsAuth(request),
+        SignInResult.requestFailed,
       ),
     ]) {
       test(
-        'signInWithApple with $scenario returns failed without a request to the API, stays signed out and logs a warning without tokens',
+        'signInWithApple with $scenario returns ${expectedResult.name} without a request to the API, stays signed out and logs a warning without tokens',
         () async {
           installFakeSignInWithApple();
           final requests = recordAuthenticationRequests(
@@ -187,7 +190,7 @@ void main() {
 
           final result = await signInWithApple();
 
-          expect(result, SignInResult.failed);
+          expect(result, expectedResult);
           expect(requests.api.requests, isEmpty);
           expect(container.read(signedInAccountProvider), isNull);
           final log = container.read(talkerProvider).history.single;
@@ -206,7 +209,7 @@ void main() {
       );
     }
 
-    test('signInWithApple with a failed request to the API returns apiRequestFailed, stays signed out and ends the session at auth', () async {
+    test('signInWithApple with a failed request to the API returns requestFailed, stays signed out and ends the session at auth', () async {
       installFakeSignInWithApple();
       final requests = recordAuthenticationRequests(
         container,
@@ -216,7 +219,7 @@ void main() {
       final result = await signInWithApple();
       await pumpEventQueue();
 
-      expect(result, SignInResult.apiRequestFailed);
+      expect(result, SignInResult.requestFailed);
       expect(container.read(signedInAccountProvider), isNull);
       expect(secureStorage, isEmpty);
       final signOut = requests.auth.requests.last;
@@ -400,7 +403,7 @@ void main() {
       (
         'auth failing with 500',
         (RequestOptions request) async => ResponseBody.fromString('', 500),
-        SignInResult.failed,
+        SignInResult.requestFailed,
       ),
       (
         'auth answering without set-auth-token',
@@ -447,7 +450,7 @@ void main() {
 
       expect(result, SignInResult.failed);
       expect(container.read(signedInAccountProvider), isNull);
-      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+      expect(container.read(reportedRequestFailureProvider), isNull);
     });
 
     test('API request 13 minutes after sign-in reuses the access token of the sign-in', () async {
@@ -537,7 +540,7 @@ void main() {
           'Bearer ${jsonWebTokenIssuedAt(now)}',
         ],
       );
-      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+      expect(container.read(reportedRequestFailureProvider), isNull);
     });
 
     test('API request rejected with 401 again after the retry throws the error, retries no further and reports only the retry', () async {
@@ -565,7 +568,7 @@ void main() {
       expect(tokenRequests(requests.auth), hasLength(2));
       expect(exampleRequests(requests.api), hasLength(2));
       expect(
-        container.read(failedApiRequestTraceIdProvider),
+        container.read(reportedRequestFailureProvider)?.supportCode,
         sentTraceId(exampleRequests(requests.api).last),
       );
     });
@@ -596,7 +599,7 @@ void main() {
 
       expect(container.read(signedInAccountProvider), isNull);
       expect(exampleRequests(requests.api), isEmpty);
-      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+      expect(container.read(reportedRequestFailureProvider), isNull);
     });
 
     for (final (scenario, failRenewal) in [
@@ -631,7 +634,7 @@ void main() {
 
           expect(container.read(signedInAccountProvider)?.id, accountId);
           expect(exampleRequests(requests.api), isEmpty);
-          expect(container.read(failedApiRequestTraceIdProvider), isNotNull);
+          expect(container.read(reportedRequestFailureProvider), isNotNull);
           final history = container.read(talkerProvider).history;
           expect(
             history.where((log) => log.logLevel == LogLevel.warning),
@@ -760,7 +763,7 @@ void main() {
       );
       expect(tokenRequests(requests.auth), hasLength(2));
       expect(container.read(signedInAccountProvider)?.id, accountId);
-      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+      expect(container.read(reportedRequestFailureProvider), isNull);
     });
 
     Future<void> restoreFrom(FailingSecureStorage failingStorage) async {

@@ -117,9 +117,35 @@
       "licenses": "Licenses"
     }
   },
-  "apiError": {
-    "title": "Something went wrong",
-    "message": "Murmli couldn't complete the request. If you contact support, please include this support code:",
-    "close": "Close"
+  "requestFailure": {
+    "close": "Close",
+    "supportCode": "If you contact support, please include this support code:",
+    "noConnection": "No connection to the server. Check your internet connection and try again.",
+    "serverUnavailable": "Murmli is currently unavailable. Please try again in a moment.",
+    "tooManyRequests": "Too many attempts. Please wait a moment and try again.",
+    "unauthorized": {
+      "title": "Sign-in not confirmed",
+      "message": "Murmli couldn't confirm your sign-in. Try again. If that doesn't help, sign out and back in."
+    },
+    "forbidden": {
+      "title": "Not allowed",
+      "message": "Your account isn't allowed to do this."
+    },
+    "notFound": {
+      "title": "Not found",
+      "message": "What you were looking for doesn't exist or no longer exists."
+    },
+    "invalidRequest": {
+      "title": "Request rejected",
+      "message": "The server rejected the request. Check your input and try again."
+    },
+    "serverError": {
+      "title": "Server error",
+      "message": "Something went wrong on the server. Please try again later."
+    },
+    "unexpected": {
+      "title": "Something went wrong",
+      "message": "Murmli couldn't complete the request. Please try again."
+    }
   }
 }

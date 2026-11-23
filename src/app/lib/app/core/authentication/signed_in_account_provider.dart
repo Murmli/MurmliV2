@@ -10,6 +10,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../api/api_client_provider.dart';
+import '../feedback/reported_request_failure_provider.dart';
+import '../feedback/request_failure.dart';
 import '../flavor/flavor.dart';
 import '../flavor/flavor_provider.dart';
 import '../logging/talker_provider.dart';
@@ -34,8 +36,9 @@ enum SignInResult {
   canceled,
   failed,
   invalidCredentials,
-  // apiClientProvider already showed the error dialog, callers show nothing.
-  apiRequestFailed,
+  // The failure was already reported to reportedRequestFailureProvider,
+  // callers show nothing.
+  requestFailed,
 }
 
 enum SignOutResult { signedOut, authUnreachable }
@@ -125,13 +128,10 @@ class SignedInAccount extends _$SignedInAccount {
       _logFailure('Apple credential', 'no identity token');
       return SignInResult.failed;
     }
-    final sessionToken = await _signInWithIdToken(
+    return _signInWithIdToken(
       provider: 'apple',
       idToken: {'token': identityToken, 'nonce': rawNonce},
     );
-    return sessionToken == null
-        ? SignInResult.failed
-        : _completeSignIn(sessionToken);
   }
 
   Future<SignInResult> signInWithGoogle() async {
@@ -155,13 +155,7 @@ class SignedInAccount extends _$SignedInAccount {
       _logFailure('Google credential', 'no ID token');
       return SignInResult.failed;
     }
-    final sessionToken = await _signInWithIdToken(
-      provider: 'google',
-      idToken: {'token': idToken},
-    );
-    return sessionToken == null
-        ? SignInResult.failed
-        : _completeSignIn(sessionToken);
+    return _signInWithIdToken(provider: 'google', idToken: {'token': idToken});
   }
 
   Future<SignInResult> signInWithEmail({
@@ -184,7 +178,7 @@ class SignedInAccount extends _$SignedInAccount {
         // Better Auth answers a malformed address with 400, it gets the same
         // message as wrong credentials.
         401 || 400 => SignInResult.invalidCredentials,
-        _ => SignInResult.failed,
+        _ => _failureOf(error),
       };
     }
     return sessionToken == null
@@ -192,11 +186,12 @@ class SignedInAccount extends _$SignedInAccount {
         : _completeSignIn(sessionToken);
   }
 
-  Future<String?> _signInWithIdToken({
+  Future<SignInResult> _signInWithIdToken({
     required String provider,
     required Map<String, String> idToken,
   }) async {
     const step = 'social sign-in';
+    final String? sessionToken;
     try {
       final response = await ref
           .read(authClientProvider)
@@ -204,11 +199,14 @@ class SignedInAccount extends _$SignedInAccount {
             '/api/auth/sign-in/social',
             data: {'provider': provider, 'idToken': idToken},
           );
-      return _sessionTokenOf(response, step);
+      sessionToken = _sessionTokenOf(response, step);
     } on DioException catch (error) {
       _logFailure(step, _httpOutcome(error));
-      return null;
+      return _failureOf(error);
     }
+    return sessionToken == null
+        ? SignInResult.failed
+        : _completeSignIn(sessionToken);
   }
 
   String? _sessionTokenOf(Response<void> response, String step) {
@@ -250,7 +248,7 @@ class SignedInAccount extends _$SignedInAccount {
   /// Deleting the account ends its sessions at auth.
   ///
   /// [AccountDeletionResult.failed]: the request failed and apiClientProvider
-  /// already showed the error popup, the user stays signed in.
+  /// already reported it, the user stays signed in.
   /// [AccountDeletionResult.sessionEnded]: auth rejected the session, usually
   /// because the account is already deleted and the response got lost.
   Future<AccountDeletionResult> deleteAccount() async {
@@ -414,7 +412,7 @@ class SignedInAccount extends _$SignedInAccount {
     } on DioException catch (error) {
       await _abandonSession(sessionToken);
       _logFailure(step, _renewalOutcome(error));
-      return SignInResult.failed;
+      return _failureOf(error);
     }
     try {
       final response = await ref
@@ -432,7 +430,7 @@ class SignedInAccount extends _$SignedInAccount {
         _logFailure('account request', 'session rejected');
         return SignInResult.failed;
       }
-      return SignInResult.apiRequestFailed;
+      return SignInResult.requestFailed;
     }
   }
 
@@ -455,6 +453,19 @@ class SignedInAccount extends _$SignedInAccount {
     }
     state = Account(id: accountId);
     return SignInResult.signedIn;
+  }
+
+  // A 4xx answer concerns the credential, not the server.
+  SignInResult _failureOf(DioException error) {
+    final status = error.response?.statusCode;
+    if (!RequestFailure.of(error).isTransient &&
+        status != null &&
+        status >= 400 &&
+        status < 500) {
+      return SignInResult.failed;
+    }
+    ref.read(reportedRequestFailureProvider.notifier).report(error);
+    return SignInResult.requestFailed;
   }
 
   Options _authorizedBy(String token) =>

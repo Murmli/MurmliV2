@@ -9,6 +9,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../../../i18n/strings.g.dart';
 import '../../../core/authentication/signed_in_account_provider.dart';
+import '../../../core/feedback/toast.dart';
 import '../../../core/flavor/flavor.dart';
 import '../../../core/flavor/flavor_provider.dart';
 import '../../../core/router/app_router.dart';
@@ -82,14 +83,11 @@ Future<void> _signIn(
       await context.router.replaceAll([const HomeRoute()]);
     case SignInResult.failed:
       isSigningIn.value = false;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(translations.signInFailed)));
+      showToast(context, translations.signInFailed);
     case SignInResult.invalidCredentials:
       isSigningIn.value = false;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(translations.emailSignIn.invalidCredentials)),
-      );
-    case SignInResult.canceled || SignInResult.apiRequestFailed:
+      showToast(context, translations.emailSignIn.invalidCredentials);
+    case SignInResult.canceled || SignInResult.requestFailed:
       isSigningIn.value = false;
   }
 }

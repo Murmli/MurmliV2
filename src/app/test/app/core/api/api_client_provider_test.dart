@@ -7,7 +7,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:talker/talker.dart';
 
 import 'package:app/app/core/api/api_client_provider.dart';
-import 'package:app/app/core/api/failed_api_request_trace_id_provider.dart';
+import 'package:app/app/core/feedback/reported_request_failure_provider.dart';
 import 'package:app/app/core/flavor/app_endpoints.dart';
 import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/logging/talker_provider.dart';
@@ -196,7 +196,7 @@ void main() {
       );
 
       expect(adapter.requests, isEmpty);
-      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+      expect(container.read(reportedRequestFailureProvider), isNull);
     });
 
     test('request to the API logs method, path, status, duration and trace id without query, headers or body', () async {
@@ -287,7 +287,7 @@ void main() {
       );
 
       expect(
-        container.read(failedApiRequestTraceIdProvider),
+        container.read(reportedRequestFailureProvider)?.supportCode,
         sentTraceId(adapter.requests.single),
       );
     });
@@ -327,7 +327,7 @@ void main() {
         ),
       );
 
-      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+      expect(container.read(reportedRequestFailureProvider), isNull);
     });
 
     test('failed request to another origin reports no failure', () async {
@@ -341,7 +341,7 @@ void main() {
         throwsA(isA<DioException>()),
       );
 
-      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+      expect(container.read(reportedRequestFailureProvider), isNull);
     });
   });
 }

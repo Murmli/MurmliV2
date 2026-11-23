@@ -2,19 +2,19 @@ import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../authentication/signed_in_account_provider.dart';
+import '../feedback/reported_request_failure_provider.dart';
 import '../flavor/app_endpoints_provider.dart';
 import '../logging/talker_provider.dart';
 import 'access_token_interceptor.dart';
 import 'api_trace_interceptor.dart';
-import 'failed_api_request_trace_id_provider.dart';
 
 part 'api_client_provider.g.dart';
 
 @Riverpod(keepAlive: true)
 Dio apiClient(Ref ref) {
   final api = ref.watch(appEndpointsProvider).api;
-  final failedApiRequestTraceId = ref.watch(
-    failedApiRequestTraceIdProvider.notifier,
+  final reportedRequestFailure = ref.watch(
+    reportedRequestFailureProvider.notifier,
   );
   final dio = Dio(BaseOptions(baseUrl: api.toString()));
   dio.interceptors.addAll([
@@ -30,7 +30,7 @@ Dio apiClient(Ref ref) {
       onError: (error, handler) {
         final traceId = error.requestOptions.apiTraceId;
         if (traceId != null && error.type != DioExceptionType.cancel) {
-          failedApiRequestTraceId.report(traceId);
+          reportedRequestFailure.report(error, traceId: traceId);
         }
         handler.next(error);
       },

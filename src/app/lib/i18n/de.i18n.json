@@ -117,9 +117,35 @@
       "licenses": "Lizenzen"
     }
   },
-  "apiError": {
-    "title": "Da ist etwas schiefgelaufen",
-    "message": "Murmli konnte die Anfrage nicht ausführen. Wenn du dich an den Support wendest, nenne bitte diesen Support-Code:",
-    "close": "Schließen"
+  "requestFailure": {
+    "close": "Schließen",
+    "supportCode": "Wenn du dich an den Support wendest, nenne bitte diesen Support-Code:",
+    "noConnection": "Keine Verbindung zum Server. Prüfe deine Internetverbindung und versuche es noch einmal.",
+    "serverUnavailable": "Murmli ist gerade nicht erreichbar. Bitte versuche es gleich noch einmal.",
+    "tooManyRequests": "Zu viele Versuche. Bitte warte einen Moment und versuche es dann noch einmal.",
+    "unauthorized": {
+      "title": "Anmeldung nicht bestätigt",
+      "message": "Murmli konnte deine Anmeldung nicht bestätigen. Versuche es noch einmal. Hilft das nicht, melde dich ab und wieder an."
+    },
+    "forbidden": {
+      "title": "Keine Berechtigung",
+      "message": "Dafür fehlt deinem Konto die Berechtigung."
+    },
+    "notFound": {
+      "title": "Nicht gefunden",
+      "message": "Was du aufrufen wolltest, gibt es nicht oder nicht mehr."
+    },
+    "invalidRequest": {
+      "title": "Anfrage abgelehnt",
+      "message": "Der Server hat die Anfrage abgelehnt. Prüfe deine Eingaben und versuche es noch einmal."
+    },
+    "serverError": {
+      "title": "Fehler am Server",
+      "message": "Am Server ist ein Fehler aufgetreten. Bitte versuche es später noch einmal."
+    },
+    "unexpected": {
+      "title": "Da ist etwas schiefgelaufen",
+      "message": "Murmli konnte die Anfrage nicht ausführen. Bitte versuche es noch einmal."
+    }
   }
 }

@@ -394,7 +394,7 @@ void main() {
       );
 
       testWidgets(
-        'failing deletion shows the error dialog and keeps the account and the device data, confirming again deletes the account',
+        'failing deletion shows the failure and keeps the account and the device data, confirming again deletes the account',
         (tester) async {
           final container = await openSettingsWithStoredPreferences(
             tester,
@@ -410,7 +410,13 @@ void main() {
 
           await confirmDeletion(tester);
 
-          expect(find.text(englishTranslations.apiError.title), findsOneWidget);
+          expect(
+            find.widgetWithText(
+              SnackBar,
+              englishTranslations.requestFailure.serverUnavailable,
+            ),
+            findsOneWidget,
+          );
           expect(container.read(signedInAccountProvider), isNotNull);
           expect(
             await const FlutterSecureStorage().readAll(),
@@ -421,8 +427,6 @@ void main() {
             PreferenceKeys.crashReportingEnabled,
             ...storedPreferencesBeforeDeletion.keys,
           });
-          await tester.tap(find.text(englishTranslations.apiError.close));
-          await tester.pumpAndSettle();
           expect(find.byType(SettingsPage), findsOneWidget);
 
           await confirmDeletion(tester);

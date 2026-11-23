@@ -135,6 +135,9 @@ abstract final class AppTheme {
         ),
         avatarBoxConstraints: BoxConstraints.tight(const Size.square(18)),
       ),
+      snackBarTheme: const SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+      ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: colors.inkTertiary,
         strokeWidth: 2,
