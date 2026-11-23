@@ -16,6 +16,7 @@ namespace Murmli.Backend.Api.Users;
 internal sealed partial class UserTelemetryMiddleware(
     RequestDelegate next,
     IOptions<DatabaseOptions> databaseOptions,
+    TimeProvider timeProvider,
     ILogger<UserTelemetryMiddleware> logger
 )
 {
@@ -48,18 +49,37 @@ internal sealed partial class UserTelemetryMiddleware(
     }
 
     // A client disconnecting during the lookup must not drop a started account deletion
-    private static async Task<AccountFeature?> ResolveAccountAsync(HttpContext context)
+    private async Task<AccountFeature?> ResolveAccountAsync(HttpContext context)
     {
         if (context.User.FindAuthUserId() is not { } authUserId)
         {
             return null;
         }
 
-        var account = await context
-            .RequestServices.GetRequiredService<MurmliDbContext>()
-            .Users.Where(user => user.AuthUserId == authUserId)
-            .Select(user => new { user.Id, user.DeletionStartedAt })
+        var users = context.RequestServices.GetRequiredService<MurmliDbContext>().Users;
+        var account = await users
+            .Where(user => user.AuthUserId == authUserId)
+            .Select(user => new
+            {
+                user.Id,
+                user.DeletionStartedAt,
+                user.LastRequestOn,
+            })
             .SingleOrDefaultAsync(CancellationToken.None);
-        return account is null ? null : new AccountFeature(account.Id, account.DeletionStartedAt is not null);
+        if (account is null)
+        {
+            return null;
+        }
+
+        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        if (account.LastRequestOn is null || account.LastRequestOn < today)
+        {
+            // The condition lets only the first of concurrent requests on a new day write
+            await users
+                .Where(user => user.Id == account.Id && (user.LastRequestOn == null || user.LastRequestOn < today))
+                .ExecuteUpdateAsync(setters => setters.SetProperty(user => user.LastRequestOn, today), CancellationToken.None);
+        }
+
+        return new AccountFeature(account.Id, account.DeletionStartedAt is not null);
     }
 }

@@ -35,11 +35,13 @@ internal sealed partial class UserRegistry(
             return null;
         }
 
+        var now = timeProvider.GetUtcNow();
         var user = new User
         {
             Id = Guid.NewGuid(),
             AuthUserId = authUserId,
-            CreatedAt = timeProvider.GetUtcNow(),
+            CreatedAt = now,
+            LastRequestOn = DateOnly.FromDateTime(now.UtcDateTime),
         };
         context.Users.Add(user);
         try
