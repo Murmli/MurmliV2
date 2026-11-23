@@ -57,7 +57,8 @@ internal sealed class ApiHost : IAsyncDisposable
         ICollection<Activity>? activities = null,
         ICollection<LogRecord>? logRecords = null,
         bool mapExplicitlyAuthorizedEndpoint = false,
-        bool testDataTypes = false
+        bool testDataTypes = false,
+        FakeTimeProvider? timeProvider = null
     )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -99,7 +100,7 @@ internal sealed class ApiHost : IAsyncDisposable
         }
 
         // Npgsql only writes UTC values to timestamp with time zone
-        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        timeProvider ??= new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
         builder.Services.AddSingleton<TimeProvider>(timeProvider);
         var authService = new AuthServiceHttpMessageHandler();
         builder.Services.ConfigureAll<HttpClientFactoryOptions>(options =>

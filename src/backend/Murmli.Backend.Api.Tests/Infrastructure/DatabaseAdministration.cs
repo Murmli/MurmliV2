@@ -11,6 +11,12 @@ internal sealed class DatabaseAdministration(string connectionString)
 
     private readonly NpgsqlConnectionStringBuilder connectionStringBuilder = new(connectionString) { Pooling = false };
 
+    private readonly NpgsqlConnectionStringBuilder maintenanceConnectionStringBuilder = new(connectionString)
+    {
+        Database = "postgres",
+        Pooling = false,
+    };
+
     public async Task<Guid> ReadDatabaseIdentityAsync()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -18,6 +24,39 @@ internal sealed class DatabaseAdministration(string connectionString)
         await connection.OpenAsync(cancellationToken);
         await using var command = new NpgsqlCommand("SELECT value FROM sync.database_identity", connection);
         return Assert.IsType<Guid>(await command.ExecuteScalarAsync(cancellationToken));
+    }
+
+    public async Task CreateSnapshotAsync(string snapshotName)
+    {
+        var snapshotDatabase = GetSnapshotDatabase(snapshotName);
+        await using var connection = new NpgsqlConnection(maintenanceConnectionStringBuilder.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await ExecuteAsync(connection, $"DROP DATABASE IF EXISTS \"{snapshotDatabase}\"");
+        await ExecuteAsync(
+            connection,
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = @database",
+            ("database", connectionStringBuilder.Database!)
+        );
+        await ExecuteAsync(connection, $"CREATE DATABASE \"{snapshotDatabase}\" TEMPLATE \"{connectionStringBuilder.Database}\"");
+    }
+
+    public async Task<bool> RestoreSnapshotAsync(string snapshotName)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var snapshotDatabase = GetSnapshotDatabase(snapshotName);
+        await using var connection = new NpgsqlConnection(maintenanceConnectionStringBuilder.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var existsCommand = new NpgsqlCommand("SELECT EXISTS (SELECT FROM pg_database WHERE datname = @snapshot)", connection);
+        existsCommand.Parameters.AddWithValue("snapshot", snapshotDatabase);
+        if (!Assert.IsType<bool>(await existsCommand.ExecuteScalarAsync(cancellationToken)))
+        {
+            return false;
+        }
+
+        await ExecuteAsync(connection, $"DROP DATABASE \"{connectionStringBuilder.Database}\" WITH (FORCE)");
+        await ExecuteAsync(connection, $"CREATE DATABASE \"{connectionStringBuilder.Database}\" TEMPLATE \"{snapshotDatabase}\"");
+        await RotateDatabaseIdentityAsync();
+        return true;
     }
 
     public Task RotateDatabaseIdentityAsync() => UpdateSingleRowAsync("UPDATE sync.database_identity SET value = gen_random_uuid()");
@@ -110,6 +149,20 @@ internal sealed class DatabaseAdministration(string connectionString)
         }
 
         Assert.Equal(1, await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken));
+    }
+
+    // Database names cannot be parameters; SyncSimulationControlApp admits only snapshot names of [a-z0-9_]
+    private string GetSnapshotDatabase(string snapshotName) => $"{connectionStringBuilder.Database}_{snapshotName}";
+
+    private static async Task ExecuteAsync(NpgsqlConnection connection, string sql, params (string Name, object Value)[] parameters)
+    {
+        await using var command = new NpgsqlCommand(sql, connection);
+        foreach (var (name, value) in parameters)
+        {
+            command.Parameters.AddWithValue(name, value);
+        }
+
+        await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
     }
 
     private async Task UpdateSingleRowAsync(string sql, params (string Name, object Value)[] parameters)

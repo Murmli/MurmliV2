@@ -104,7 +104,7 @@ internal sealed class SyncTestDevice
         return problem;
     }
 
-    public SyncTestDevice OtherDevice() => new(api, AuthUserId, AccountId, personalScopeId);
+    public SyncTestDevice OtherDevice(ApiHost? otherApi = null) => new(otherApi ?? api, AuthUserId, AccountId, personalScopeId);
 
     public Task<SyncResponse> SyncAsync(params JsonObject[] commands) => SyncAsync([TestNoteType.DataTypeName], commands);
 
