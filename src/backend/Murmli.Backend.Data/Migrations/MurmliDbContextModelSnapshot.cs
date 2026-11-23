@@ -224,6 +224,140 @@ namespace Murmli.Backend.Data.Migrations
                     b.ToTable("product_import_runs", "products");
                 });
 
+            modelBuilder.Entity("Murmli.Backend.Data.ShoppingLists.ShoppingList", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset>("NameChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("name_changed_at");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_id");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_lists");
+
+                    b.HasIndex("ScopeId", "Version")
+                        .HasDatabaseName("ix_lists_scope_id_version");
+
+                    b.ToTable("lists", "shopping", t =>
+                        {
+                            t.HasCheckConstraint("ck_lists_scope_id", "scope_id = id");
+                        });
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.ShoppingLists.ShoppingListItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AmountChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("amount_changed_at");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("category");
+
+                    b.Property<DateTimeOffset>("CategoryChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("category_changed_at");
+
+                    b.Property<DateTimeOffset>("ChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("changed_at");
+
+                    b.Property<Guid?>("ChangedByMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_member_id");
+
+                    b.Property<bool>("Checked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("checked");
+
+                    b.Property<DateTimeOffset?>("CheckedArrivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_arrived_at");
+
+                    b.Property<DateTimeOffset>("CheckedChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_changed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedByMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_member_id");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("language");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset>("NameChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("name_changed_at");
+
+                    b.Property<decimal?>("Quantity")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_id");
+
+                    b.Property<string>("Unit")
+                        .HasColumnType("text")
+                        .HasColumnName("unit");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_items");
+
+                    b.HasIndex("ChangedByMemberId")
+                        .HasDatabaseName("ix_items_changed_by_member_id")
+                        .HasFilter("changed_by_member_id IS NOT NULL");
+
+                    b.HasIndex("CheckedArrivedAt")
+                        .HasDatabaseName("ix_items_checked_arrived_at")
+                        .HasFilter("checked_arrived_at IS NOT NULL");
+
+                    b.HasIndex("CreatedByMemberId")
+                        .HasDatabaseName("ix_items_created_by_member_id")
+                        .HasFilter("created_by_member_id IS NOT NULL");
+
+                    b.HasIndex("ScopeId", "Version")
+                        .HasDatabaseName("ix_items_scope_id_version");
+
+                    b.ToTable("items", "shopping");
+                });
+
             modelBuilder.Entity("Murmli.Backend.Data.Sync.CleanupLease", b =>
                 {
                     b.Property<bool>("Singleton")
@@ -463,6 +597,38 @@ namespace Murmli.Backend.Data.Migrations
                         .HasDatabaseName("ix_tombstones_scope_id_version");
 
                     b.ToTable("tombstones", "sync");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.ShoppingLists.ShoppingList", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Sync.SyncScope", null)
+                        .WithMany()
+                        .HasForeignKey("ScopeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_lists_scopes_scope_id");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.ShoppingLists.ShoppingListItem", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Sync.SyncMemberEntry", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByMemberId")
+                        .OnDelete(DeleteBehavior.ClientNoAction)
+                        .HasConstraintName("fk_items_member_entries_changed_by_member_id");
+
+                    b.HasOne("Murmli.Backend.Data.Sync.SyncMemberEntry", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByMemberId")
+                        .OnDelete(DeleteBehavior.ClientNoAction)
+                        .HasConstraintName("fk_items_member_entries_created_by_member_id");
+
+                    b.HasOne("Murmli.Backend.Data.Sync.SyncScope", null)
+                        .WithMany()
+                        .HasForeignKey("ScopeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_items_scopes_scope_id");
                 });
 
             modelBuilder.Entity("Murmli.Backend.Data.Sync.ProcessedSyncCommand", b =>
