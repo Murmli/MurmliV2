@@ -1,4 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
+using Murmli.Backend.Sync.Cleanup;
 
 namespace Murmli.Backend.Api.Tests.Infrastructure.SyncSimulation;
 
@@ -23,6 +25,7 @@ internal sealed class SyncSimulationEnvironment : IAsyncDisposable
         var configuration = new Dictionary<string, string?>
         {
             ["Sync:Retention"] = Environment.GetEnvironmentVariable("SYNC_SIMULATION_RETENTION") ?? "01:00:00",
+            ["Sync:Cleanup:SafetyMargin"] = "00:10:00",
             ["Database:MaxRetryCount"] = "10",
             ["Database:MaxRetryDelay"] = "00:00:00.200",
             ["Logging:Console:LogLevel:Default"] = "Warning",
@@ -34,7 +37,12 @@ internal sealed class SyncSimulationEnvironment : IAsyncDisposable
             apis.Add(await ApiHost.StartAsync(connectionString, configuration, testDataTypes: true, timeProvider: timeProvider));
             apis.Add(await ApiHost.StartAsync(connectionString, configuration, testDataTypes: true, timeProvider: timeProvider));
             var apiUrls = apis.Select(api => api.HttpClient.BaseAddress!.GetLeftPart(UriPartial.Authority)).ToList();
-            var control = await SyncSimulationControlApp.StartAsync(apiUrls, timeProvider, new DatabaseAdministration(connectionString));
+            var control = await SyncSimulationControlApp.StartAsync(
+                apiUrls,
+                timeProvider,
+                new DatabaseAdministration(connectionString),
+                apis[0].Services.GetRequiredService<SyncCleanupRunner>()
+            );
             return new SyncSimulationEnvironment(apis, apiUrls, control);
         }
         catch

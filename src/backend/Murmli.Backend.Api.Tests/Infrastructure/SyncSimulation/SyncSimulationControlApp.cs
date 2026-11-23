@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
+using Murmli.Backend.Sync.Cleanup;
 
 namespace Murmli.Backend.Api.Tests.Infrastructure.SyncSimulation;
 
@@ -28,7 +29,8 @@ internal sealed partial class SyncSimulationControlApp : IAsyncDisposable
     public static async Task<SyncSimulationControlApp> StartAsync(
         IReadOnlyList<string> apiUrls,
         FakeTimeProvider timeProvider,
-        DatabaseAdministration administration
+        DatabaseAdministration administration,
+        SyncCleanupRunner cleanupRunner
     )
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
@@ -86,6 +88,14 @@ internal sealed partial class SyncSimulationControlApp : IAsyncDisposable
 
                     return TypedResults.Ok(new SyncSimulationClockResponse(target));
                 }
+            }
+        );
+        application.MapPost(
+            "/cleanup",
+            async Task<NoContent> (CancellationToken cancellationToken) =>
+            {
+                await cleanupRunner.RunAsync(cancellationToken);
+                return TypedResults.NoContent();
             }
         );
         application.MapPost(
