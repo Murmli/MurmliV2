@@ -36,7 +36,7 @@ internal sealed class SyncCommandParser(SyncDataTypeRegistry registry)
     {
         if (command.ValueKind != JsonValueKind.Object)
         {
-            return new SyncParsedCommand(null, null, null, null);
+            return new SyncParsedCommand(null, null, null, null, null, null);
         }
 
         var members = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
@@ -59,27 +59,27 @@ internal sealed class SyncCommandParser(SyncDataTypeRegistry registry)
         var recordId = ReadId(members, RecordIdMember);
         var dataTypeName = ReadString(members, DataTypeMember);
         var kind = ReadString(members, KindMember);
+        SyncCommandKind? knownKind = kind is not null && SyncCommandKind.TryParse(kind, out var parsedKind) ? parsedKind : null;
+        var dataType = dataTypeName is not null && registry.TryGet(dataTypeName, out var registeredDataType) ? registeredDataType : null;
         var target =
-            scopeId is { } targetScopeId && recordId is { } targetRecordId && dataTypeName is not null && registry.TryGet(dataTypeName, out _)
-                ? SyncCommandTarget.FromCommand(targetScopeId, dataTypeName, targetRecordId, kind)
+            scopeId is { } targetScopeId && recordId is { } targetRecordId && dataType is not null
+                ? SyncCommandTarget.FromCommand(targetScopeId, dataType.Name, targetRecordId, kind)
                 : null;
         // Unknown kinds and data types stay unclaimed: sync.processed_commands holds no string a device chose
         if (
             commandId is not { } claimedCommandId
-            || kind is null
+            || knownKind is not { } commandKind
             || scopeId is not { Version: 4 } claimedScopeId
-            || dataTypeName is null
-            || !SyncCommandKind.TryParse(kind, out var commandKind)
-            || !registry.TryGet(dataTypeName, out var dataType)
+            || dataType is null
             || recordId is not { Version: 4 } claimedRecordId
             || ReadTime(members) is not { } time
         )
         {
-            return new SyncParsedCommand(commandId, target, null, null);
+            return new SyncParsedCommand(commandId, knownKind, dataType, target, null, null);
         }
 
-        var claim = new SyncCommandClaim(claimedCommandId, kind, claimedScopeId, dataTypeName, claimedRecordId, time);
-        var claimedTarget = SyncCommandTarget.FromCommand(claimedScopeId, dataTypeName, claimedRecordId, claim.Kind);
+        var claim = new SyncCommandClaim(claimedCommandId, commandKind.Key, claimedScopeId, dataType.Name, claimedRecordId, time);
+        var claimedTarget = SyncCommandTarget.FromCommand(claimedScopeId, dataType.Name, claimedRecordId, claim.Kind);
         if (
             hasUnknownMember
             || !listedTypes.Contains(dataType)
@@ -87,10 +87,10 @@ internal sealed class SyncCommandParser(SyncDataTypeRegistry registry)
             || !TryParseFields(members, commandKind, dataType, out var changes)
         )
         {
-            return new SyncParsedCommand(commandId, claimedTarget, claim, null);
+            return new SyncParsedCommand(commandId, knownKind, dataType, claimedTarget, claim, null);
         }
 
-        return new SyncParsedCommand(commandId, claimedTarget, claim, new SyncCommand(claim, commandKind, dataType, changes));
+        return new SyncParsedCommand(commandId, knownKind, dataType, claimedTarget, claim, new SyncCommand(claim, commandKind, dataType, changes));
     }
 
     private static Guid? ReadId(Dictionary<string, JsonElement> members, string name) =>

@@ -8,6 +8,7 @@ using Murmli.Backend.Sync.Accounts;
 using Murmli.Backend.Sync.Cleanup;
 using Murmli.Backend.Sync.Configuration;
 using Murmli.Backend.Sync.DataTypes;
+using Murmli.Backend.Sync.Diagnostics;
 using Murmli.Backend.Sync.Processing;
 using Murmli.Backend.Sync.Protocol;
 using Murmli.Backend.Sync.Writing;
@@ -28,6 +29,7 @@ public static class HostApplicationBuilderExtensions
         builder.Services.TryAddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<SyncDataTypeRegistry>();
         builder.Services.AddSingleton<SyncCommandParser>();
+        builder.Services.AddSingleton<SyncTelemetry>();
         builder.Services.AddScoped<SyncCommandUnit>();
         builder.Services.AddScoped<SyncAccountLifecycle>();
         builder.Services.AddScoped<SyncChangeReader>();
@@ -40,6 +42,7 @@ public static class HostApplicationBuilderExtensions
             provider.GetRequiredService<SyncChangeReader>(),
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<IOptions<SyncOptions>>(),
+            provider.GetRequiredService<SyncTelemetry>(),
             provider.GetRequiredService<ILogger<SyncProcessor>>()
         ));
         builder.Services.AddScoped(provider => new SyncServerWriter(
@@ -47,6 +50,7 @@ public static class HostApplicationBuilderExtensions
             provider.GetRequiredService<SyncCommandUnit>(),
             provider.GetRequiredService<MurmliDbContext>(),
             provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<SyncTelemetry>(),
             provider.GetRequiredService<ILogger<SyncServerWriter>>()
         ));
     }

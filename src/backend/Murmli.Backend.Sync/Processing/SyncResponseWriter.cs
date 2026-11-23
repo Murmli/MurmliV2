@@ -16,6 +16,8 @@ internal sealed class SyncResponseWriter : IDisposable
 
     private readonly GZipStream? compression;
 
+    private readonly List<string> fullStateReasons = [];
+
     public SyncResponseWriter(MemoryStream stream, SyncOptions options, SyncResponseEncoding encoding)
     {
         this.stream = stream;
@@ -41,12 +43,17 @@ internal sealed class SyncResponseWriter : IDisposable
         Json.WriteStartArray("scopes");
     }
 
-    public void WriteScopeStart(SyncScopeHead head, bool fullState)
+    public void WriteScopeStart(SyncScopeHead head, string? fullStateReason)
     {
         Json.WriteStartObject();
         Json.WriteString("scopeId", head.Id);
         Json.WriteString("kind", head.Kind);
-        Json.WriteBoolean("fullState", fullState);
+        Json.WriteBoolean("fullState", fullStateReason is not null);
+        if (fullStateReason is not null)
+        {
+            fullStateReasons.Add(fullStateReason);
+        }
+
         Json.WriteStartArray("records");
     }
 
@@ -88,7 +95,7 @@ internal sealed class SyncResponseWriter : IDisposable
         }
     }
 
-    public SyncOutcome.Completed WriteEnd(
+    public SyncWrittenResponse WriteEnd(
         IReadOnlyList<SyncRemovedScope> removedScopes,
         bool coversAllScopes,
         IReadOnlyList<SyncScopeHead> heads,
@@ -119,8 +126,14 @@ internal sealed class SyncResponseWriter : IDisposable
         Json.WriteNumber("maxRequestBytes", options.MaxRequestBytes);
         Json.WriteEndObject();
         Json.WriteEndObject();
+        var uncompressedLength = Json.BytesCommitted + Json.BytesPending;
         Dispose();
-        return new SyncOutcome.Completed(new ReadOnlyMemory<byte>(stream.GetBuffer(), 0, (int)stream.Length), encoding);
+        return new SyncWrittenResponse(
+            new SyncOutcome.Completed(new ReadOnlyMemory<byte>(stream.GetBuffer(), 0, (int)stream.Length), encoding),
+            uncompressedLength,
+            fullStateReasons,
+            removedScopes
+        );
     }
 
     // The writer first: its disposal flushes into the gzip stream, whose disposal then writes the gzip trailer

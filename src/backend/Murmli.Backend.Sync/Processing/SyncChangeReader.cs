@@ -6,6 +6,7 @@ using Murmli.Backend.Data.Identity;
 using Murmli.Backend.Data.Sync;
 using Murmli.Backend.Sync.Configuration;
 using Murmli.Backend.Sync.DataTypes;
+using Murmli.Backend.Sync.Diagnostics;
 using Murmli.Backend.Sync.Extensions;
 using Murmli.Backend.Sync.Protocol;
 
@@ -65,9 +66,10 @@ internal sealed class SyncChangeReader(
             && token.Scopes.Contains(new SyncTokenScope(head.Id, head.Epoch, head.Version))
         );
 
-    public Task<SyncOutcome> ReadAsync(
+    public Task<SyncWrittenResponse?> ReadAsync(
         Guid accountId,
         SyncToken? token,
+        bool tokenSent,
         IReadOnlyList<SyncDataType> listed,
         IReadOnlyList<SyncCommandOutcome> outcomes,
         SyncResponseEncoding acceptedEncoding,
@@ -79,18 +81,23 @@ internal sealed class SyncChangeReader(
             .Database.CreateExecutionStrategy()
             .ExecuteAsync(
                 attemptCancellationToken =>
-                    ReadSnapshotAsync(accountId, token, listed, outcomes, acceptedEncoding, stream, attemptCancellationToken),
+                    ReadSnapshotAsync(accountId, token, tokenSent, listed, outcomes, acceptedEncoding, stream, attemptCancellationToken),
                 cancellationToken
             );
     }
 
-    private static long? GetKnownVersion(SyncScopeHead head, IReadOnlyList<SyncTokenScope> tokenScopes) =>
-        FindTokenScope(tokenScopes, head.Id) is { } known
-        && known.Epoch == head.Epoch
-        && known.Version >= head.TombstoneFloor
-        && known.Version <= head.Version
-            ? known.Version
-            : null;
+    private static (long? KnownVersion, string? FullStateReason) GetKnownVersion(
+        SyncScopeHead head,
+        IReadOnlyList<SyncTokenScope> tokenScopes
+    ) =>
+        FindTokenScope(tokenScopes, head.Id) switch
+        {
+            null => (null, SyncFullStateReason.UnknownScope),
+            { } known when known.Epoch != head.Epoch => (null, SyncFullStateReason.Epoch),
+            { } known when known.Version < head.TombstoneFloor => (null, SyncFullStateReason.BelowFloor),
+            { } known when known.Version > head.Version => (null, SyncFullStateReason.AheadOfServer),
+            { } known => (known.Version, null),
+        };
 
     // A binary search instead of a dictionary, which colliding forged ids would flood; TryDecode guarantees the order
     private static SyncTokenScope? FindTokenScope(IReadOnlyList<SyncTokenScope> tokenScopes, Guid scopeId)
@@ -160,9 +167,10 @@ internal sealed class SyncChangeReader(
             outcome.Status != SyncResultStatus.Applied && outcome.Target is { IsRootDelete: true } target && target.ScopeId == head.Id
         );
 
-    private async Task<SyncOutcome> ReadSnapshotAsync(
+    private async Task<SyncWrittenResponse?> ReadSnapshotAsync(
         Guid accountId,
         SyncToken? token,
+        bool tokenSent,
         IReadOnlyList<SyncDataType> listed,
         IReadOnlyList<SyncCommandOutcome> outcomes,
         SyncResponseEncoding acceptedEncoding,
@@ -176,23 +184,31 @@ internal sealed class SyncChangeReader(
         var heads = await ReadHeadsAsync(accountId, cancellationToken);
         if (!HasPersonalScope(heads) || IsAccountBeingDeleted(heads))
         {
-            return new SyncOutcome.AccountGone();
+            return null;
         }
 
         var visibleHeads = GetVisibleHeads(heads, listed);
-        var coversAllScopes = token is null || token.DatabaseIdentity != heads[0].DatabaseIdentity;
+        var coversAllReason =
+            token is null ? (tokenSent ? SyncFullStateReason.UnreadableToken : SyncFullStateReason.NoToken)
+            : token.DatabaseIdentity != heads[0].DatabaseIdentity ? SyncFullStateReason.DatabaseIdentity
+            : null;
+        var coversAllScopes = coversAllReason is not null;
         var tokenScopes = coversAllScopes ? [] : token!.Scopes;
         var listedNames = listed.Select(dataType => dataType.Name).ToArray();
-        var knownVersions = new Dictionary<Guid, long?>();
+        var scopeStates = new Dictionary<Guid, (long? KnownVersion, string? FullStateReason)>();
         foreach (var head in visibleHeads)
         {
-            var knownVersion = IsRootDeleteNotApplied(head, outcomes) ? null : GetKnownVersion(head, tokenScopes);
+            var (knownVersion, fullStateReason) =
+                coversAllReason is not null ? (null, coversAllReason)
+                : IsRootDeleteNotApplied(head, outcomes) ? (null, SyncFullStateReason.RootDeleteNotApplied)
+                : GetKnownVersion(head, tokenScopes);
             if (knownVersion < head.Version && await HasTooManyDeletionsAsync(head, knownVersion.Value, listedNames, cancellationToken))
             {
                 knownVersion = null;
+                fullStateReason = SyncFullStateReason.TooManyDeletions;
             }
 
-            knownVersions.Add(head.Id, knownVersion);
+            scopeStates.Add(head.Id, (knownVersion, fullStateReason));
         }
 
         var includedTargets = visibleHeads.ToDictionary(head => head.Id, _ => new List<SyncCommandTarget>());
@@ -201,8 +217,8 @@ internal sealed class SyncChangeReader(
             if (
                 outcome.Status != SyncResultStatus.Applied
                 && outcome.Target is { } target
-                && knownVersions.TryGetValue(target.ScopeId, out var knownVersion)
-                && knownVersion is not null
+                && scopeStates.TryGetValue(target.ScopeId, out var state)
+                && state.KnownVersion is not null
                 && listedNames.Contains(target.DataType)
             )
             {
@@ -224,17 +240,21 @@ internal sealed class SyncChangeReader(
         using var response = new SyncResponseWriter(
             stream,
             options.Value,
-            acceptedEncoding == SyncResponseEncoding.Gzip && knownVersions.ContainsValue(null) ? SyncResponseEncoding.Gzip : SyncResponseEncoding.Identity
+            acceptedEncoding == SyncResponseEncoding.Gzip && scopeStates.Values.Any(state => state.FullStateReason is not null)
+                ? SyncResponseEncoding.Gzip
+                : SyncResponseEncoding.Identity
         );
 
         response.WriteStart(outcomes);
         foreach (var head in visibleHeads)
         {
+            var (knownVersion, fullStateReason) = scopeStates[head.Id];
             await WriteScopeAsync(
                 response,
                 accountId,
                 head,
-                knownVersions[head.Id],
+                knownVersion,
+                fullStateReason,
                 includedTargets[head.Id],
                 listed,
                 listedNames,
@@ -242,9 +262,9 @@ internal sealed class SyncChangeReader(
             );
         }
 
-        var completed = response.WriteEnd(removedScopes, coversAllScopes, visibleHeads, timeProvider.GetUtcNowInMilliseconds());
+        var written = response.WriteEnd(removedScopes, coversAllScopes, visibleHeads, timeProvider.GetUtcNowInMilliseconds());
         await transaction.CommitAsync(cancellationToken);
-        return completed;
+        return written;
     }
 
     private async Task<Guid[]> ReadOwnRootDeleteScopeIdsAsync(
@@ -290,6 +310,7 @@ internal sealed class SyncChangeReader(
         Guid accountId,
         SyncScopeHead head,
         long? knownVersion,
+        string? fullStateReason,
         List<SyncCommandTarget> includedTargets,
         IReadOnlyList<SyncDataType> listed,
         string[] listedNames,
@@ -302,7 +323,7 @@ internal sealed class SyncChangeReader(
         }
 
         var afterVersion = knownVersion ?? 0;
-        response.WriteScopeStart(head, fullState: knownVersion is null);
+        response.WriteScopeStart(head, fullStateReason);
         var written = new HashSet<(string DataType, Guid Id)>();
         foreach (var dataType in listed.Where(dataType => dataType.ScopeKind == head.Kind))
         {

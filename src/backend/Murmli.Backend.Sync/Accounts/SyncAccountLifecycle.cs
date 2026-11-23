@@ -2,6 +2,7 @@ using System.Data;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Identity;
@@ -13,12 +14,13 @@ using Npgsql;
 
 namespace Murmli.Backend.Sync.Accounts;
 
-public sealed class SyncAccountLifecycle(
+public sealed partial class SyncAccountLifecycle(
     MurmliDbContext context,
     SyncServerWriter writer,
     IEnumerable<ISyncAccountBootstrapContributor> bootstrapContributors,
     TimeProvider timeProvider,
-    IOptions<SyncOptions> options
+    IOptions<SyncOptions> options,
+    ILogger<SyncAccountLifecycle> logger
 )
 {
     private string? OwnerForeignKeyName =>
@@ -71,7 +73,7 @@ public sealed class SyncAccountLifecycle(
         var bootstrapCommands = bootstrapContributors.SelectMany(contributor => contributor.CreateCommands(accountId)).ToList();
         try
         {
-            return await context
+            var result = await context
                 .Database.CreateExecutionStrategy()
                 .ExecuteInTransactionAsync(
                     attemptCancellationToken =>
@@ -81,6 +83,12 @@ public sealed class SyncAccountLifecycle(
                     IsolationLevel.ReadCommitted,
                     cancellationToken
                 );
+            if (result == SyncBootstrapResult.Created)
+            {
+                LogAccountBootstrapped(personalScopeId);
+            }
+
+            return result;
         }
         catch (PostgresException exception)
             when (exception.SqlState == PostgresErrorCodes.ForeignKeyViolation && exception.ConstraintName == OwnerForeignKeyName)

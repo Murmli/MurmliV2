@@ -7,6 +7,7 @@ using Murmli.Backend.Data.Sync;
 using Murmli.Backend.Sync.Accounts;
 using Murmli.Backend.Sync.Configuration;
 using Murmli.Backend.Sync.DataTypes;
+using Murmli.Backend.Sync.Diagnostics;
 using Murmli.Backend.Sync.Extensions;
 using Murmli.Backend.Sync.Protocol;
 
@@ -19,6 +20,9 @@ public sealed partial class SyncProcessor
     private const string ChangesPhase = "changes";
 
     private const string BootstrapPhase = "bootstrap";
+
+    // An unsigned token can name any number of unknown scopes, an honest one at most 85
+    private const int MaxLoggedRemovedScopes = 100;
 
     private readonly SyncDataTypeRegistry registry;
 
@@ -34,6 +38,8 @@ public sealed partial class SyncProcessor
 
     private readonly SyncOptions options;
 
+    private readonly SyncTelemetry telemetry;
+
     private readonly ILogger<SyncProcessor> logger;
 
     internal SyncProcessor(
@@ -44,6 +50,7 @@ public sealed partial class SyncProcessor
         SyncChangeReader changeReader,
         TimeProvider timeProvider,
         IOptions<SyncOptions> options,
+        SyncTelemetry telemetry,
         ILogger<SyncProcessor> logger
     )
     {
@@ -54,6 +61,7 @@ public sealed partial class SyncProcessor
         this.changeReader = changeReader;
         this.timeProvider = timeProvider;
         this.options = options.Value;
+        this.telemetry = telemetry;
         this.logger = logger;
     }
 
@@ -64,6 +72,7 @@ public sealed partial class SyncProcessor
         CancellationToken cancellationToken = default
     )
     {
+        telemetry.RecordRequest(caller.DeviceId, request);
         var listed = registry.GetListed(request.DataTypes);
         var token = SyncTokenCodec.TryDecode(request.Token, out var decoded) ? decoded : null;
         var phase = ChangesPhase;
@@ -96,13 +105,30 @@ public sealed partial class SyncProcessor
             {
                 using var response = new SyncResponseWriter(new MemoryStream(), options, SyncResponseEncoding.Identity);
                 response.WriteStart([]);
-                return response.WriteEnd([], false, visibleHeads, timeProvider.GetUtcNowInMilliseconds());
+                var unchanged = response.WriteEnd([], false, visibleHeads, timeProvider.GetUtcNowInMilliseconds());
+                RecordResponse(caller.DeviceId, 0, unchanged);
+                return unchanged.Response;
             }
 
             phase = CommandsPhase;
             var outcomes = await ProcessCommandsAsync(caller, request.Commands, listed, cancellationToken);
             phase = ChangesPhase;
-            return await changeReader.ReadAsync(caller.AccountId, token, listed, outcomes, acceptedEncoding, cancellationToken);
+            var written = await changeReader.ReadAsync(
+                caller.AccountId,
+                token,
+                request.Token is not null,
+                listed,
+                outcomes,
+                acceptedEncoding,
+                cancellationToken
+            );
+            if (written is null)
+            {
+                return new SyncOutcome.AccountGone();
+            }
+
+            RecordResponse(caller.DeviceId, outcomes.Count, written);
+            return written.Response;
         }
         catch (Exception exception) when (exception.IsDatabaseDisturbance())
         {
@@ -119,12 +145,6 @@ public sealed partial class SyncProcessor
         !(exception is OperationCanceledException && cancellationToken.IsCancellationRequested)
         && !exception.IsDatabaseDisturbance()
         && exception is not SyncAccountGoneException;
-
-    private static string? GetKnownKind(SyncCommandClaim? claim) =>
-        claim is not null && SyncCommandKind.TryParse(claim.Kind, out var kind) ? kind.Key : null;
-
-    private string? GetRegisteredDataType(SyncCommandClaim? claim) =>
-        claim is not null && registry.TryGet(claim.DataType, out var dataType) ? dataType.Name : null;
 
     private async Task<List<SyncCommandOutcome>> ProcessCommandsAsync(
         SyncCaller caller,
@@ -144,16 +164,23 @@ public sealed partial class SyncProcessor
             }
 
             SyncParsedCommand? parsed = null;
+            SyncCommandOutcome outcome;
             try
             {
                 var now = timeProvider.GetUtcNowInMilliseconds();
                 parsed = parser.Parse(command, listed);
-                outcomes.Add(await ProcessCommandAsync(caller.AccountId, parsed, now, cancellationToken));
+                outcome = await ProcessCommandAsync(caller.AccountId, parsed, now, cancellationToken);
             }
             catch (Exception exception) when (IsCommandFailure(exception, cancellationToken))
             {
-                LogCommandFailed(exception, parsed?.CommandId, GetKnownKind(parsed?.Claim), GetRegisteredDataType(parsed?.Claim), caller.DeviceId);
-                outcomes.Add(new SyncCommandOutcome(parsed?.CommandId, SyncResultStatus.Failed, null, null, null, parsed?.Target));
+                LogCommandFailed(exception, parsed?.CommandId, parsed?.Kind?.Key, parsed?.DataType?.Name, caller.DeviceId);
+                outcome = new SyncCommandOutcome(parsed?.CommandId, SyncResultStatus.Failed, null, null, null, parsed?.Target);
+            }
+
+            outcomes.Add(outcome);
+            RecordCommand(caller.DeviceId, parsed, outcome);
+            if (outcome.Status == SyncResultStatus.Failed)
+            {
                 break;
             }
         }
@@ -192,4 +219,24 @@ public sealed partial class SyncProcessor
         time < now - options.Retention ? SyncRejectionReason.TooOld
         : time > now + options.ClockAheadTolerance ? SyncRejectionReason.ClockAhead
         : null;
+
+    private void RecordCommand(Guid deviceId, SyncParsedCommand? parsed, SyncCommandOutcome outcome)
+    {
+        var kind = parsed?.Kind?.Key;
+        var dataType = parsed?.DataType?.Name;
+        telemetry.RecordCommand(outcome.Status.Key, outcome.Reason ?? outcome.Cause, kind, dataType, SyncTelemetry.DeviceWriter);
+        if (outcome.Status == SyncResultStatus.Rejected)
+        {
+            LogCommandRejected(deviceId, outcome.CommandId, kind, dataType, outcome.Target?.ScopeId, outcome.Target?.RecordId, outcome.Reason);
+        }
+    }
+
+    private void RecordResponse(Guid deviceId, int processedCommandCount, SyncWrittenResponse written)
+    {
+        telemetry.RecordResponse(processedCommandCount, written);
+        foreach (var removedScope in written.RemovedScopes.Take(MaxLoggedRemovedScopes))
+        {
+            LogScopeRemoved(deviceId, removedScope.ScopeId, removedScope.RemovedByOwnAccount);
+        }
+    }
 }

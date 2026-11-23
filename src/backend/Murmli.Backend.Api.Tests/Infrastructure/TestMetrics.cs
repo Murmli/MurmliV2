@@ -10,6 +10,16 @@ internal static class TestMetrics
             .GroupBy(point => point.Key)
             .ToDictionary(group => group.Key, group => group.Sum(point => point.Point.GetSumLong()));
 
+    public static Dictionary<string, long> CountByTags(IEnumerable<MetricSnapshot> snapshots, string name, params string[] tagKeys) =>
+        GetPoints(snapshots, name, tagKeys)
+            .GroupBy(point => point.Key)
+            .ToDictionary(group => group.Key, group => group.Sum(point => point.Point.GetHistogramCount()));
+
+    public static Dictionary<string, double> HistogramSumByTags(IEnumerable<MetricSnapshot> snapshots, string name, params string[] tagKeys) =>
+        GetPoints(snapshots, name, tagKeys)
+            .GroupBy(point => point.Key)
+            .ToDictionary(group => group.Key, group => group.Sum(point => point.Point.GetHistogramSum()));
+
     private static List<(string Key, MetricPoint Point)> GetPoints(IEnumerable<MetricSnapshot> snapshots, string name, string[] tagKeys)
     {
         var points = new List<(string Key, MetricPoint Point)>();

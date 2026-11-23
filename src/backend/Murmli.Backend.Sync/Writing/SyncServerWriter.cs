@@ -4,6 +4,7 @@ using Murmli.Backend.Data;
 using Murmli.Backend.Data.Extensions;
 using Murmli.Backend.Data.Sync;
 using Murmli.Backend.Sync.DataTypes;
+using Murmli.Backend.Sync.Diagnostics;
 using Murmli.Backend.Sync.Extensions;
 using Murmli.Backend.Sync.Processing;
 using Murmli.Backend.Sync.Protocol;
@@ -20,6 +21,8 @@ public sealed partial class SyncServerWriter
 
     private readonly TimeProvider timeProvider;
 
+    private readonly SyncTelemetry telemetry;
+
     private readonly ILogger<SyncServerWriter> logger;
 
     internal SyncServerWriter(
@@ -27,6 +30,7 @@ public sealed partial class SyncServerWriter
         SyncCommandUnit unit,
         MurmliDbContext context,
         TimeProvider timeProvider,
+        SyncTelemetry telemetry,
         ILogger<SyncServerWriter> logger
     )
     {
@@ -34,6 +38,7 @@ public sealed partial class SyncServerWriter
         this.unit = unit;
         this.context = context;
         this.timeProvider = timeProvider;
+        this.telemetry = telemetry;
         this.logger = logger;
     }
 
@@ -41,24 +46,28 @@ public sealed partial class SyncServerWriter
     {
         if (CreateInput(command) is not { } input)
         {
+            RecordCommand(command, SyncResultStatus.Rejected, SyncRejectionReason.Invalid.Key);
             return new SyncServerWriteResult(SyncResultStatus.Rejected.Key, SyncRejectionReason.Invalid.Key, null);
         }
 
         try
         {
             var outcome = await unit.RunAsync(input, cancellationToken);
+            RecordCommand(command, outcome.Status, outcome.Reason ?? outcome.Cause);
             return outcome.Original is { } original
                 ? new SyncServerWriteResult(original.Status, original.Reason, original.Cause)
                 : new SyncServerWriteResult(outcome.Status.Key, outcome.Reason, outcome.Cause);
         }
         catch (SyncAccountGoneException)
         {
+            RecordCommand(command, SyncResultStatus.Ignored, SyncIgnoreCause.TargetDeleted.Key);
             return new SyncServerWriteResult(SyncResultStatus.Ignored.Key, null, SyncIgnoreCause.TargetDeleted.Key);
         }
         catch (Exception exception)
             when (!(exception is OperationCanceledException && cancellationToken.IsCancellationRequested) && !exception.IsDatabaseDisturbance())
         {
             LogCommandFailed(exception, command.CommandId, input.Claim.Kind, input.Claim.DataType);
+            RecordCommand(command, SyncResultStatus.Failed, null);
             return new SyncServerWriteResult(SyncResultStatus.Failed.Key, null, null);
         }
         finally
@@ -74,6 +83,15 @@ public sealed partial class SyncServerWriter
             ?? throw new InvalidOperationException($"The bootstrap command for the data type {command.DataType} is invalid.");
         await unit.RunInCurrentTransactionAsync(input, cancellationToken);
     }
+
+    private void RecordCommand(SyncServerCommand command, SyncResultStatus status, string? reasonOrCause) =>
+        telemetry.RecordCommand(
+            status.Key,
+            reasonOrCause,
+            SyncCommandKind.TryParse(command.Kind.Key, out var kind) ? kind.Key : null,
+            registry.TryGet(command.DataType, out var dataType) ? dataType.Name : null,
+            SyncTelemetry.ServerWriter
+        );
 
     private SyncCommandUnitInput? CreateInput(SyncServerCommand command)
     {
