@@ -33,7 +33,13 @@ public static class HostApplicationBuilderExtensions
         builder.Services.AddScoped<SyncCommandUnit>();
         builder.Services.AddScoped<SyncAccountLifecycle>();
         builder.Services.AddScoped<SyncChangeReader>();
-        builder.Services.AddSingleton<SyncCleanupRunner>();
+        builder.Services.AddSingleton(provider => new SyncCleanupRunner(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<IOptions<SyncOptions>>(),
+            provider.GetRequiredService<SyncTelemetry>(),
+            provider.GetRequiredService<ILogger<SyncCleanupRunner>>()
+        ));
         builder.Services.AddScoped(provider => new SyncProcessor(
             provider.GetRequiredService<SyncDataTypeRegistry>(),
             provider.GetRequiredService<SyncCommandParser>(),

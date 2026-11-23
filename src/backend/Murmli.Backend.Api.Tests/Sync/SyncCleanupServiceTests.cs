@@ -426,7 +426,9 @@ public class SyncCleanupServiceTests(PostgresFixture postgres) : IClassFixture<P
 
         await RunCleanupAsync(api);
 
-        Assert.Equal(new SyncCleanupContext(start + TimeSpan.FromMilliseconds(1), 7), Assert.Single(cleanupContexts));
+        var cleanupContext = Assert.Single(cleanupContexts);
+        Assert.Equal(start + TimeSpan.FromMilliseconds(1), cleanupContext.Now);
+        Assert.Equal(7, cleanupContext.BatchSize);
     }
 
     [Fact]

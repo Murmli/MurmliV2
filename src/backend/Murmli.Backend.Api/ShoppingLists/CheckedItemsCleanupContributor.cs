@@ -16,12 +16,13 @@ internal sealed class CheckedItemsCleanupContributor(
     IOptions<ShoppingListOptions> options
 ) : ISyncCleanupContributor
 {
-    public async Task<int> RunAsync(SyncCleanupContext cleanupContext, CancellationToken cancellationToken = default)
+    public string Name => "checked_shopping_list_items";
+
+    public async Task RunAsync(SyncCleanupContext cleanupContext, CancellationToken cancellationToken = default)
     {
         var arrivedBefore = cleanupContext.Now - options.Value.CheckedItemRetention;
         var skippedItemIds = new List<Guid>();
         var skippedListIds = new List<Guid>();
-        var removedCount = 0;
         while (true)
         {
             var items = await context
@@ -38,7 +39,7 @@ internal sealed class CheckedItemsCleanupContributor(
                 .ToListAsync(cancellationToken);
             if (items.Count == 0)
             {
-                return removedCount;
+                return;
             }
 
             foreach (var item in items)
@@ -52,7 +53,7 @@ internal sealed class CheckedItemsCleanupContributor(
                 {
                     if (await TryRemoveAsync(item.ScopeId, item.Id, item.CheckedArrivedAt, cancellationToken))
                     {
-                        removedCount++;
+                        cleanupContext.AddRemovedRecords(1);
                     }
                     else
                     {

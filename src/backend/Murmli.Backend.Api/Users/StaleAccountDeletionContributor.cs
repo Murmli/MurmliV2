@@ -14,7 +14,9 @@ internal sealed partial class StaleAccountDeletionContributor(
 {
     private static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(10);
 
-    public async Task<int> RunAsync(SyncCleanupContext cleanupContext, CancellationToken cancellationToken = default)
+    public string Name => "stale_account_deletions";
+
+    public async Task RunAsync(SyncCleanupContext cleanupContext, CancellationToken cancellationToken = default)
     {
         var markedBefore = cleanupContext.Now - StaleAfter;
         StaleAccount? previous = null;
@@ -25,6 +27,7 @@ internal sealed partial class StaleAccountDeletionContributor(
                 cancellationToken.ThrowIfCancellationRequested();
                 using (logger.BeginScope(new Dictionary<string, object> { [LogProperties.UserId] = account.Id }))
                 {
+                    // Records removed with an account's whole scopes are not counted as removed records of the run
                     // A started deletion runs to its end; the run stops only between accounts, inside its lease reserve
                     if (await userRegistry.CompleteDeletionAsync(account.AuthUserId, CancellationToken.None))
                     {
@@ -35,9 +38,6 @@ internal sealed partial class StaleAccountDeletionContributor(
 
             previous = accounts[^1];
         }
-
-        // Records removed with an account's whole scopes are not counted as removed records of the run
-        return 0;
     }
 
     private Task<List<StaleAccount>> ReadStaleAccountsAsync(

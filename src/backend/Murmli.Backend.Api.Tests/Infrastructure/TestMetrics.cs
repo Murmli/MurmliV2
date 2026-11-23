@@ -20,6 +20,11 @@ internal static class TestMetrics
             .GroupBy(point => point.Key)
             .ToDictionary(group => group.Key, group => group.Sum(point => point.Point.GetHistogramSum()));
 
+    public static long? GetLastGaugeValue(IEnumerable<MetricSnapshot> snapshots, string name) =>
+        snapshots.LastOrDefault(snapshot => snapshot.Name == name && snapshot.MetricPoints.Count > 0) is { } snapshot
+            ? Assert.Single(snapshot.MetricPoints).GetGaugeLastValueLong()
+            : null;
+
     private static List<(string Key, MetricPoint Point)> GetPoints(IEnumerable<MetricSnapshot> snapshots, string name, string[] tagKeys)
     {
         var points = new List<(string Key, MetricPoint Point)>();

@@ -11,11 +11,25 @@ internal sealed class SyncTelemetry
 
     public const string ServerWriter = "server";
 
+    public const string CleanupSucceeded = "succeeded";
+
+    public const string CleanupFailed = "failed";
+
+    public const string CleanupSkipped = "skipped";
+
+    public const string TombstonesKind = "tombstones";
+
+    public const string ProcessedCommandsKind = "processed_commands";
+
     private const string SourceName = "Murmli.Backend.Sync";
 
     private const string Unknown = "unknown";
 
     private const string None = "none";
+
+    private const long NoCleanupSuccess = 0;
+
+    public static readonly ActivitySource ActivitySource = new(SourceName);
 
     private readonly Counter<long> commands;
 
@@ -33,6 +47,14 @@ internal sealed class SyncTelemetry
 
     private readonly Counter<long> removedScopes;
 
+    private readonly Counter<long> cleanupRuns;
+
+    private readonly Histogram<double> cleanupDuration;
+
+    private readonly Counter<long> cleanupRemovedRows;
+
+    private long lastCleanupSuccessUnixSeconds;
+
     public SyncTelemetry(IMeterFactory meterFactory)
     {
         var meter = meterFactory.Create(SourceName);
@@ -44,6 +66,10 @@ internal sealed class SyncTelemetry
         compressedResponseSize = meter.CreateHistogram<long>("murmli.sync.response.compressed_size", "By");
         fullStateScopes = meter.CreateCounter<long>("murmli.sync.full_state.scopes", "{scope}");
         removedScopes = meter.CreateCounter<long>("murmli.sync.scopes.removed", "{scope}");
+        cleanupRuns = meter.CreateCounter<long>("murmli.sync.cleanup.runs", "{run}");
+        cleanupDuration = meter.CreateHistogram<double>("murmli.sync.cleanup.duration", "s");
+        cleanupRemovedRows = meter.CreateCounter<long>("murmli.sync.cleanup.removed", "{row}");
+        meter.CreateObservableGauge<long>("murmli.sync.cleanup.last_success_time", ObserveLastCleanupSuccess, "s");
     }
 
     public void RecordRequest(Guid deviceId, SyncRequest request)
@@ -102,5 +128,31 @@ internal sealed class SyncTelemetry
             .SetTag(LogProperties.SyncRemovedScopeCount, written.RemovedScopes.Count)
             .SetTag(LogProperties.SyncResponseBytes, written.UncompressedLength)
             .SetTag(LogProperties.SyncCompressed, compressed);
+    }
+
+    public void RecordCleanupRun(string result, TimeSpan duration, IReadOnlyList<(string Kind, int Count)> removedRows, DateTimeOffset runTime)
+    {
+        cleanupRuns.Add(1, new KeyValuePair<string, object?>("murmli.sync.cleanup.result", result));
+        if (result == CleanupSkipped)
+        {
+            return;
+        }
+
+        cleanupDuration.Record(duration.TotalSeconds);
+        foreach (var (kind, count) in removedRows)
+        {
+            cleanupRemovedRows.Add(count, new KeyValuePair<string, object?>("murmli.sync.cleanup.kind", kind));
+        }
+
+        if (result == CleanupSucceeded)
+        {
+            Interlocked.Exchange(ref lastCleanupSuccessUnixSeconds, runTime.ToUnixTimeSeconds());
+        }
+    }
+
+    private IEnumerable<Measurement<long>> ObserveLastCleanupSuccess()
+    {
+        var lastCleanupSuccess = Interlocked.Read(ref lastCleanupSuccessUnixSeconds);
+        return lastCleanupSuccess == NoCleanupSuccess ? [] : [new Measurement<long>(lastCleanupSuccess)];
     }
 }

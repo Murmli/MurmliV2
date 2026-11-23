@@ -10,29 +10,55 @@ using Murmli.Backend.Data.Extensions;
 using Murmli.Backend.Data.Sync;
 using Murmli.Backend.Sync.Configuration;
 using Murmli.Backend.Sync.DataTypes;
+using Murmli.Backend.Sync.Diagnostics;
 using Murmli.Backend.Sync.Extensions;
 
 namespace Murmli.Backend.Sync.Cleanup;
 
-public sealed partial class SyncCleanupRunner(
-    IServiceScopeFactory scopeFactory,
-    TimeProvider timeProvider,
-    IOptions<SyncOptions> options,
-    ILogger<SyncCleanupRunner> logger
-)
+public sealed partial class SyncCleanupRunner
 {
+    private const string RunActivityName = "sync cleanup run";
+
     private static readonly TimeSpan LeaseReserve = TimeSpan.FromMinutes(1);
 
-    private readonly string lockTimeout = options.Value.GetLockTimeoutSetting();
+    private readonly IServiceScopeFactory scopeFactory;
+
+    private readonly TimeProvider timeProvider;
+
+    private readonly IOptions<SyncOptions> options;
+
+    private readonly SyncTelemetry telemetry;
+
+    private readonly ILogger<SyncCleanupRunner> logger;
+
+    private readonly string lockTimeout;
+
+    internal SyncCleanupRunner(
+        IServiceScopeFactory scopeFactory,
+        TimeProvider timeProvider,
+        IOptions<SyncOptions> options,
+        SyncTelemetry telemetry,
+        ILogger<SyncCleanupRunner> logger
+    )
+    {
+        this.scopeFactory = scopeFactory;
+        this.timeProvider = timeProvider;
+        this.options = options;
+        this.telemetry = telemetry;
+        this.logger = logger;
+        lockTimeout = options.Value.GetLockTimeoutSetting();
+    }
 
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
+        using var activity = SyncTelemetry.ActivitySource.StartActivity(RunActivityName);
         var start = Stopwatch.GetTimestamp();
         var runId = Guid.NewGuid();
         var syncOptions = options.Value;
         var cleanupOptions = syncOptions.Cleanup;
         var now = timeProvider.GetUtcNowInMilliseconds();
         var removed = new RemovedCounts();
+        var result = SyncTelemetry.CleanupFailed;
         await using var scope = scopeFactory.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<MurmliDbContext>();
         using var timeLimit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -42,6 +68,7 @@ public sealed partial class SyncCleanupRunner(
             if (!await TryTakeLeaseAsync(context, runId, now, now + cleanupOptions.LeaseDuration, timeLimit.Token))
             {
                 LogCleanupSkipped();
+                result = SyncTelemetry.CleanupSkipped;
                 return;
             }
 
@@ -53,13 +80,15 @@ public sealed partial class SyncCleanupRunner(
                 removed,
                 timeLimit.Token
             );
-            await RunContributorsAsync(scope.ServiceProvider, new SyncCleanupContext(now, cleanupOptions.BatchSize), removed, timeLimit.Token);
+            await RunContributorsAsync(scope.ServiceProvider, now, cleanupOptions.BatchSize, removed, timeLimit.Token);
             LogCompleted(start, removed);
+            result = SyncTelemetry.CleanupSucceeded;
         }
         catch (OperationCanceledException) when (timeLimit.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
             // The run ends before its lease can expire, the next run removes the rest
             LogStopped(start, removed);
+            result = SyncTelemetry.CleanupSucceeded;
         }
         catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested)
         {
@@ -74,6 +103,7 @@ public sealed partial class SyncCleanupRunner(
         finally
         {
             await ReleaseLeaseAsync(context, runId);
+            RecordRun(activity, result, start, removed, now);
         }
     }
 
@@ -94,21 +124,27 @@ public sealed partial class SyncCleanupRunner(
 
     private async Task RunContributorsAsync(
         IServiceProvider services,
-        SyncCleanupContext cleanupContext,
+        DateTimeOffset now,
+        int batchSize,
         RemovedCounts removed,
         CancellationToken cancellationToken
     )
     {
         foreach (var contributor in services.GetServices<ISyncCleanupContributor>())
         {
+            var cleanupContext = new SyncCleanupContext(now, batchSize);
             try
             {
-                removed.Records += await contributor.RunAsync(cleanupContext, cancellationToken);
+                await contributor.RunAsync(cleanupContext, cancellationToken);
             }
             catch (Exception exception)
                 when (!(exception is OperationCanceledException && cancellationToken.IsCancellationRequested) && !exception.IsDatabaseDisturbance())
             {
                 LogCleanupFailed(exception);
+            }
+            finally
+            {
+                removed.Contributors.Add((contributor.Name, cleanupContext.RemovedRecordCount));
             }
         }
     }
@@ -283,12 +319,28 @@ public sealed partial class SyncCleanupRunner(
             removed.Records
         );
 
+    private void RecordRun(Activity? activity, string result, long start, RemovedCounts removed, DateTimeOffset runTime)
+    {
+        telemetry.RecordCleanupRun(
+            result,
+            Stopwatch.GetElapsedTime(start),
+            [(SyncTelemetry.TombstonesKind, removed.Tombstones), (SyncTelemetry.ProcessedCommandsKind, removed.ProcessedCommands), .. removed.Contributors],
+            runTime
+        );
+        if (result == SyncTelemetry.CleanupFailed)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error);
+        }
+    }
+
     private sealed class RemovedCounts
     {
         public int Tombstones { get; set; }
 
         public int ProcessedCommands { get; set; }
 
-        public int Records { get; set; }
+        public List<(string Kind, int Count)> Contributors { get; } = [];
+
+        public int Records => Contributors.Sum(contributor => contributor.Count);
     }
 }

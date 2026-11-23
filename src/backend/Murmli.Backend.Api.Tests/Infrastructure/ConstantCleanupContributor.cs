@@ -6,6 +6,13 @@ internal sealed class ConstantCleanupContributor : ISyncCleanupContributor
 {
     public const int RemovedRecordCount = 3;
 
-    public Task<int> RunAsync(SyncCleanupContext context, CancellationToken cancellationToken = default) =>
-        Task.FromResult(RemovedRecordCount);
+    public const string ContributorName = "test_constant";
+
+    public string Name => ContributorName;
+
+    public Task RunAsync(SyncCleanupContext context, CancellationToken cancellationToken = default)
+    {
+        context.AddRemovedRecords(RemovedRecordCount);
+        return Task.CompletedTask;
+    }
 }

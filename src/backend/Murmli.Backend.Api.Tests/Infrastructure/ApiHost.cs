@@ -69,7 +69,9 @@ internal sealed class ApiHost : IAsyncDisposable
         bool testCleanupContributors = false,
         ICollection<SyncCleanupContext>? cleanupContexts = null,
         bool invalidBootstrapContributor = false,
-        ICollection<MetricSnapshot>? metricSnapshots = null
+        ICollection<MetricSnapshot>? metricSnapshots = null,
+        bool disturbedCleanupContributor = false,
+        CancellationTokenSource? cleanupCancellation = null
     )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -117,6 +119,16 @@ internal sealed class ApiHost : IAsyncDisposable
         if (cleanupContexts is not null)
         {
             builder.Services.AddSingleton(cleanupContexts).AddSyncCleanupContributor<RecordingCleanupContributor>();
+        }
+
+        if (disturbedCleanupContributor)
+        {
+            builder.Services.AddSyncCleanupContributor<DisturbedCleanupContributor>();
+        }
+
+        if (cleanupCancellation is not null)
+        {
+            builder.Services.AddSingleton(cleanupCancellation).AddSyncCleanupContributor<CancellingCleanupContributor>();
         }
 
         if (invalidBootstrapContributor)
