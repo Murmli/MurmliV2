@@ -826,6 +826,50 @@ void main() {
       expect(warnings().single.message, endsWith(storageErrorCode));
     });
 
+    test('deleteAccount with a failed request to the API returns failed, stays signed in and keeps the stored session', () async {
+      recordAuthenticationRequests(
+        container,
+        respondFromApi: (request) async => request.method == 'DELETE'
+            ? ResponseBody.fromString('', 502)
+            : await respondAsApi(request),
+      );
+      await signInWithEmail();
+
+      final result = await container
+          .read(signedInAccountProvider.notifier)
+          .deleteAccount();
+
+      expect(result, AccountDeletionResult.failed);
+      expect(container.read(signedInAccountProvider)?.id, accountId);
+      expect(secureStorage, isNotEmpty);
+    });
+
+    test('deleteAccount whose renewal auth rejects with 401 returns sessionEnded without sending the request, signs out and deletes the stored session', () async {
+      var tokenStatusCode = 200;
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: (request) async =>
+            request.uri.path == tokenPath && tokenStatusCode != 200
+            ? ResponseBody.fromString('', tokenStatusCode)
+            : await respondWithTokenIssuedNow(request),
+      );
+      await signInWithEmail();
+      tokenStatusCode = 401;
+      now = signInTime.add(const Duration(minutes: 14));
+
+      final result = await container
+          .read(signedInAccountProvider.notifier)
+          .deleteAccount();
+
+      expect(result, AccountDeletionResult.sessionEnded);
+      expect(container.read(signedInAccountProvider), isNull);
+      expect(
+        requests.api.requests.where((request) => request.method == 'DELETE'),
+        isEmpty,
+      );
+      expect(secureStorage, isEmpty);
+    });
+
     test('signInWithEmail stores the session token with the account id and restore after a restart signs in without waiting for the session check', () async {
       recordAuthenticationRequests(container);
       await signInWithEmail();

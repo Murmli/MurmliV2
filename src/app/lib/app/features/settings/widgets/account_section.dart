@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -8,58 +7,47 @@ import '../../../../i18n/strings.g.dart';
 import '../../../core/authentication/signed_in_account_provider.dart';
 import '../../../core/widgets/confirmation_dialog.dart';
 import '../../../core/widgets/message_dialog.dart';
-import '../providers/account_deletion_provider.dart';
+import '../providers/account_actions_provider.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
-enum _AccountAction { signOut, deletion }
-
-class AccountSection extends HookConsumerWidget {
+class AccountSection extends ConsumerWidget {
   const AccountSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final translations = context.t.settings.account;
-    final runningAction = useState<_AccountAction?>(null);
+    final runningAction = ref.watch(accountActionsProvider);
     return SettingsSection(
       title: translations.section,
       children: [
         SettingsRow(
           icon: Icons.logout,
           label: translations.signOut,
-          trailing: runningAction.value == _AccountAction.signOut
+          trailing: runningAction == AccountAction.signOut
               ? const _ProgressIndicator()
               : null,
-          onTap: runningAction.value != null
+          onTap: runningAction != null
               ? null
-              : () => unawaited(_signOut(context, ref, runningAction)),
+              : () => unawaited(_signOut(context, ref)),
         ),
         SettingsRow(
           icon: Icons.delete_outline,
           label: translations.deleteAccount,
-          trailing: runningAction.value == _AccountAction.deletion
+          trailing: runningAction == AccountAction.deletion
               ? const _ProgressIndicator()
               : null,
-          onTap: runningAction.value != null
+          onTap: runningAction != null
               ? null
-              : () => unawaited(_deleteAccount(context, ref, runningAction)),
+              : () => unawaited(_deleteAccount(context, ref)),
         ),
       ],
     );
   }
 
-  Future<void> _signOut(
-    BuildContext context,
-    WidgetRef ref,
-    ValueNotifier<_AccountAction?> runningAction,
-  ) async {
-    final signedInAccount = ref.read(signedInAccountProvider.notifier);
-    final result = await _whileRunning(
-      context,
-      runningAction,
-      _AccountAction.signOut,
-      signedInAccount.signOut,
-    );
+  Future<void> _signOut(BuildContext context, WidgetRef ref) async {
+    final accountActions = ref.read(accountActionsProvider.notifier);
+    final result = await accountActions.signOut();
     if (result == SignOutResult.signedOut || !context.mounted) {
       return;
     }
@@ -74,12 +62,7 @@ class AccountSection extends HookConsumerWidget {
     if (!isConfirmed || !context.mounted) {
       return;
     }
-    final isSignedOut = await _whileRunning(
-      context,
-      runningAction,
-      _AccountAction.signOut,
-      signedInAccount.signOutLocally,
-    );
+    final isSignedOut = await accountActions.signOutLocally();
     if (isSignedOut || !context.mounted) {
       return;
     }
@@ -92,11 +75,8 @@ class AccountSection extends HookConsumerWidget {
     );
   }
 
-  Future<void> _deleteAccount(
-    BuildContext context,
-    WidgetRef ref,
-    ValueNotifier<_AccountAction?> runningAction,
-  ) async {
+  Future<void> _deleteAccount(BuildContext context, WidgetRef ref) async {
+    final accountActions = ref.read(accountActionsProvider.notifier);
     final translations = context.t.settings.account.deleteDialog;
     final isConfirmed = await showConfirmationDialog(
       context,
@@ -105,29 +85,8 @@ class AccountSection extends HookConsumerWidget {
       cancelLabel: translations.cancel,
       confirmLabel: translations.confirm,
     );
-    if (isConfirmed && context.mounted) {
-      await _whileRunning(
-        context,
-        runningAction,
-        _AccountAction.deletion,
-        ref.read(deleteAccountProvider),
-      );
-    }
-  }
-
-  Future<T> _whileRunning<T>(
-    BuildContext context,
-    ValueNotifier<_AccountAction?> runningAction,
-    _AccountAction action,
-    Future<T> Function() run,
-  ) async {
-    runningAction.value = action;
-    try {
-      return await run();
-    } finally {
-      if (context.mounted) {
-        runningAction.value = null;
-      }
+    if (isConfirmed) {
+      await accountActions.delete();
     }
   }
 }
