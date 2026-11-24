@@ -40,6 +40,8 @@ enum SignInResult {
 
 enum SignOutResult { signedOut, authUnreachable }
 
+enum AccountDeletionResult { deleted, failed, sessionEnded }
+
 @Riverpod(keepAlive: true)
 class SignedInAccount extends _$SignedInAccount {
   late final Future<void> _googleSignInInitialization = GoogleSignInPlatform
@@ -245,16 +247,22 @@ class SignedInAccount extends _$SignedInAccount {
     return true;
   }
 
-  /// Yields false when the API request fails, apiClientProvider already
-  /// showed the error dialog. Deleting the account ends its sessions at auth.
-  Future<bool> deleteAccount() async {
+  /// Deleting the account ends its sessions at auth.
+  ///
+  /// [AccountDeletionResult.failed]: the request failed and apiClientProvider
+  /// already showed the error popup, the user stays signed in.
+  /// [AccountDeletionResult.sessionEnded]: auth rejected the session, usually
+  /// because the account is already deleted and the response got lost.
+  Future<AccountDeletionResult> deleteAccount() async {
     try {
       await ref.read(apiClientProvider).delete<void>('/v1/users/me');
     } on DioException {
-      return false;
+      return _sessionToken == null
+          ? AccountDeletionResult.sessionEnded
+          : AccountDeletionResult.failed;
     }
     await _endSession();
-    return true;
+    return AccountDeletionResult.deleted;
   }
 
   Future<void> _signOutAtAuth(String sessionToken) => ref

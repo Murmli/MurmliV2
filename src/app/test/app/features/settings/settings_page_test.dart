@@ -258,7 +258,6 @@ void main() {
     group('deleting the account', () {
       late final Translations englishTranslations;
       final storedPreferencesBeforeDeletion = {
-        PreferenceKeys.crashReportingEnabled: false,
         PreferenceKeys.appLanguage: 'english',
         PreferenceKeys.themeMode: 'dark',
       };
@@ -266,11 +265,15 @@ void main() {
       setUpAll(() async => englishTranslations = await AppLocale.en.build());
 
       Future<ProviderContainer> openSettingsWithStoredPreferences(
-        WidgetTester tester,
-      ) async {
+        WidgetTester tester, {
+        required bool isCrashReportingEnabled,
+      }) async {
         final container = await pumpApp(
           tester,
-          storedPreferences: storedPreferencesBeforeDeletion,
+          storedPreferences: {
+            PreferenceKeys.crashReportingEnabled: isCrashReportingEnabled,
+            ...storedPreferencesBeforeDeletion,
+          },
           signedInAccount: const Account(id: 'account'),
         );
         await tester.tap(
@@ -285,6 +288,28 @@ void main() {
         await tapRow(tester, account.deleteAccount);
         await tester.tap(find.text(account.deleteDialog.confirm));
         await tester.pumpAndSettle();
+      }
+
+      Future<void> expectDeviceDataRemovedOnOnboarding(
+        WidgetTester tester, {
+        required bool isCrashReportingEnabled,
+      }) async {
+        expect(await const FlutterSecureStorage().readAll(), isEmpty);
+        final storedPreferences = await reopenPreferences();
+        expect(storedPreferences.keys, {
+          PreferenceKeys.crashReportingEnabled,
+          PreferenceKeys.installed,
+        });
+        expect(
+          storedPreferences.getBool(PreferenceKeys.crashReportingEnabled),
+          isCrashReportingEnabled,
+        );
+        expect(find.byType(OnboardingPage), findsOneWidget);
+        expect(
+          tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
+          ThemeMode.system,
+        );
+        expect(LocaleSettings.currentLocale, AppLocale.de);
       }
 
       testWidgets(
@@ -309,9 +334,12 @@ void main() {
       );
 
       testWidgets(
-        'confirming the deletion deletes the account at the API, removes the device data except the crash reporting opt-out and the installation marker and shows the onboarding page',
+        'confirming the deletion deletes the account at the API, removes the device data except the crash reporting consent and the installation marker, removes the crash reporting user and shows the onboarding page',
         (tester) async {
-          final container = await openSettingsWithStoredPreferences(tester);
+          final container = await openSettingsWithStoredPreferences(
+            tester,
+            isCrashReportingEnabled: true,
+          );
           final requests = recordAuthenticationRequests(
             container,
             respondFromApi: (_) async => ResponseBody.fromString('', 204),
@@ -326,29 +354,51 @@ void main() {
             deletion.headers['Authorization'],
             'Bearer $issuedJsonWebToken',
           );
-          expect(await const FlutterSecureStorage().readAll(), isEmpty);
-          final storedPreferences = await reopenPreferences();
-          expect(storedPreferences.keys, {
-            PreferenceKeys.crashReportingEnabled,
-            PreferenceKeys.installed,
-          });
-          expect(
-            storedPreferences.getBool(PreferenceKeys.crashReportingEnabled),
-            isFalse,
+          await expectDeviceDataRemovedOnOnboarding(
+            tester,
+            isCrashReportingEnabled: true,
           );
-          expect(find.byType(OnboardingPage), findsOneWidget);
           expect(
-            tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode,
-            ThemeMode.system,
+            (container.read(
+              crashReporterProvider,
+            ) as RecordingCrashReporter).calls.last,
+            'user none',
           );
-          expect(LocaleSettings.currentLocale, AppLocale.de);
+        },
+      );
+
+      testWidgets(
+        'confirming the deletion when auth rejects the session on the token renewal removes the device data except the crash reporting opt-out and the installation marker and shows the onboarding page',
+        (tester) async {
+          final container = await openSettingsWithStoredPreferences(
+            tester,
+            isCrashReportingEnabled: false,
+          );
+          recordAuthenticationRequests(
+            container,
+            respondFromAuth: (request) async => request.uri.path == tokenPath
+                ? ResponseBody.fromString('', 401)
+                : await respondAsAuth(request),
+            respondFromApi: (_) async => ResponseBody.fromString('', 401),
+          );
+
+          await confirmDeletion(tester);
+
+          expect(container.read(signedInAccountProvider), isNull);
+          await expectDeviceDataRemovedOnOnboarding(
+            tester,
+            isCrashReportingEnabled: false,
+          );
         },
       );
 
       testWidgets(
         'failing deletion shows the error dialog and keeps the account and the device data, confirming again deletes the account',
         (tester) async {
-          final container = await openSettingsWithStoredPreferences(tester);
+          final container = await openSettingsWithStoredPreferences(
+            tester,
+            isCrashReportingEnabled: false,
+          );
           var deletionAttempts = 0;
           final requests = recordAuthenticationRequests(
             container,
@@ -367,6 +417,7 @@ void main() {
           );
           expect((await reopenPreferences()).keys, {
             PreferenceKeys.installed,
+            PreferenceKeys.crashReportingEnabled,
             ...storedPreferencesBeforeDeletion.keys,
           });
           await tester.tap(find.text(englishTranslations.apiError.close));
@@ -401,6 +452,52 @@ void main() {
           expect(requests.api.requests, hasLength(1));
           expect(find.byType(AlertDialog), findsNothing);
           expect(find.byType(CircularProgressIndicator), findsOneWidget);
+          pendingDeletion.complete(ResponseBody.fromString('', 204));
+          await tester.pumpAndSettle();
+          expect(find.byType(OnboardingPage), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'leaving and reopening the settings page while the deletion is pending keeps sign out and delete account disabled',
+        (tester) async {
+          final container = await openSettings(tester);
+          final pendingDeletion = Completer<ResponseBody>();
+          recordAuthenticationRequests(
+            container,
+            respondFromApi: (_) => pendingDeletion.future,
+          );
+          await tapRow(tester, translations.account.deleteAccount);
+          await tester.tap(
+            find.text(translations.account.deleteDialog.confirm),
+          );
+          await tester.pump(const Duration(seconds: 1));
+
+          await tester.binding.handlePopRoute();
+          await tester.pump();
+          await tester.pump(const Duration(seconds: 1));
+          expect(find.byType(SettingsPage), findsNothing);
+          await tester.tap(
+            find.byTooltip(germanTranslations.home.settingsTooltip),
+          );
+          await tester.pump();
+          await tester.pump(const Duration(seconds: 1));
+          await tester.scrollUntilVisible(
+            find.text(translations.account.deleteAccount),
+            100,
+          );
+
+          for (final label in [
+            translations.account.signOut,
+            translations.account.deleteAccount,
+          ]) {
+            expect(
+              tester
+                  .widget<ListTile>(find.widgetWithText(ListTile, label))
+                  .onTap,
+              isNull,
+            );
+          }
           pendingDeletion.complete(ResponseBody.fromString('', 204));
           await tester.pumpAndSettle();
           expect(find.byType(OnboardingPage), findsOneWidget);
