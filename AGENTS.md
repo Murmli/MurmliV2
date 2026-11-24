@@ -335,6 +335,7 @@ Hintergrund und Entscheidungen: [docs/ci.md](docs/ci.md)
   - App (`src/app`): `fvm flutter pub get --enforce-lockfile`, `fvm dart run build_runner build`, `fvm dart format --output=none --set-exit-if-changed .`, `fvm flutter analyze`, `fvm flutter test`.
   - Backend (`src/backend`): `dotnet format --verify-no-changes`, `dotnet test`, `dotnet restore --force -warnaserror:NU1900,NU1901,NU1902,NU1903,NU1904`.
   - Auth (`src/auth`): `npm ci`, `npm run check`.
+- Lasttests laufen nie in der CI.
 - Generierte Dateien (`*.g.dart`, `*.gr.dart`, `*.freezed.dart`) werden nicht committet; CI erzeugt sie in der Composite-Action `.github/actions/setup-app` per build_runner.
 - Funde ohne Fix unterdrücken: Backend per `<NuGetAuditSuppress>` im csproj, App (auch `src/app/Gemfile.lock`) per `[[IgnoredVulns]]` in `src/app/osv-scanner.toml`, Auth per `[[IgnoredVulns]]` in `src/auth/osv-scanner.toml`.
 - Concurrency nur in `ci.yml` setzen. Ausnahme: `deploy-backend.yml` und jeder weitere Workflow, der Dev ändert, bekommt die feste Gruppe `deploy-dev` mit `cancel-in-progress: false`, der aufrufende `deploy-backend`-Job in `ci.yml` keine. `deliver-app.yml` ändert Dev nicht und bekommt keine Gruppe `deploy-dev`, nur sein Android-Job hat die feste Gruppe `google-play-upload` mit `cancel-in-progress: false`.
@@ -422,7 +423,7 @@ Hintergrund und Entscheidungen: [docs/authentication.md](docs/authentication.md)
 - `OpenApi:Enabled` nur in `appsettings.Development.json` und `appsettings.azure-dev.json` des AppHost setzen, sonst ist das OpenAPI-Dokument in weiteren Umgebungen ohne Anmeldung erreichbar.
 - `Apple:BundleIdentifier` und `Google:WebClientId` nur in `appsettings.Development.json` und `appsettings.azure-<name>.json` des AppHost setzen, nie in `appsettings.json` (eine neue Umgebung erbte sonst die Werte von Dev).
 - Sign in with Apple und Google nur über das ID-Token (`POST /api/auth/sign-in/social` mit `idToken`), ohne Client Secret, ohne Scopes bei Apple. In `auth` `mapProfileToUser` behalten: Platzhalter-E-Mail für beide, bei Google zusätzlich leerer Name und kein Bild (ohne Platzhalter lehnt Better Auth jede Anmeldung mit Apple ab, mit `profile.email` oder ohne die Google-Felder speicherte es Adressen, Namen und Bilder). Ebenso die `databaseHooks` für `account` behalten, die `idToken` auf `NULL` setzen.
-- Tests stellen eigene Tokens aus (`TestTokens`) und ersetzen `auth` durch `AuthServiceHttpMessageHandler`. Echte Tokens nur im End-to-End-Test `AuthenticationTests` gegen das lokal gestartete `auth`, kein Test spricht mit Azure.
+- Tests stellen eigene Tokens aus (`TestTokens`) und ersetzen `auth` durch `AuthServiceHttpMessageHandler`; die Lasttests geben der API im Container nur eine nie aufgerufene Adresse für `auth` und löschen deshalb kein Konto ([docs/sync.md](docs/sync.md#lasttests)). Echte Tokens nur im End-to-End-Test `AuthenticationTests` gegen das lokal gestartete `auth`, kein Test spricht mit Azure.
 - `TokenValidationParameters` im Code nie ersetzen, die Werte kommen aus der Bindung von `Authentication:Schemes:Bearer`.
 
 ## Telemetrie
@@ -471,7 +472,7 @@ Hintergrund und Entscheidungen: [docs/sync.md](docs/sync.md)
 - Antworten des Abgleichs enthalten nie Konto-IDs; Datensätze nennen Personen nur über Mitglieds-IDs, die der Server setzt (Füllungen aus `SyncServerFill` oder `Evaluate` mit `ActingMemberId`), nie über Werte vom Gerät.
 - Gespeicherte Gründe, Ursachen, Arten und Rollen als Text lesen, nie mit `Get`.
 - Die drei Fehler der Gegenprobe ([docs/sync.md](docs/sync.md#gegenprobe)) nur lokal einbauen, nie committen.
-- Regeln zur Schreibberechtigung ([Murmli/BackOffice#17](https://github.com/Murmli/BackOffice/issues/17)) und Messwerte (Lasttests, Simulation, Kapazität, [Murmli/BackOffice#18](https://github.com/Murmli/BackOffice/issues/18)) gehören ins BackOffice, nie in dieses Repo, auch nicht in Kommentare oder Testausgaben.
+- Regeln zur Schreibberechtigung ([Murmli/BackOffice#17](https://github.com/Murmli/BackOffice/issues/17)) und Messwerte (Lasttests, Simulation, Kapazität, [Murmli/BackOffice#18](https://github.com/Murmli/BackOffice/issues/18)) gehören ins BackOffice, nie in dieses Repo, auch nicht in Kommentare, Tests oder committete Testausgaben; die Lasttests geben Messwerte nur auf der Konsole aus und prüfen keine Schwellen ([docs/sync.md](docs/sync.md#lasttests)).
 
 ## App
 

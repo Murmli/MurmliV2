@@ -767,6 +767,57 @@ Eine Simulation, die nie scheitert, beweist nichts. Vor dem ersten Vertrauen in 
 2. Eine ältere Änderung überschreibt eine neuere: in `SyncDataType<TRecord>.ApplyChanges` die Bedingung `isNew || commandTime >= change.Group.GetChangedAt(typedRecord)` durch `true` ersetzen.
 3. Ein wiederholt gesendetes Kommando wird ein zweites Mal ausgeführt: in `SyncCommandUnit.RunAttemptAsync` (`Murmli.Backend.Sync/Processing/SyncCommandUnit.cs`) das Ergebnis von `ClaimAsync` übergehen, statt bei einer vorhandenen Kommando-ID mit `ReadAlreadyProcessedAsync` zu antworten.
 
+### Lasttests
+
+Die Lasttests zu Datenmengen ([#137](https://github.com/Murmli/MurmliV2/issues/137)) messen die veröffentlichte API mit der CPU und dem Speicher der kleinsten Instanz in Azure gegen ein Postgres mit dem Verbindungslimit des Azure-Tarifs. Sie laufen nur auf Abruf, etwa nach Umbauten am Kern, und nie in der CI ([ci.md](ci.md)). Alle Szenarien, in `src/backend` (braucht Docker): `dotnet test --project Murmli.Backend.Api.Tests --explicit only --filter-class "*SyncLoadTests"`; ein einzelnes Szenario mit `--filter-method "*<Testname>"` statt `--filter-class`. Ohne einen der beiden Filter liefen die übrigen expliziten Tests mit, darunter `ServeEnvironment_UntilCancelled_KeepsRunning`, das bis Strg+C läuft.
+
+Aufbau (Testcode in `Murmli.Backend.Api.Tests/Infrastructure/SyncLoad/`), gestartet vom ersten Szenario eines Laufs und von allen Szenarien des Laufs geteilt; sie laufen nacheinander, ohne andere Tests daneben:
+
+1. `dotnet publish` von `Murmli.Backend.Api.Host` (Release mit `-p:UseAppHost=false`, nur die DLL ohne eigene ausführbare Datei) in ein temporäres Verzeichnis, eingebunden in einen Container aus `mcr.microsoft.com/dotnet/aspnet:11.0`; ein eigenes Image entsteht nicht.
+2. Der Container der API hat 0,25 CPU und 512 MiB ohne Swap, so wie der AppHost die Container-App `api` anlegt. Er läuft mit der Konfiguration von Produktion bis auf: Pool der Datenbank mit `Maximum Pool Size=20` (Startwert aus [#140](https://github.com/Murmli/MurmliV2/issues/140)), Schlüssel der Test-Tokens (`TestTokens`), Rate-Limits weit über der Last, kein geplanter Aufräum-Lauf (`Sync:Cleanup:Enabled=false`), eine Adresse für `auth`, die nie aufgerufen wird (die Lasttests löschen kein Konto), und die Konsole wie in Azure erst ab `Warning`. Telemetrie exportiert der Container nicht: Logs von EF Core auf `Information` entstehen wie in Produktion, ohne Exporter formatiert und versendet sie aber niemand, und Spans und Metriken gehen nirgends hin; was das in Azure kostet, fehlt im gemessenen Verbrauch.
+3. Postgres (`postgres:18`) im selben Docker-Netz mit 1 CPU, 2 GiB und den 35 Verbindungen von Burstable B1ms ([#140](https://github.com/Murmli/MurmliV2/issues/140)), ohne reservierte Verbindungen. Anders als in den übrigen Tests mit Testcontainers (`PostgresFixture`, dort schaltet `PostgreSqlBuilder` sie ab) sind `fsync`, `full_page_writes` und `synchronous_commit` eingeschaltet. Vor dem ersten Szenario prüft der Lauf diese Einstellungen, die 35 Verbindungen ohne reservierte sowie CPU und Speicher beider Container und gibt sie aus.
+4. Jedes Konto legt der Lauf mit `GET /v1/users/me` an, alle übrigen Daten entstehen nur über `/v1/sync`, beides an der API im Container; die Inhalte kommen aus einem festen Startwert und den Schlüsseln aus `src/sync-cases/shopping/catalog.json`.
+
+Gemessen werden CPU und Speicher des Containers der API nur von außen über die Stats-API von Docker, mit `Docker.DotNet.Enhanced` (dem Fork von Testcontainers mit dem Namensraum `Docker.DotNet`; das Paket `Docker.DotNet` nie daneben aufnehmen). Wer im Container misst (`docker exec`, Werte aus dem Prozess selbst), verbraucht dessen eigenes CPU-Kontingent. Jede Phase mit Messfenster (alle außer dem Wachstum) wartet erst `SYNC_LOAD_SETTLE_SECONDS` in Ruhe, liest dann den Verbrauch, wiederholt ihre Anfragen ohne Pause, bis `SYNC_LOAD_WINDOW_SECONDS` vorbei sind (die zuletzt begonnene läuft zu Ende), und liest erneut; gelesen wird nur an diesen beiden Rändern. Hat das Konto keinen Platz mehr für die nächsten Kommandos (Kosten je Kommando, Warteschlange), endet das Fenster früher, und alle Werte gelten für das kürzere Fenster (`windowSeconds`). Der CPU-Anteil ist die verbrauchte CPU-Zeit geteilt durch die Länge des Fensters und das Kontingent. Weil der Container dabei am Kontingent läuft, enthalten die Dauern Wartezeiten der Drosselung; vergleichbar sind vor allem die CPU-Millisekunden je Anfrage oder je Kommando. Speicher ist der Verbrauch ohne den freigebbaren Seiten-Cache (`inactive_file`), wie ihn `docker stats` zeigt. Nach jedem Messfenster und nach dem Befüllen und Leeren von Konten außerhalb der Fenster (größtes Konto, Löschungen, Wachstum), jeweils auch wenn eine Anfrage darin scheitert, prüft der Lauf, dass der Container noch läuft und nicht wegen Speichermangels beendet wurde (`OOMKilled`, Exit-Code 137).
+
+| Test | Szenario |
+| --- | --- |
+| `Sync_FirstSyncOfLargestAccount_ReportsDurationSizesAndGzipCost` | erster Abgleich eines neuen Geräts für das größte Konto, mit und ohne gzip: Dauer, Größe komprimiert und unkomprimiert, CPU je Anfrage, Kosten von gzip als Unterschied der CPU je Anfrage |
+| `Sync_NoChangePoll_ReportsDuration` | Abgleich ohne Änderungen mit aktuellem Token (Median, p95) |
+| `Sync_SmallChange_ReportsWriterAndReaderDuration` | ein Gerät ändert den Namen eines Artikels, ein zweites holt das Delta |
+| `Sync_TenConcurrentFirstSyncsOfLargestAccount_ReportsDurationAndMemory` | zehn gleichzeitige erste Abgleiche des größten Kontos gegen 512 MiB |
+| `Sync_ManyDeletions_ReportsReturningAndFreshDevice` | ein zurückkehrendes Gerät nach dem Löschen aller Artikel (Delta mit allen Löschungen), danach ein neues Gerät, nachdem die Listen neu gefüllt sind (vollständiger Stand neben ebenso vielen Löschmarkierungen) |
+| `Sync_CommandsPerRequestAndQueue_ReportsCostPerCommand` | Kosten je Kommando (Artikel anlegen) bei 1, 50 und 500 Kommandos je Anfrage und für eine Warteschlange über 500, abgearbeitet in Anfragen zu 500 |
+| `Sync_CommandsAndDeletions_ReportsGrowthOfProcessedCommandsAndTombstones` | Wachstum von `sync.processed_commands` und `sync.tombstones` (`pg_total_relation_size`) je Anlegen, je Löschen und je Löschmarkierung, mit höchstens 5 Listen |
+
+Das größte Konto hat `SYNC_LOAD_LISTS` Listen mit je `SYNC_LOAD_ITEMS_PER_LIST` Artikeln, im Standard die Grenzen für eigene Listen und Artikel je Liste (42 eigene Listen mit je 1.000 Artikeln, [Grenzen](#grenzen)); dieselben Werte gelten für die Löschungen und, mit höchstens 5 Listen, für das Wachstum.
+
+| Variable | Standard | Wirkung |
+| --- | --- | --- |
+| `SYNC_LOAD_SEED` | `137` | Startwert der Inhalte (0 bis 2147483647) |
+| `SYNC_LOAD_LISTS` | `42` | Listen des größten Kontos, der Löschungen und, höchstens 5, des Wachstums (1 bis 42) |
+| `SYNC_LOAD_ITEMS_PER_LIST` | `1000` | Artikel je Liste dieser Konten und des Wachstums (1 bis 1000) |
+| `SYNC_LOAD_QUEUE_COMMANDS` | `5000` | Kommandos der Warteschlange (501 bis 42000) |
+| `SYNC_LOAD_SETTLE_SECONDS` | `30` | Ruhe vor jedem Messfenster in Sekunden (0 bis 3600) |
+| `SYNC_LOAD_WINDOW_SECONDS` | `60` | Länge eines Messfensters in Sekunden (1 bis 3600) |
+
+Ein ungültiger Wert lässt jedes Szenario des Laufs scheitern, bevor etwas startet; die Meldung nennt Variable und Bereich.
+
+Ergebnisse stehen nur in der Ausgabe des Laufs: Zeilen `SyncLoad <szenario> <phase>: name=wert …` direkt auf der Konsole (Ausgaben über `ITestOutputHelper` zeigt `dotnet test` erst nach dem Test, siehe [Simulationsumgebung](#simulationsumgebung)), vorweg die Einstellungen von Postgres, das Image mit der Version der Laufzeit, die wirksamen Grenzen der Container und die Stellschrauben. Ein Mensch überträgt sie nach [Murmli/BackOffice#18](https://github.com/Murmli/BackOffice/issues/18) neben die Ergebnisse vom 2026-11-21; in dieses Repo gehören sie nie. Unterstützt der Docker-Daemon keine Grenzen für Swap (Warnung „No swap limit support“), gilt nur die Grenze für den Speicher; die Ausgabe zeigt dann `memorySwapBytes=-1`.
+
+Die Tests prüfen nur Folgendes, nie Schwellen für Dauer oder Verbrauch:
+
+1. Die Umgebung vor dem ersten Szenario, wie im dritten Punkt des Aufbaus oben, nachdem `dotnet publish` ohne Fehler endet.
+2. Dass der Container der API überlebt, wie oben beschrieben.
+3. Status 200 für jede Anmeldung mit `GET /v1/users/me` und jede Anfrage an `/v1/sync`.
+4. In jedem Messfenster ohne Kommandos (erster Abgleich, ohne Änderungen, zehn gleichzeitige, zurückkehrendes und neues Gerät): entpackt gleich lange Antworten und den Inhalt der ersten Antwort nach den folgenden Punkten.
+5. Vollständiger Stand (erster Abgleich, zehn gleichzeitige, neues Gerät): gzip genau dann, wenn die Anfrage es nennt, `coversAllScopes: true`, `SYNC_LOAD_LISTS` + 1 Blöcke (so viele wie Listen und persönlicher Bereich), jeder mit `fullState: true` und leerem `deletedRecords`, zusammen so viele Datensätze wie Listen und Artikel.
+6. Ohne Änderungen: leeres `scopes` und das Token der Anfrage.
+7. Zurückkehrendes Gerät: unkomprimiert, `SYNC_LOAD_LISTS` Blöcke, jeder mit `fullState: false`, leerem `records` und `SYNC_LOAD_ITEMS_PER_LIST` Einträgen in `deletedRecords`.
+8. Kleine Änderung: für jede Umbenennung genau ein Ergebnis `applied`, danach für das zweite Gerät genau ein Block, der der Liste, mit `fullState: false`, einem Datensatz und leerem `deletedRecords`.
+9. Kommandos (Listen anlegen, Befüllen, Leeren, Kosten je Kommando, Warteschlange): mindestens ein Ergebnis je Antwort, der Reihe nach zu den ersten Kommandos der Anfrage und jedes `applied` (die übrigen sendet der Lauf mit der nächsten); der erste Abgleich eines neuen Kontos liefert genau einen Block der Art `shoppingList`.
+10. Wachstum: in den Listen des Kontos genau eine neue Zeile in `sync.processed_commands` je Kommando (Anlegen wie Löschen) und genau eine neue Zeile in `sync.tombstones` je Löschung.
+
 ## Entscheidungen
 
 | Entscheidung | Grund |
@@ -808,3 +859,5 @@ Eine Simulation, die nie scheitert, beweist nichts. Vor dem ersten Vertrauen in 
 | Zeitplan und Lease des Aufräumens nach dem `TimeProvider`, seine Zeitgrenze in Echtzeit | Der Zeitplan lässt sich mit der gestellten Uhr prüfen, und das Ende der Lease ist ein gespeicherter Zeitpunkt wie jeder andere des Abgleichs; in Produktion sind beide Uhren dieselbe. Die Zeitgrenze schützt den Betrieb und folgt deshalb der Echtzeit wie Frist und Budget einer Anfrage. |
 | Katalog der Einkaufsliste als Datei in `src/sync-cases/shopping/` und als `ShoppingCatalog` im Code | App und Server lesen dieselben Schlüssel ohne Paket, ein Test prüft, dass der Server jeden Schlüssel der Datei annimmt. Schlüssel in camelCase sind in Daten lesbar. Verworfen: Zahlen als IDs, eine Reihenfolge im Katalog (sie gilt je Person, [#86](https://github.com/Murmli/MurmliV2/issues/86)). |
 | Abgehakte Artikel nach der Ankunft am Server entfernen, mit Bedingung unter der Sperre der Liste | Ein Gerät mit weit nachgehender Uhr ließe einen Artikel sonst sofort verschwinden ([#141](https://github.com/Murmli/MurmliV2/issues/141)). Die Bedingung lässt ein Herausnehmen des Hakens gewinnen, das zwischen Abfrage und Löschen ankommt. Verworfen: die Gerätezeit des Abhakens, Löschen per eigenem SQL (Geräte erführen es nie). |
+| Lasttests gegen die veröffentlichte API in einem Container mit den Grenzen der kleinsten Instanz | CPU und Speicher wie in Azure, gemessen von außen, ohne das Kontingent des Containers anzutasten ([#137](https://github.com/Murmli/MurmliV2/issues/137)); der Build läuft per `dotnet publish` und wird in das Image von ASP.NET Core eingebunden. Verworfen: Dockerfile oder `PublishContainer` (ein Image-Build je Lauf), Messen an `ApiHost` im Testprozess (keine Grenzen für CPU und Speicher, Testcode und API teilten sich die Maschine). |
+| Lasttests: Anfragen ohne Pause, Verbrauch nur an den Rändern eines Messfensters, ohne geplanten Aufräum-Lauf | Vergleichbar sind die CPU-Millisekunden je Anfrage oder Kommando, unabhängig vom Takt. Dass 512 MiB reichen, belegt die Prüfung auf `OOMKilled`; einen Spitzenwert des Speichers misst der Lauf nicht. Der Aufräum-Lauf fiele zu beliebiger Zeit in ein Messfenster. Verworfen: Pausen zwischen den Anfragen (eine Stellschraube ohne Grundlage, die Dauern hingen von ihr ab), Stats von Docker während des Fensters lesen ([#137](https://github.com/Murmli/MurmliV2/issues/137) liest nur an den Rändern). |
