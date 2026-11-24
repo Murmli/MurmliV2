@@ -12,6 +12,7 @@ import 'core/theme/app_theme.dart';
 import 'core/widgets/api_error_dialog_listener.dart';
 import 'core/widgets/flavor_banner.dart';
 import 'features/settings/providers/theme_mode_provider.dart';
+import 'features/settings/widgets/apple_disconnect_notice_listener.dart';
 
 class MurmliApp extends HookConsumerWidget {
   const MurmliApp({super.key});
@@ -34,8 +35,11 @@ class MurmliApp extends HookConsumerWidget {
       locale: TranslationProvider.of(context).flutterLocale,
       supportedLocales: AppLocaleUtils.supportedLocales,
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      builder: (context, child) =>
-          ApiErrorDialogListener(child: FlavorBanner(child: child!)),
+      builder: (context, child) => ApiErrorDialogListener(
+        child: AppleDisconnectNoticeListener(
+          child: FlavorBanner(child: child!),
+        ),
+      ),
     );
   }
 }

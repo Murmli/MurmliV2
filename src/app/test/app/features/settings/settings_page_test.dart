@@ -10,6 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:app/app/core/authentication/account.dart';
 import 'package:app/app/core/authentication/signed_in_account_provider.dart';
 import 'package:app/app/core/crash_reporting/crash_reporter_provider.dart';
+import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/storage/preference_keys.dart';
 import 'package:app/app/features/onboarding/onboarding_page.dart';
 import 'package:app/app/features/settings/settings_page.dart';
@@ -456,6 +457,54 @@ void main() {
           await tester.pumpAndSettle();
           expect(find.byType(OnboardingPage), findsOneWidget);
         },
+      );
+
+      Future<void> deleteAccountInDevelopment(WidgetTester tester) async {
+        final container = await pumpApp(
+          tester,
+          flavor: Flavor.development,
+          signedInAccount: const Account(id: 'account'),
+        );
+        await tester.tap(
+          find.byTooltip(germanTranslations.home.settingsTooltip),
+        );
+        await tester.pumpAndSettle();
+        recordAuthenticationRequests(
+          container,
+          respondFromApi: (_) async => ResponseBody.fromString('', 204),
+        );
+        await tapRow(tester, translations.account.deleteAccount);
+        await tester.tap(find.text(translations.account.deleteDialog.confirm));
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets(
+        'confirming the deletion on iOS in development shows the notice to disconnect Sign in with Apple over the onboarding page',
+        (tester) async {
+          await deleteAccountInDevelopment(tester);
+
+          final notice = translations.account.appleDisconnectDialog;
+          expect(find.text(notice.message), findsOneWidget);
+          await tester.tap(find.text(notice.confirm));
+          await tester.pumpAndSettle();
+          expect(find.text(notice.message), findsNothing);
+          expect(find.byType(OnboardingPage), findsOneWidget);
+        },
+        variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+      );
+
+      testWidgets(
+        'confirming the deletion on Android in development shows no notice to disconnect Sign in with Apple',
+        (tester) async {
+          await deleteAccountInDevelopment(tester);
+
+          expect(
+            find.text(translations.account.appleDisconnectDialog.message),
+            findsNothing,
+          );
+          expect(find.byType(OnboardingPage), findsOneWidget);
+        },
+        variant: TargetPlatformVariant.only(TargetPlatform.android),
       );
 
       testWidgets(
