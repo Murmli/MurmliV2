@@ -103,6 +103,11 @@
         "message": "Your account and all associated data will be deleted immediately and permanently. This cannot be undone.",
         "cancel": "Cancel",
         "confirm": "Delete permanently"
+      },
+      "appleDisconnectDialog": {
+        "title": "Account deleted",
+        "message": "Your account is deleted, but your Apple Account is still connected to Murmli. Disconnect it in the iPhone Settings under Apple Account › Sign in with Apple › Murmli.",
+        "confirm": "OK"
       }
     },
     "about": {

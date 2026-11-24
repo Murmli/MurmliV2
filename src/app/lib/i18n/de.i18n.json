@@ -103,6 +103,11 @@
         "message": "Dein Konto und alle zugehörigen Daten werden sofort und endgültig gelöscht. Das lässt sich nicht rückgängig machen.",
         "cancel": "Abbrechen",
         "confirm": "Endgültig löschen"
+      },
+      "appleDisconnectDialog": {
+        "title": "Konto gelöscht",
+        "message": "Dein Konto ist gelöscht. Deine Apple-ID ist aber noch mit Murmli verbunden. Trenne die Verbindung in den iPhone-Einstellungen unter Apple-Account › Anmelden mit Apple › Murmli.",
+        "confirm": "OK"
       }
     },
     "about": {
