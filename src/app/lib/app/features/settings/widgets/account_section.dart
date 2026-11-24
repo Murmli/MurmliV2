@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../../../i18n/strings.g.dart';
 import '../../../core/authentication/signed_in_account_provider.dart';
 import '../../../core/widgets/confirmation_dialog.dart';
+import '../../../core/widgets/message_dialog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
@@ -51,21 +52,32 @@ class AccountSection extends HookConsumerWidget {
     if (result == SignOutResult.signedOut || !context.mounted) {
       return;
     }
-    final translations = context.t.settings.account.signOutOfflineDialog;
+    final offlineTranslations = context.t.settings.account.signOutOfflineDialog;
     final isConfirmed = await showConfirmationDialog(
       context,
-      title: translations.title,
-      message: translations.message,
-      cancelLabel: translations.cancel,
-      confirmLabel: translations.confirm,
+      title: offlineTranslations.title,
+      message: offlineTranslations.message,
+      cancelLabel: offlineTranslations.cancel,
+      confirmLabel: offlineTranslations.confirm,
     );
-    if (isConfirmed && context.mounted) {
-      await _whileSigningOut(
-        context,
-        isSigningOut,
-        signedInAccount.signOutLocally,
-      );
+    if (!isConfirmed || !context.mounted) {
+      return;
     }
+    final isSignedOut = await _whileSigningOut(
+      context,
+      isSigningOut,
+      signedInAccount.signOutLocally,
+    );
+    if (isSignedOut || !context.mounted) {
+      return;
+    }
+    final failedTranslations = context.t.settings.account.signOutFailedDialog;
+    await showMessageDialog(
+      context,
+      title: failedTranslations.title,
+      message: failedTranslations.message,
+      confirmLabel: failedTranslations.confirm,
+    );
   }
 
   Future<T> _whileSigningOut<T>(

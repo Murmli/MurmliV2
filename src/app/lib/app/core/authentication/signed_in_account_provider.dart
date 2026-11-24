@@ -235,7 +235,15 @@ class SignedInAccount extends _$SignedInAccount {
     return SignOutResult.signedOut;
   }
 
-  Future<void> signOutLocally() => _endSession();
+  /// Stays signed in and returns false when the stored session cannot be
+  /// removed, because auth still accepts it and restore would sign in again.
+  Future<bool> signOutLocally() async {
+    if (!await _deleteStoredSession()) {
+      return false;
+    }
+    _clearSession();
+    return true;
+  }
 
   Future<void> _signOutAtAuth(String sessionToken) => ref
       .read(authClientProvider)
@@ -323,9 +331,13 @@ class SignedInAccount extends _$SignedInAccount {
   }
 
   Future<void> _endSession() async {
+    _clearSession();
+    await _deleteStoredSession();
+  }
+
+  void _clearSession() {
     _startSession(null);
     state = null;
-    await _deleteStoredSession();
   }
 
   void _startSession(String? sessionToken) {
@@ -335,16 +347,23 @@ class SignedInAccount extends _$SignedInAccount {
     _renewal = null;
   }
 
-  Future<void> _deleteStoredSession() async {
+  Future<bool> _deleteStoredSession() async {
     try {
       await _secureStorage.delete(key: _sessionKey);
     } on PlatformException {
       try {
         await _secureStorage.deleteAll();
-      } on PlatformException catch (error) {
-        _logStorageFailure('delete', error);
+      } on PlatformException {
+        try {
+          // restore discards the empty entry as unreadable.
+          await _secureStorage.write(key: _sessionKey, value: '');
+        } on PlatformException catch (error) {
+          _logStorageFailure('delete', error);
+          return false;
+        }
       }
     }
+    return true;
   }
 
   Future<void> _abandonSession(String sessionToken) async {

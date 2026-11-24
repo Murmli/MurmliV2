@@ -91,6 +91,11 @@
         "message": "Sign out on this device anyway? The session on the server will then only expire after 30 days without use.",
         "cancel": "Cancel",
         "confirm": "Sign out anyway"
+      },
+      "signOutFailedDialog": {
+        "title": "Sign out failed",
+        "message": "This device could not remove the sign-in. Please try again.",
+        "confirm": "OK"
       }
     },
     "about": {

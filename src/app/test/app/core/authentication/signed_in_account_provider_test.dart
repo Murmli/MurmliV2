@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:convert';
 
 import 'package:clock/clock.dart';
@@ -25,6 +24,7 @@ import '../../../helpers/google_sign_in.dart';
 import '../../../helpers/http_client_adapter.dart';
 import '../../../helpers/preferences.dart';
 import '../../../helpers/provider_container.dart';
+import '../../../helpers/secure_storage.dart';
 import '../../../helpers/sign_in_with_apple.dart';
 
 void main() {
@@ -763,40 +763,68 @@ void main() {
       expect(container.read(failedApiRequestTraceIdProvider), isNull);
     });
 
-    for (final (scenario, failsToClear) in [
-      ('deleting the entry fails', false),
-      ('deleting the entry and clearing the storage fail', true),
+    Future<void> restoreFrom(FailingSecureStorage failingStorage) async {
+      secureStorage = failingStorage;
+      container = createDevelopmentContainer(await reopenPreferences());
+      recordAuthenticationRequests(container);
+      await restore();
+      await pumpEventQueue();
+      container.read(talkerProvider).cleanHistory();
+    }
+
+    Iterable<TalkerData> warnings() => container
+        .read(talkerProvider)
+        .history
+        .where((log) => log.logLevel == LogLevel.warning);
+
+    for (final (scenario, failsToClear, remainingEntries) in [
+      ('deleting the entry fails', false, <String, String>{}),
+      (
+        'deleting the entry and clearing the storage fail',
+        true,
+        {'session': ''},
+      ),
     ]) {
       test(
-        'signOut when $scenario signs out and logs a warning only if the storage keeps the session',
+        'signOut when $scenario signs out without a warning and restore after a restart stays signed out',
         () async {
-          secureStorage = _FailingSecureStorage(
-            storedSession(accountId),
-            failsToClear: failsToClear,
+          await restoreFrom(
+            FailingSecureStorage(
+              storedSession(accountId),
+              failsToClear: failsToClear,
+            ),
           );
-          container = createDevelopmentContainer(await reopenPreferences());
-          recordAuthenticationRequests(container);
-          await restore();
-          await pumpEventQueue();
-          container.read(talkerProvider).cleanHistory();
 
           await container.read(signedInAccountProvider.notifier).signOut();
 
           expect(container.read(signedInAccountProvider), isNull);
-          final warnings = container
-              .read(talkerProvider)
-              .history
-              .where((log) => log.logLevel == LogLevel.warning);
-          if (failsToClear) {
-            expect(secureStorage, storedSession(accountId));
-            expect(warnings.single.message, endsWith(_storageErrorCode));
-          } else {
-            expect(secureStorage, isEmpty);
-            expect(warnings, isEmpty);
-          }
+          expect(secureStorage, remainingEntries);
+          expect(warnings(), isEmpty);
+          container = createDevelopmentContainer(await reopenPreferences());
+          await restore();
+          expect(container.read(signedInAccountProvider), isNull);
         },
       );
     }
+
+    test('signOutLocally when deleting, clearing and overwriting the entry fail returns false, stays signed in, keeps the stored session and logs a warning', () async {
+      await restoreFrom(
+        FailingSecureStorage(
+          storedSession(accountId),
+          failsToClear: true,
+          failsToWrite: true,
+        ),
+      );
+      final signedInAccount = container.read(signedInAccountProvider.notifier);
+
+      final isSignedOut = await signedInAccount.signOutLocally();
+
+      expect(isSignedOut, isFalse);
+      expect(container.read(signedInAccountProvider)?.id, accountId);
+      expect(await signedInAccount.accessToken(), isNotNull);
+      expect(secureStorage, storedSession(accountId));
+      expect(warnings().single.message, endsWith(storageErrorCode));
+    });
 
     test('signInWithEmail stores the session token with the account id and restore after a restart signs in without waiting for the session check', () async {
       recordAuthenticationRequests(container);
@@ -908,37 +936,4 @@ void main() {
       expect(secureStorage, storedSession(accountId));
     });
   });
-}
-
-const _storageErrorCode = 'storage-failure';
-
-class _FailingSecureStorage extends MapBase<String, String> {
-  _FailingSecureStorage(
-    Map<String, String> entries, {
-    required this.failsToClear,
-  }) : _entries = {...entries};
-
-  final Map<String, String> _entries;
-  final bool failsToClear;
-
-  @override
-  String? operator [](Object? key) => _entries[key];
-
-  @override
-  void operator []=(String key, String value) => _entries[key] = value;
-
-  @override
-  Iterable<String> get keys => _entries.keys;
-
-  @override
-  String? remove(Object? key) =>
-      throw PlatformException(code: _storageErrorCode);
-
-  @override
-  void clear() {
-    if (failsToClear) {
-      throw PlatformException(code: _storageErrorCode);
-    }
-    _entries.clear();
-  }
 }

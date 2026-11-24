@@ -19,6 +19,7 @@ import '../../../helpers/authentication.dart';
 import '../../../helpers/crash_reporter.dart';
 import '../../../helpers/preferences.dart';
 import '../../../helpers/pump_app.dart';
+import '../../../helpers/secure_storage.dart';
 
 void main() {
   final germanTranslations = AppLocale.de.buildSync();
@@ -220,6 +221,39 @@ void main() {
         },
       );
     }
+
+    testWidgets(
+      'confirming the sign-out on the device when the device cannot remove the stored session shows the failure popup and stays signed in on the settings page',
+      (tester) async {
+        final container = await openSettings(tester);
+        recordAuthenticationRequests(
+          container,
+          respondFromAuth: (_) async => ResponseBody.fromString('', 503),
+        );
+        FlutterSecureStorage.setMockInitialValues(
+          FailingSecureStorage(
+            storedSession('account'),
+            failsToClear: true,
+            failsToWrite: true,
+          ),
+        );
+        await tapRow(tester, translations.account.signOut);
+
+        await tester.tap(
+          find.text(translations.account.signOutOfflineDialog.confirm),
+        );
+        await tester.pumpAndSettle();
+
+        final failedDialog = translations.account.signOutFailedDialog;
+        expect(find.text(failedDialog.title), findsOneWidget);
+        expect(find.text(failedDialog.message), findsOneWidget);
+        await tester.tap(find.text(failedDialog.confirm));
+        await tester.pumpAndSettle();
+        expect(find.text(failedDialog.title), findsNothing);
+        expect(container.read(signedInAccountProvider), isNotNull);
+        expect(find.byType(SettingsPage), findsOneWidget);
+      },
+    );
 
     testWidgets('about section shows the app version', (tester) async {
       await openSettings(tester);
