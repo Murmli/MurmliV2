@@ -4,8 +4,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../../i18n/strings.g.dart';
+import '../../../core/feedback/popup.dart';
 import '../../../core/router/app_router_provider.dart';
-import '../../../core/widgets/message_dialog.dart';
 import '../providers/apple_disconnect_notice_provider.dart';
 
 class AppleDisconnectNoticeListener extends ConsumerWidget {
@@ -42,11 +42,10 @@ class AppleDisconnectNoticeListener extends ConsumerWidget {
     final translations =
         navigatorContext.t.settings.account.appleDisconnectDialog;
     unawaited(
-      showMessageDialog(
+      showMessagePopup(
         navigatorContext,
         title: translations.title,
         message: translations.message,
-        confirmLabel: translations.confirm,
       ),
     );
   }

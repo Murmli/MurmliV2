@@ -6,7 +6,6 @@ import 'package:material_ui/material_ui.dart';
 import '../../../../i18n/strings.g.dart';
 import '../../../core/authentication/signed_in_account_provider.dart';
 import '../../../core/feedback/popup.dart';
-import '../../../core/widgets/message_dialog.dart';
 import '../providers/account_actions_provider.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
@@ -67,11 +66,10 @@ class AccountSection extends ConsumerWidget {
       return;
     }
     final failedTranslations = context.t.settings.account.signOutFailedDialog;
-    await showMessageDialog(
+    await showMessagePopup(
       context,
       title: failedTranslations.title,
       message: failedTranslations.message,
-      confirmLabel: failedTranslations.confirm,
     );
   }
 

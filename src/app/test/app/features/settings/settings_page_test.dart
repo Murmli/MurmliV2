@@ -248,7 +248,7 @@ void main() {
         final failedDialog = translations.account.signOutFailedDialog;
         expect(find.text(failedDialog.title), findsOneWidget);
         expect(find.text(failedDialog.message), findsOneWidget);
-        await tester.tap(find.text(failedDialog.confirm));
+        await tester.tap(find.text(germanTranslations.requestFailure.close));
         await tester.pumpAndSettle();
         expect(find.text(failedDialog.title), findsNothing);
         expect(container.read(signedInAccountProvider), isNotNull);
@@ -529,7 +529,7 @@ void main() {
 
           final notice = translations.account.appleDisconnectDialog;
           expect(find.text(notice.message), findsOneWidget);
-          await tester.tap(find.text(notice.confirm));
+          await tester.tap(find.text(germanTranslations.requestFailure.close));
           await tester.pumpAndSettle();
           expect(find.text(notice.message), findsNothing);
           expect(find.byType(OnboardingPage), findsOneWidget);

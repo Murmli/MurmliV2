@@ -94,8 +94,7 @@
       },
       "signOutFailedDialog": {
         "title": "Abmelden fehlgeschlagen",
-        "message": "Die Anmeldung konnte auf diesem Gerät nicht entfernt werden. Bitte versuche es erneut.",
-        "confirm": "OK"
+        "message": "Die Anmeldung konnte auf diesem Gerät nicht entfernt werden. Bitte versuche es erneut."
       },
       "deleteAccount": "Konto löschen",
       "deleteDialog": {
@@ -106,8 +105,7 @@
       },
       "appleDisconnectDialog": {
         "title": "Konto gelöscht",
-        "message": "Dein Konto ist gelöscht. Deine Apple-ID ist aber noch mit Murmli verbunden. Trenne die Verbindung in den iPhone-Einstellungen unter Apple-Account › Anmelden mit Apple › Murmli.",
-        "confirm": "OK"
+        "message": "Dein Konto ist gelöscht. Deine Apple-ID ist aber noch mit Murmli verbunden. Trenne die Verbindung in den iPhone-Einstellungen unter Apple-Account › Anmelden mit Apple › Murmli."
       }
     },
     "about": {
