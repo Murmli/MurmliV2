@@ -178,12 +178,7 @@ internal sealed class SyncTestDevice
     public JsonObject CreateBody(params JsonObject[] commands) => CreateBody([TestNoteType.DataTypeName], commands);
 
     public JsonObject CreateBody(IReadOnlyList<string> dataTypes, IReadOnlyList<JsonObject> commands) =>
-        new()
-        {
-            ["token"] = Token,
-            ["dataTypes"] = new JsonArray([.. dataTypes.Select(dataType => JsonValue.Create(dataType))]),
-            ["commands"] = new JsonArray([.. commands.Select(command => command.DeepClone())]),
-        };
+        SyncTestCommands.CreateBody(Token, dataTypes, commands);
 
     public JsonObject CreateNote(
         Guid noteId,
@@ -240,24 +235,8 @@ internal sealed class SyncTestDevice
     public JsonObject SetItemFields(Guid listId, Guid itemId, DateTimeOffset time, JsonObject fields) =>
         CreateCommand("setFields", ShoppingListItemDataType, listId, itemId, time, fields.DeepClone().AsObject());
 
-    public JsonObject CreateCommand(string kind, string dataType, Guid scopeId, Guid recordId, DateTimeOffset time, JsonObject? fields)
-    {
-        var command = new JsonObject
-        {
-            ["id"] = Guid.NewGuid(),
-            ["kind"] = kind,
-            ["scopeId"] = scopeId,
-            ["dataType"] = dataType,
-            ["recordId"] = recordId,
-            ["time"] = time.ToUnixTimeMilliseconds(),
-        };
-        if (fields is not null)
-        {
-            command["fields"] = fields;
-        }
-
-        return command;
-    }
+    public JsonObject CreateCommand(string kind, string dataType, Guid scopeId, Guid recordId, DateTimeOffset time, JsonObject? fields) =>
+        SyncTestCommands.Create(kind, dataType, scopeId, recordId, time, fields);
 
     private async Task<SyncResponse> ReadAsync(HttpResponseMessage response)
     {
