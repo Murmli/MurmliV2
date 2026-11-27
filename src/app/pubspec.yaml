@@ -113,6 +113,7 @@ flutter:
     - assets/fonts/GoogleSans-OFL.txt
     - assets/fonts/PlusJakartaSans-OFL.txt
     - assets/images/google_logo.png
+    - assets/icons/categories/
 
   fonts:
     - family: BricolageGrotesque
