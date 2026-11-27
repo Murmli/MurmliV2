@@ -225,6 +225,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.6"
+  dart_mappable:
+    dependency: "direct main"
+    description:
+      name: dart_mappable
+      sha256: c8f08f9d4ee070b13971e234d2d23240328e7156b6ead7c2dfd567518d2ee8b5
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.11.0"
+  dart_mappable_builder:
+    dependency: "direct dev"
+    description:
+      name: dart_mappable_builder
+      sha256: "92e7eb692653054589ac941e98fc4f7c61fef0548b04d822fc6a3b26d77f5f25"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.11.0"
   dart_style:
     dependency: transitive
     description:
@@ -413,16 +429,8 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  freezed:
-    dependency: "direct dev"
-    description:
-      name: freezed
-      sha256: "541a82723c84298f3ca46a6c2186935aa21ad529ad1f1423d67af18040494f51"
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.0.1"
   freezed_annotation:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: freezed_annotation
       sha256: "7294967ff0a6d98638e7acb774aac3af2550777accd8149c90af5b014e6d44d8"
@@ -1274,6 +1282,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.14"
+  type_plus:
+    dependency: transitive
+    description:
+      name: type_plus
+      sha256: d5d1019471f0d38b91603adb9b5fd4ce7ab903c879d2fbf1a3f80a630a03fcc9
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.1"
   typed_data:
     dependency: transitive
     description:
@@ -1315,7 +1331,7 @@ packages:
     source: hosted
     version: "3.1.6"
   uuid:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: uuid
       sha256: "9b129329f58692f6e6578329498a8fe9fbe98f090beb764ffbb8ee2eadd01dcd"
