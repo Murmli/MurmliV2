@@ -12,6 +12,7 @@ import 'package:app/app/core/authentication/signed_in_account_provider.dart';
 import 'package:app/app/core/crash_reporting/crash_reporter_provider.dart';
 import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/storage/preference_keys.dart';
+import 'package:app/app/core/widgets/slide_to_confirm.dart';
 import 'package:app/app/features/onboarding/onboarding_page.dart';
 import 'package:app/app/features/settings/settings_page.dart';
 import 'package:app/i18n/strings.g.dart';
@@ -43,6 +44,11 @@ void main() {
     await tester.pump();
     await tester.tap(row);
     await tester.pumpAndSettle();
+  }
+
+  Future<void> slideToDelete(WidgetTester tester) async {
+    final slider = find.byType(SlideToConfirm);
+    await tester.drag(slider, Offset(tester.getSize(slider).width, 0));
   }
 
   setUp(() {
@@ -287,7 +293,7 @@ void main() {
       Future<void> confirmDeletion(WidgetTester tester) async {
         final account = englishTranslations.settings.account;
         await tapRow(tester, account.deleteAccount);
-        await tester.tap(find.text(account.deleteDialog.confirm));
+        await slideToDelete(tester);
         await tester.pumpAndSettle();
       }
 
@@ -331,6 +337,29 @@ void main() {
           expect(requests.api.requests, isEmpty);
           expect(container.read(signedInAccountProvider), isNotNull);
           expect(find.byType(SettingsPage), findsOneWidget);
+        },
+      );
+
+      testWidgets(
+        'sliding only partway and releasing sends no request, keeps the dialog open and stays signed in',
+        (tester) async {
+          final container = await openSettings(tester);
+          final requests = recordAuthenticationRequests(container);
+          await tapRow(tester, translations.account.deleteAccount);
+
+          final slider = find.byType(SlideToConfirm);
+          await tester.drag(
+            slider,
+            Offset(tester.getSize(slider).width / 3, 0),
+          );
+          await tester.pumpAndSettle();
+
+          expect(requests.api.requests, isEmpty);
+          expect(
+            find.text(translations.account.deleteDialog.message),
+            findsOneWidget,
+          );
+          expect(container.read(signedInAccountProvider), isNotNull);
         },
       );
 
@@ -442,9 +471,7 @@ void main() {
             respondFromApi: (_) => pendingDeletion.future,
           );
           await tapRow(tester, translations.account.deleteAccount);
-          await tester.tap(
-            find.text(translations.account.deleteDialog.confirm),
-          );
+          await slideToDelete(tester);
           await tester.pump(const Duration(seconds: 1));
 
           await tester.tap(find.text(translations.account.deleteAccount));
@@ -474,7 +501,7 @@ void main() {
           respondFromApi: (_) async => ResponseBody.fromString('', 204),
         );
         await tapRow(tester, translations.account.deleteAccount);
-        await tester.tap(find.text(translations.account.deleteDialog.confirm));
+        await slideToDelete(tester);
         await tester.pumpAndSettle();
       }
 
@@ -517,9 +544,7 @@ void main() {
             respondFromApi: (_) => pendingDeletion.future,
           );
           await tapRow(tester, translations.account.deleteAccount);
-          await tester.tap(
-            find.text(translations.account.deleteDialog.confirm),
-          );
+          await slideToDelete(tester);
           await tester.pump(const Duration(seconds: 1));
 
           await tester.binding.handlePopRoute();

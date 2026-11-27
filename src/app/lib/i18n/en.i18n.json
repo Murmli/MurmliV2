@@ -102,7 +102,7 @@
         "title": "Delete account?",
         "message": "Your account and all associated data will be deleted immediately and permanently. This cannot be undone.",
         "cancel": "Cancel",
-        "confirm": "Delete permanently"
+        "slideToDelete": "Slide to delete"
       },
       "appleDisconnectDialog": {
         "title": "Account deleted",

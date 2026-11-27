@@ -7,6 +7,7 @@ import '../../../../i18n/strings.g.dart';
 import '../../../core/authentication/signed_in_account_provider.dart';
 import '../../../core/widgets/confirmation_dialog.dart';
 import '../../../core/widgets/message_dialog.dart';
+import '../../../core/widgets/slide_to_confirm_dialog.dart';
 import '../providers/account_actions_provider.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
@@ -78,12 +79,12 @@ class AccountSection extends ConsumerWidget {
   Future<void> _deleteAccount(BuildContext context, WidgetRef ref) async {
     final accountActions = ref.read(accountActionsProvider.notifier);
     final translations = context.t.settings.account.deleteDialog;
-    final isConfirmed = await showConfirmationDialog(
+    final isConfirmed = await showSlideToConfirmDialog(
       context,
       title: translations.title,
       message: translations.message,
       cancelLabel: translations.cancel,
-      confirmLabel: translations.confirm,
+      slideLabel: translations.slideToDelete,
     );
     if (isConfirmed) {
       await accountActions.delete();
