@@ -96,6 +96,18 @@
         "title": "Sign out failed",
         "message": "This device could not remove the sign-in. Please try again.",
         "confirm": "OK"
+      },
+      "deleteAccount": "Delete account",
+      "deleteDialog": {
+        "title": "Delete account?",
+        "message": "Your account and all associated data will be deleted immediately and permanently. This cannot be undone.",
+        "cancel": "Cancel",
+        "slideToDelete": "Slide to delete"
+      },
+      "appleDisconnectDialog": {
+        "title": "Account deleted",
+        "message": "Your account is deleted, but your Apple Account is still connected to Murmli. Disconnect it in the iPhone Settings under Apple Account › Sign in with Apple › Murmli.",
+        "confirm": "OK"
       }
     },
     "about": {
