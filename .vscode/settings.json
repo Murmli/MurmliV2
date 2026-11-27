@@ -12,6 +12,6 @@
   "files.exclude": {
     "**/*.g.dart": true,
     "**/*.gr.dart": true,
-    "**/*.freezed.dart": true
+    "**/*.mapper.dart": true
   }
 }

@@ -17,7 +17,7 @@
 - `dart.flutterSdkPath` zeigt auf `src/app/.fvm/flutter_sdk`. Den Link legt `fvm install` in `src/app` an, er ist nicht im Repo. So nutzt die Dart-Extension die Flutter-Version aus `src/app/.fvmrc`, obwohl der Workspace der Repo-Root ist.
 - Format-on-Save für Dart (`dart format`) und C# (Formatter der C#-Extension), damit `dart format --set-exit-if-changed` und `dotnet format --verify-no-changes` in der CI nicht scheitern.
 - `dotnet.defaultSolution` lädt `src/backend/Murmli.Backend.slnx` in C# Dev Kit, ohne Nachfrage beim Öffnen.
-- `files.exclude` blendet `*.g.dart`, `*.gr.dart` und `*.freezed.dart` im Explorer und in der Suche aus. Sie sind generiert und nicht committet.
+- `files.exclude` blendet `*.g.dart`, `*.gr.dart` und `*.mapper.dart` im Explorer und in der Suche aus. Sie sind generiert und nicht committet.
 
 ## Extensions
 
