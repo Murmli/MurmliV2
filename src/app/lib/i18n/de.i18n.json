@@ -83,6 +83,21 @@
       "send": "Fehlerberichte senden",
       "description": "Meldet Abstürze und Fehler, damit wir sie beheben können."
     },
+    "account": {
+      "section": "Konto",
+      "signOut": "Abmelden",
+      "signOutOfflineDialog": {
+        "title": "Server nicht erreichbar",
+        "message": "Auf diesem Gerät trotzdem abmelden? Die Sitzung am Server läuft dann erst nach 30 Tagen ohne Nutzung ab.",
+        "cancel": "Abbrechen",
+        "confirm": "Trotzdem abmelden"
+      },
+      "signOutFailedDialog": {
+        "title": "Abmelden fehlgeschlagen",
+        "message": "Die Anmeldung konnte auf diesem Gerät nicht entfernt werden. Bitte versuche es erneut.",
+        "confirm": "OK"
+      }
+    },
     "about": {
       "section": "Über Murmli",
       "version": "Version",

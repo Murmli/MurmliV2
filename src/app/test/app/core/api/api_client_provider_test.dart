@@ -12,6 +12,7 @@ import 'package:app/app/core/flavor/app_endpoints.dart';
 import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/logging/talker_provider.dart';
 
+import '../../../helpers/authentication.dart';
 import '../../../helpers/http_client_adapter.dart';
 import '../../../helpers/preferences.dart';
 import '../../../helpers/provider_container.dart';
@@ -25,6 +26,7 @@ void main() {
     Flavor? flavor,
   }) async {
     container = createContainer(await createPreferences(), flavor: flavor);
+    await signIn(container);
     final apiClient = container.read(apiClientProvider)
       ..httpClientAdapter = adapter;
     return apiClient;
@@ -116,12 +118,16 @@ void main() {
       HttpOverrides.global = _ProxyHttpOverrides(server.port);
       addTearDown(() => HttpOverrides.global = previousHttpOverrides);
       await startRecordingSentry();
-      // Keeps dio's real adapter, Sentry integrations like sentry_dio set
-      // their headers there.
-      final apiClient = createContainer(
+      container = createContainer(
         await createPreferences(),
         flavor: Flavor.local,
-      ).read(apiClientProvider);
+      );
+      final apiClient = container.read(apiClientProvider);
+      // Keeps dio's real adapter, Sentry integrations like sentry_dio set
+      // their headers there.
+      final realAdapter = apiClient.httpClientAdapter;
+      await signIn(container);
+      apiClient.httpClientAdapter = realAdapter;
 
       await apiClient.get<void>('/v1/example');
 
@@ -142,18 +148,56 @@ void main() {
       ),
       ('a third party', Uri.https('example.com', '/data')),
     ]) {
-      test('request to $targetName carries no traceparent', () async {
-        final adapter = RecordingHttpClientAdapter();
-        final apiClient = await createApiClient(adapter, flavor: Flavor.local);
+      test(
+        'request to $targetName carries neither traceparent nor access token',
+        () async {
+          final adapter = RecordingHttpClientAdapter();
+          final apiClient = await createApiClient(
+            adapter,
+            flavor: Flavor.local,
+          );
 
-        await apiClient.getUri<void>(target);
+          await apiClient.getUri<void>(target);
 
-        expect(
-          adapter.requests.single.headers.containsKey('traceparent'),
-          isFalse,
-        );
-      });
+          final headers = adapter.requests.single.headers;
+          expect(headers.containsKey('traceparent'), isFalse);
+          expect(headers.containsKey('Authorization'), isFalse);
+        },
+      );
     }
+
+    test('request to the API while signed in carries the access token as bearer token', () async {
+      final adapter = RecordingHttpClientAdapter();
+      final apiClient = await createApiClient(adapter);
+
+      await apiClient.get<void>('/v1/example');
+
+      expect(
+        adapter.requests.single.headers['Authorization'],
+        'Bearer $issuedJsonWebToken',
+      );
+    });
+
+    test('request to the API without a session is canceled without sending it or reporting a failure', () async {
+      container = createContainer(await createPreferences());
+      final adapter = RecordingHttpClientAdapter();
+      final apiClient = container.read(apiClientProvider)
+        ..httpClientAdapter = adapter;
+
+      await expectLater(
+        apiClient.get<void>('/v1/example'),
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.type,
+            'type',
+            DioExceptionType.cancel,
+          ),
+        ),
+      );
+
+      expect(adapter.requests, isEmpty);
+      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+    });
 
     test('request to the API logs method, path, status, duration and trace id without query, headers or body', () async {
       final adapter = RecordingHttpClientAdapter(

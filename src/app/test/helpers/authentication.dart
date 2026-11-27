@@ -5,17 +5,41 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:app/app/core/api/api_client_provider.dart';
 import 'package:app/app/core/authentication/auth_client_provider.dart';
+import 'package:app/app/core/authentication/signed_in_account_provider.dart';
+import 'package:app/app/core/logging/talker_provider.dart';
 
 import 'http_client_adapter.dart';
 
 const socialSignInPath = '/api/auth/sign-in/social';
 const emailSignInPath = '/api/auth/sign-in/email';
 const tokenPath = '/api/auth/token';
+const signOutPath = '/api/auth/sign-out';
 const signInEmail = 'test@murmli.de';
 const signInPassword = 'correct-horse-battery-staple';
 const signedSessionToken = 'signed-session-token';
-const jsonWebToken = 'json-web-token';
 const accountId = '0198c5a4-2f6e-7b1d-9c3a-4e5f6a7b8c9d';
+final issuedJsonWebToken = jsonWebTokenIssuedAt(DateTime.utc(2026, 11, 22));
+
+String jsonWebTokenIssuedAt(
+  DateTime issuedAt, {
+  Duration lifetime = const Duration(minutes: 15),
+}) {
+  String encode(Map<String, Object> json) =>
+      base64Url.encode(utf8.encode(jsonEncode(json))).replaceAll('=', '');
+  final issuedAtSeconds = issuedAt.millisecondsSinceEpoch ~/ 1000;
+  return [
+    encode({'alg': 'ES256', 'typ': 'JWT'}),
+    encode({
+      'iat': issuedAtSeconds,
+      'exp': issuedAtSeconds + lifetime.inSeconds,
+    }),
+    'signature',
+  ].join('.');
+}
+
+Map<String, String> storedSession(String accountId) => {
+  'session': '{"sessionToken":"$signedSessionToken","accountId":"$accountId"}',
+};
 
 ResponseBody jsonResponse(
   Object body, {
@@ -38,7 +62,8 @@ Future<ResponseBody> respondAsAuth(RequestOptions request) async =>
           'set-auth-token': [signedSessionToken],
         },
       ),
-      tokenPath => jsonResponse({'token': jsonWebToken}),
+      tokenPath => jsonResponse({'token': issuedJsonWebToken}),
+      signOutPath => jsonResponse({'success': true}),
       _ => ResponseBody.fromString('', 404),
     };
 
@@ -58,4 +83,12 @@ recordAuthenticationRequests(
   container.read(authClientProvider).httpClientAdapter = auth;
   container.read(apiClientProvider).httpClientAdapter = api;
   return (auth: auth, api: api);
+}
+
+Future<void> signIn(ProviderContainer container) async {
+  recordAuthenticationRequests(container);
+  await container
+      .read(signedInAccountProvider.notifier)
+      .signInWithEmail(email: signInEmail, password: signInPassword);
+  container.read(talkerProvider).cleanHistory();
 }

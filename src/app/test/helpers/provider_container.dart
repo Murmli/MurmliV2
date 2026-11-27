@@ -1,3 +1,5 @@
+import 'package:clock/clock.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:talker/talker.dart';
@@ -10,6 +12,7 @@ import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/flavor/flavor_provider.dart';
 import 'package:app/app/core/logging/talker_provider.dart';
 import 'package:app/app/core/storage/shared_preferences_provider.dart';
+import 'package:app/app/core/time/clock_provider.dart';
 
 import 'crash_reporter.dart';
 
@@ -18,18 +21,24 @@ ProviderContainer createContainer(
   Flavor? flavor,
   bool? debugBuild,
   Account? signedInAccount,
-}) => ProviderContainer.test(
-  overrides: [
-    sharedPreferencesProvider.overrideWithValue(preferences),
-    talkerProvider.overrideWithValue(
-      Talker(settings: TalkerSettings(useConsoleLogs: false)),
-    ),
-    crashReporterProvider.overrideWithValue(RecordingCrashReporter()),
-    if (flavor != null) flavorProvider.overrideWithValue(flavor),
-    if (debugBuild != null) debugBuildProvider.overrideWithValue(debugBuild),
-    if (signedInAccount != null)
-      signedInAccountProvider.overrideWithBuild(
-        (ref, notifier) => signedInAccount,
+  Clock? clock,
+  Map<String, String>? secureStorage,
+}) {
+  FlutterSecureStorage.setMockInitialValues(secureStorage ?? {});
+  return ProviderContainer.test(
+    overrides: [
+      sharedPreferencesProvider.overrideWithValue(preferences),
+      talkerProvider.overrideWithValue(
+        Talker(settings: TalkerSettings(useConsoleLogs: false)),
       ),
-  ],
-);
+      crashReporterProvider.overrideWithValue(RecordingCrashReporter()),
+      if (flavor != null) flavorProvider.overrideWithValue(flavor),
+      if (debugBuild != null) debugBuildProvider.overrideWithValue(debugBuild),
+      if (signedInAccount != null)
+        signedInAccountProvider.overrideWithBuild(
+          (ref, notifier) => signedInAccount,
+        ),
+      if (clock != null) appClockProvider.overrideWithValue(clock),
+    ],
+  );
+}

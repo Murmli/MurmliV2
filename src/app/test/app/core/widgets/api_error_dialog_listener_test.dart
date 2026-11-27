@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:app/app/core/api/api_client_provider.dart';
 import 'package:app/i18n/strings.g.dart';
 
+import '../../../helpers/authentication.dart';
 import '../../../helpers/http_client_adapter.dart';
 import '../../../helpers/pump_app.dart';
 
@@ -17,6 +18,8 @@ void main() {
 
   Future<void> pumpAppWithFailingApi(WidgetTester tester) async {
     container = await pumpApp(tester);
+    await tester.runAsync(() => signIn(container));
+    await tester.pumpAndSettle();
     adapter = RecordingHttpClientAdapter(
       respond: (_) async => ResponseBody.fromString('', 500),
     );

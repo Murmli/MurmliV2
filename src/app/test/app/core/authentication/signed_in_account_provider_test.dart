@@ -1,26 +1,36 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:clock/clock.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple_platform_interface/sign_in_with_apple_platform_interface.dart';
 import 'package:talker/talker.dart';
 
+import 'package:app/app/core/api/api_client_provider.dart';
+import 'package:app/app/core/api/failed_api_request_trace_id_provider.dart';
 import 'package:app/app/core/authentication/signed_in_account_provider.dart';
 import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/logging/talker_provider.dart';
+import 'package:app/app/core/storage/preference_keys.dart';
 
 import '../../../helpers/authentication.dart';
 import '../../../helpers/google_sign_in.dart';
+import '../../../helpers/http_client_adapter.dart';
 import '../../../helpers/preferences.dart';
 import '../../../helpers/provider_container.dart';
+import '../../../helpers/secure_storage.dart';
 import '../../../helpers/sign_in_with_apple.dart';
 
 void main() {
   late ProviderContainer container;
+  final signInTime = DateTime.utc(2026, 11, 22, 12);
+  late DateTime now;
 
   Future<SignInResult> signInWithApple() =>
       container.read(signedInAccountProvider.notifier).signInWithApple();
@@ -36,12 +46,42 @@ void main() {
       ((socialSignIn.data as Map<String, Object?>)['idToken']!
           as Map<String, String>)['nonce']!;
 
+  late Map<String, String> secureStorage;
+
+  ProviderContainer createDevelopmentContainer(
+    SharedPreferencesWithCache preferences,
+  ) => createContainer(
+    preferences,
+    flavor: Flavor.development,
+    clock: Clock(() => now),
+    secureStorage: secureStorage,
+  );
+
   setUp(() async {
-    container = createContainer(
-      await createPreferences(),
-      flavor: Flavor.development,
+    now = signInTime;
+    secureStorage = {};
+    container = createDevelopmentContainer(
+      await createPreferences({PreferenceKeys.installed: true}),
     );
   });
+
+  Future<void> restore() =>
+      container.read(signedInAccountProvider.notifier).restore();
+
+  Future<ResponseBody> respondWithTokenIssuedNow(
+    RequestOptions request,
+  ) async => request.uri.path == tokenPath
+      ? jsonResponse({'token': jsonWebTokenIssuedAt(now)})
+      : await respondAsAuth(request);
+
+  Iterable<RequestOptions> tokenRequests(RecordingHttpClientAdapter auth) =>
+      auth.requests.where((request) => request.uri.path == tokenPath);
+
+  Iterable<RequestOptions> exampleRequests(RecordingHttpClientAdapter api) =>
+      api.requests.where((request) => request.uri.path == '/v1/example');
+
+  Future<Response<void>> requestExample() =>
+      container.read(apiClientProvider).get<void>('/v1/example');
 
   group('SignedInAccount', () {
     test('signInWithApple requests no scopes, signs in with the identity token and the hashed nonce, exchanges the session token for a JSON web token and fetches the account with it', () async {
@@ -72,7 +112,10 @@ void main() {
       );
       final accountRequest = requests.api.requests.single;
       expect(accountRequest.uri.path, '/v1/users/me');
-      expect(accountRequest.headers['Authorization'], 'Bearer $jsonWebToken');
+      expect(
+        accountRequest.headers['Authorization'],
+        'Bearer $issuedJsonWebToken',
+      );
     });
 
     test('signInWithApple canceled by the user returns canceled without requests and stays signed out', () async {
@@ -163,17 +206,23 @@ void main() {
       );
     }
 
-    test('signInWithApple with a failed request to the API returns apiRequestFailed and stays signed out', () async {
+    test('signInWithApple with a failed request to the API returns apiRequestFailed, stays signed out and ends the session at auth', () async {
       installFakeSignInWithApple();
-      recordAuthenticationRequests(
+      final requests = recordAuthenticationRequests(
         container,
         respondFromApi: (_) async => ResponseBody.fromString('', 500),
       );
 
       final result = await signInWithApple();
+      await pumpEventQueue();
 
       expect(result, SignInResult.apiRequestFailed);
       expect(container.read(signedInAccountProvider), isNull);
+      expect(secureStorage, isEmpty);
+      final signOut = requests.auth.requests.last;
+      expect(signOut.method, 'POST');
+      expect(signOut.uri.path, signOutPath);
+      expect(signOut.headers['Authorization'], 'Bearer $signedSessionToken');
     });
 
     test('signInWithApple with the API answering without an account id returns failed and stays signed out', () async {
@@ -187,6 +236,7 @@ void main() {
 
       expect(result, SignInResult.failed);
       expect(container.read(signedInAccountProvider), isNull);
+      expect(secureStorage, isEmpty);
     });
 
     test('signInWithGoogle initializes with the development server client ID, signs in with the ID token, exchanges the session token for a JSON web token and fetches the account with it', () async {
@@ -215,7 +265,10 @@ void main() {
       );
       final accountRequest = requests.api.requests.single;
       expect(accountRequest.uri.path, '/v1/users/me');
-      expect(accountRequest.headers['Authorization'], 'Bearer $jsonWebToken');
+      expect(
+        accountRequest.headers['Authorization'],
+        'Bearer $issuedJsonWebToken',
+      );
     });
 
     test('signInWithGoogle canceled by the user returns canceled without requests and stays signed out', () async {
@@ -327,7 +380,10 @@ void main() {
       );
       final accountRequest = requests.api.requests.single;
       expect(accountRequest.uri.path, '/v1/users/me');
-      expect(accountRequest.headers['Authorization'], 'Bearer $jsonWebToken');
+      expect(
+        accountRequest.headers['Authorization'],
+        'Bearer $issuedJsonWebToken',
+      );
     });
 
     for (final (scenario, respondFromAuth, expectedResult) in [
@@ -375,5 +431,509 @@ void main() {
         },
       );
     }
+
+    test('signInWithEmail whose account request the API rejects with 401 and whose renewal auth rejects with 401 returns failed without reporting a failure and stays signed out', () async {
+      var tokenResponses = 0;
+      recordAuthenticationRequests(
+        container,
+        respondFromAuth: (request) async =>
+            request.uri.path == tokenPath && tokenResponses++ > 0
+            ? ResponseBody.fromString('', 401)
+            : await respondAsAuth(request),
+        respondFromApi: (_) async => ResponseBody.fromString('', 401),
+      );
+
+      final result = await signInWithEmail();
+
+      expect(result, SignInResult.failed);
+      expect(container.read(signedInAccountProvider), isNull);
+      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+    });
+
+    test('API request 13 minutes after sign-in reuses the access token of the sign-in', () async {
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: respondWithTokenIssuedNow,
+      );
+      await signInWithEmail();
+      now = signInTime.add(const Duration(minutes: 13));
+
+      await requestExample();
+
+      expect(tokenRequests(requests.auth), hasLength(1));
+      expect(
+        exampleRequests(requests.api).single.headers['Authorization'],
+        'Bearer ${jsonWebTokenIssuedAt(signInTime)}',
+      );
+    });
+
+    test('API request 14 minutes after sign-in renews the access token first and sends the new one', () async {
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: respondWithTokenIssuedNow,
+      );
+      await signInWithEmail();
+      now = signInTime.add(const Duration(minutes: 14));
+
+      await requestExample();
+
+      expect(tokenRequests(requests.auth), hasLength(2));
+      expect(
+        tokenRequests(requests.auth).last.headers['Authorization'],
+        'Bearer $signedSessionToken',
+      );
+      expect(
+        exampleRequests(requests.api).single.headers['Authorization'],
+        'Bearer ${jsonWebTokenIssuedAt(now)}',
+      );
+    });
+
+    test(
+      'parallel API requests with a due access token share one renewal',
+      () async {
+        final requests = recordAuthenticationRequests(
+          container,
+          respondFromAuth: respondWithTokenIssuedNow,
+        );
+        await signInWithEmail();
+        now = signInTime.add(const Duration(minutes: 14));
+
+        await Future.wait([
+          requestExample(),
+          requestExample(),
+          requestExample(),
+        ]);
+
+        expect(tokenRequests(requests.auth), hasLength(2));
+        expect(
+          exampleRequests(requests.api)
+              .map((request) => request.headers['Authorization']),
+          everyElement('Bearer ${jsonWebTokenIssuedAt(now)}'),
+        );
+      },
+    );
+
+    test('API request rejected with 401 renews the access token once, retries with the new one and returns the response without reporting a failure', () async {
+      var exampleResponses = 0;
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: respondWithTokenIssuedNow,
+        respondFromApi: (request) async => request.uri.path == '/v1/example'
+            ? ResponseBody.fromString('', exampleResponses++ == 0 ? 401 : 204)
+            : await respondAsApi(request),
+      );
+      await signInWithEmail();
+      now = signInTime.add(const Duration(minutes: 1));
+
+      final response = await requestExample();
+
+      expect(response.statusCode, 204);
+      expect(tokenRequests(requests.auth), hasLength(2));
+      expect(
+        exampleRequests(requests.api)
+            .map((request) => request.headers['Authorization']),
+        [
+          'Bearer ${jsonWebTokenIssuedAt(signInTime)}',
+          'Bearer ${jsonWebTokenIssuedAt(now)}',
+        ],
+      );
+      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+    });
+
+    test('API request rejected with 401 again after the retry throws the error, retries no further and reports only the retry', () async {
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: respondWithTokenIssuedNow,
+        respondFromApi: (request) async => request.uri.path == '/v1/example'
+            ? ResponseBody.fromString('', 401)
+            : await respondAsApi(request),
+      );
+      await signInWithEmail();
+      now = signInTime.add(const Duration(minutes: 1));
+
+      await expectLater(
+        requestExample(),
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.response?.statusCode,
+            'status code',
+            401,
+          ),
+        ),
+      );
+
+      expect(tokenRequests(requests.auth), hasLength(2));
+      expect(exampleRequests(requests.api), hasLength(2));
+      expect(
+        container.read(failedApiRequestTraceIdProvider),
+        sentTraceId(exampleRequests(requests.api).last),
+      );
+    });
+
+    test('API request whose renewal auth rejects with 401 ends the session and is canceled without reporting a failure', () async {
+      var tokenStatusCode = 200;
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: (request) async =>
+            request.uri.path == tokenPath && tokenStatusCode != 200
+            ? ResponseBody.fromString('', tokenStatusCode)
+            : await respondWithTokenIssuedNow(request),
+      );
+      await signInWithEmail();
+      tokenStatusCode = 401;
+      now = signInTime.add(const Duration(minutes: 14));
+
+      await expectLater(
+        requestExample(),
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.type,
+            'type',
+            DioExceptionType.cancel,
+          ),
+        ),
+      );
+
+      expect(container.read(signedInAccountProvider), isNull);
+      expect(exampleRequests(requests.api), isEmpty);
+      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+    });
+
+    for (final (scenario, failRenewal) in [
+      (
+        'auth failing with 500',
+        (RequestOptions request) async => ResponseBody.fromString('', 500),
+      ),
+      (
+        'auth being unreachable',
+        (RequestOptions request) async => throw DioException.connectionError(
+          requestOptions: request,
+          reason: 'Connection refused',
+        ),
+      ),
+    ]) {
+      test(
+        'API request whose renewal fails with $scenario stays signed in, throws, reports the failure and logs a warning without tokens',
+        () async {
+          var renewalFails = false;
+          final requests = recordAuthenticationRequests(
+            container,
+            respondFromAuth: (request) async =>
+                renewalFails && request.uri.path == tokenPath
+                ? await failRenewal(request)
+                : await respondWithTokenIssuedNow(request),
+          );
+          await signInWithEmail();
+          renewalFails = true;
+          now = signInTime.add(const Duration(minutes: 14));
+
+          await expectLater(requestExample(), throwsA(isA<DioException>()));
+
+          expect(container.read(signedInAccountProvider)?.id, accountId);
+          expect(exampleRequests(requests.api), isEmpty);
+          expect(container.read(failedApiRequestTraceIdProvider), isNotNull);
+          final history = container.read(talkerProvider).history;
+          expect(
+            history.where((log) => log.logLevel == LogLevel.warning),
+            hasLength(1),
+          );
+          expect(
+            history.map((log) => log.message),
+            everyElement(
+              isNot(
+                anyOf(
+                  contains(signedSessionToken),
+                  contains(jsonWebTokenIssuedAt(signInTime)),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    test('API request whose renewal is in flight during sign-out is canceled without being sent and the late access token leaves the account signed out', () async {
+      var renewalIsPending = false;
+      final pendingRenewal = Completer<ResponseBody>();
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: (request) =>
+            renewalIsPending && request.uri.path == tokenPath
+            ? pendingRenewal.future
+            : respondWithTokenIssuedNow(request),
+      );
+      await signInWithEmail();
+      renewalIsPending = true;
+      now = signInTime.add(const Duration(minutes: 14));
+      final example = requestExample();
+      await pumpEventQueue();
+
+      await container.read(signedInAccountProvider.notifier).signOut();
+      pendingRenewal.complete(
+        jsonResponse({'token': jsonWebTokenIssuedAt(now)}),
+      );
+
+      await expectLater(
+        example,
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.type,
+            'type',
+            DioExceptionType.cancel,
+          ),
+        ),
+      );
+      expect(container.read(signedInAccountProvider), isNull);
+      expect(exampleRequests(requests.api), isEmpty);
+    });
+
+    test('renewal of the previous session rejected by auth with 401 after a new sign-in keeps the new session', () async {
+      const previousSessionToken = 'previous-session-token';
+      const newSessionToken = 'new-session-token';
+      var sessionToken = previousSessionToken;
+      var previousRenewalIsPending = false;
+      final pendingPreviousRenewal = Completer<ResponseBody>();
+      recordAuthenticationRequests(
+        container,
+        respondFromAuth: (request) async => switch (request.uri.path) {
+          emailSignInPath => jsonResponse(
+            {'redirect': false, 'token': 'unsigned-session-token'},
+            headers: {
+              'set-auth-token': [sessionToken],
+            },
+          ),
+          tokenPath
+              when previousRenewalIsPending &&
+                  request.headers['Authorization'] ==
+                      'Bearer $previousSessionToken' =>
+            await pendingPreviousRenewal.future,
+          _ => await respondWithTokenIssuedNow(request),
+        },
+      );
+      await signInWithEmail();
+      previousRenewalIsPending = true;
+      now = signInTime.add(const Duration(minutes: 14));
+      final example = requestExample();
+      await pumpEventQueue();
+      await container.read(signedInAccountProvider.notifier).signOut();
+      sessionToken = newSessionToken;
+      await signInWithEmail();
+
+      pendingPreviousRenewal.complete(ResponseBody.fromString('', 401));
+
+      await expectLater(example, throwsA(isA<DioException>()));
+      expect(container.read(signedInAccountProvider)?.id, accountId);
+      expect(secureStorage['session'], contains(newSessionToken));
+    });
+
+    test('API request sent before a sign-out and new sign-in and then rejected with 401 is canceled without a resend under the new session and without reporting a failure', () async {
+      final pendingExampleResponse = Completer<ResponseBody>();
+      final requests = recordAuthenticationRequests(
+        container,
+        respondFromAuth: respondWithTokenIssuedNow,
+        respondFromApi: (request) => request.uri.path == '/v1/example'
+            ? pendingExampleResponse.future
+            : respondAsApi(request),
+      );
+      await signInWithEmail();
+      final example = requestExample();
+      await pumpEventQueue();
+      await container.read(signedInAccountProvider.notifier).signOut();
+      now = signInTime.add(const Duration(minutes: 1));
+      await signInWithEmail();
+
+      pendingExampleResponse.complete(ResponseBody.fromString('', 401));
+
+      await expectLater(
+        example,
+        throwsA(
+          isA<DioException>().having(
+            (error) => error.type,
+            'type',
+            DioExceptionType.cancel,
+          ),
+        ),
+      );
+      expect(
+        exampleRequests(requests.api).single.headers['Authorization'],
+        'Bearer ${jsonWebTokenIssuedAt(signInTime)}',
+      );
+      expect(tokenRequests(requests.auth), hasLength(2));
+      expect(container.read(signedInAccountProvider)?.id, accountId);
+      expect(container.read(failedApiRequestTraceIdProvider), isNull);
+    });
+
+    Future<void> restoreFrom(FailingSecureStorage failingStorage) async {
+      secureStorage = failingStorage;
+      container = createDevelopmentContainer(await reopenPreferences());
+      recordAuthenticationRequests(container);
+      await restore();
+      await pumpEventQueue();
+      container.read(talkerProvider).cleanHistory();
+    }
+
+    Iterable<TalkerData> warnings() => container
+        .read(talkerProvider)
+        .history
+        .where((log) => log.logLevel == LogLevel.warning);
+
+    for (final (scenario, failsToClear, remainingEntries) in [
+      ('deleting the entry fails', false, <String, String>{}),
+      (
+        'deleting the entry and clearing the storage fail',
+        true,
+        {'session': ''},
+      ),
+    ]) {
+      test(
+        'signOut when $scenario signs out without a warning and restore after a restart stays signed out',
+        () async {
+          await restoreFrom(
+            FailingSecureStorage(
+              storedSession(accountId),
+              failsToClear: failsToClear,
+            ),
+          );
+
+          await container.read(signedInAccountProvider.notifier).signOut();
+
+          expect(container.read(signedInAccountProvider), isNull);
+          expect(secureStorage, remainingEntries);
+          expect(warnings(), isEmpty);
+          container = createDevelopmentContainer(await reopenPreferences());
+          await restore();
+          expect(container.read(signedInAccountProvider), isNull);
+        },
+      );
+    }
+
+    test('signOutLocally when deleting, clearing and overwriting the entry fail returns false, stays signed in, keeps the stored session and logs a warning', () async {
+      await restoreFrom(
+        FailingSecureStorage(
+          storedSession(accountId),
+          failsToClear: true,
+          failsToWrite: true,
+        ),
+      );
+      final signedInAccount = container.read(signedInAccountProvider.notifier);
+
+      final isSignedOut = await signedInAccount.signOutLocally();
+
+      expect(isSignedOut, isFalse);
+      expect(container.read(signedInAccountProvider)?.id, accountId);
+      expect(await signedInAccount.accessToken(), isNotNull);
+      expect(secureStorage, storedSession(accountId));
+      expect(warnings().single.message, endsWith(storageErrorCode));
+    });
+
+    test('signInWithEmail stores the session token with the account id and restore after a restart signs in without waiting for the session check', () async {
+      recordAuthenticationRequests(container);
+      await signInWithEmail();
+
+      expect(secureStorage, storedSession(accountId));
+
+      final restarted = createDevelopmentContainer(await reopenPreferences());
+      final pendingSessionCheck = Completer<ResponseBody>();
+      final requests = recordAuthenticationRequests(
+        restarted,
+        respondFromAuth: (_) => pendingSessionCheck.future,
+      );
+      await restarted.read(signedInAccountProvider.notifier).restore();
+
+      expect(restarted.read(signedInAccountProvider)?.id, accountId);
+      await pumpEventQueue();
+      expect(requests.api.requests, isEmpty);
+      final sessionCheck = requests.auth.requests.single;
+      expect(sessionCheck.uri.path, tokenPath);
+      expect(
+        sessionCheck.headers['Authorization'],
+        'Bearer $signedSessionToken',
+      );
+      pendingSessionCheck.complete(
+        jsonResponse({'token': jsonWebTokenIssuedAt(now)}),
+      );
+      await pumpEventQueue();
+    });
+
+    test(
+      'restore without a stored session stays signed out without requests',
+      () async {
+        final requests = recordAuthenticationRequests(container);
+
+        await restore();
+        await pumpEventQueue();
+
+        expect(container.read(signedInAccountProvider), isNull);
+        expect(requests.auth.requests, isEmpty);
+      },
+    );
+
+    for (final unreadableSession in [
+      'not-json',
+      '{"sessionToken":"$signedSessionToken"}',
+    ]) {
+      test(
+        'restore with the unreadable stored session $unreadableSession stays signed out, deletes it and logs a warning without it',
+        () async {
+          secureStorage['session'] = unreadableSession;
+          final requests = recordAuthenticationRequests(container);
+
+          await restore();
+          await pumpEventQueue();
+
+          expect(container.read(signedInAccountProvider), isNull);
+          expect(secureStorage, isEmpty);
+          expect(requests.auth.requests, isEmpty);
+          final log = container.read(talkerProvider).history.single;
+          expect(log.logLevel, LogLevel.warning);
+          expect(
+            log.message,
+            isNot(
+              anyOf(contains(unreadableSession), contains('session-token')),
+            ),
+          );
+        },
+      );
+    }
+
+    test('restore without the installation marker clears the secure storage, sets the marker and stays signed out', () async {
+      final preferences = await createPreferences();
+      container = createDevelopmentContainer(preferences);
+      secureStorage.addAll({...storedSession(accountId), 'other': 'value'});
+
+      await restore();
+
+      expect(container.read(signedInAccountProvider), isNull);
+      expect(secureStorage, isEmpty);
+      expect(preferences.getBool(PreferenceKeys.installed), isTrue);
+    });
+
+    test('restore whose session check auth rejects with 401 signs out and deletes the stored session', () async {
+      secureStorage.addAll(storedSession(accountId));
+      recordAuthenticationRequests(
+        container,
+        respondFromAuth: (_) async => ResponseBody.fromString('', 401),
+      );
+
+      await restore();
+      await pumpEventQueue();
+
+      expect(container.read(signedInAccountProvider), isNull);
+      expect(secureStorage, isEmpty);
+    });
+
+    test('restore whose session check auth fails with 500 stays signed in and keeps the stored session', () async {
+      secureStorage.addAll(storedSession(accountId));
+      recordAuthenticationRequests(
+        container,
+        respondFromAuth: (_) async => ResponseBody.fromString('', 500),
+      );
+
+      await restore();
+      await pumpEventQueue();
+
+      expect(container.read(signedInAccountProvider)?.id, accountId);
+      expect(secureStorage, storedSession(accountId));
+    });
   });
 }
