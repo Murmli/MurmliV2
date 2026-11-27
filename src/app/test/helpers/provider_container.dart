@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:clock/clock.dart';
+import 'package:drift/native.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +11,8 @@ import 'package:app/app/core/authentication/account.dart';
 import 'package:app/app/core/authentication/signed_in_account_provider.dart';
 import 'package:app/app/core/build_mode/debug_build_provider.dart';
 import 'package:app/app/core/crash_reporting/crash_reporter_provider.dart';
+import 'package:app/app/core/database/app_database.dart';
+import 'package:app/app/core/database/app_database_provider.dart';
 import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/flavor/flavor_provider.dart';
 import 'package:app/app/core/logging/talker_provider.dart';
@@ -23,6 +28,7 @@ ProviderContainer createContainer(
   Account? signedInAccount,
   Clock? clock,
   Map<String, String>? secureStorage,
+  AppDatabase? database,
 }) {
   FlutterSecureStorage.setMockInitialValues(secureStorage ?? {});
   return ProviderContainer.test(
@@ -39,6 +45,11 @@ ProviderContainer createContainer(
           (ref, notifier) => signedInAccount,
         ),
       if (clock != null) appClockProvider.overrideWithValue(clock),
+      appDatabaseProvider.overrideWith((ref) {
+        final openedDatabase = database ?? AppDatabase(NativeDatabase.memory());
+        ref.onDispose(() => unawaited(openedDatabase.close()));
+        return openedDatabase;
+      }),
     ],
   );
 }
