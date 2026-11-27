@@ -64,6 +64,78 @@
       }
     }
   },
+  "shoppingList": {
+    "categories": {
+      "vegetables": "Vegetables",
+      "fruits": "Fruits",
+      "bakery": "Bakery",
+      "refrigerated": "Refrigerated",
+      "dairy": "Dairy",
+      "meatAndFish": "Meat & fish",
+      "grainsAndPasta": "Pasta, rice & grains",
+      "cannedGoods": "Canned goods",
+      "brothsAndSauces": "Broths & sauces",
+      "spices": "Spices",
+      "vinegarAndOils": "Vinegars & oils",
+      "bakingAndCooking": "Baking & cooking",
+      "cerealsAndMuesli": "Cereals & muesli",
+      "nuts": "Nuts",
+      "snacks": "Snacks",
+      "sweets": "Sweets",
+      "beverages": "Beverages",
+      "householdGoods": "Household goods",
+      "personalCare": "Personal care",
+      "petFood": "Pet food",
+      "frozen": "Frozen food",
+      "miscellaneous": "Miscellaneous"
+    },
+    "units": {
+      "gram": {
+        "name": "Gram",
+        "abbreviation": "g"
+      },
+      "kilogram": {
+        "name": "Kilogram",
+        "abbreviation": "kg"
+      },
+      "milliliter": {
+        "name": "Milliliter",
+        "abbreviation": "ml"
+      },
+      "liter": {
+        "name": "Liter",
+        "abbreviation": "l"
+      },
+      "piece": {
+        "name": "Piece",
+        "abbreviation": "pc."
+      },
+      "tablespoon": {
+        "name": "Tablespoon",
+        "abbreviation": "tbsp"
+      },
+      "teaspoon": {
+        "name": "Teaspoon",
+        "abbreviation": "tsp"
+      },
+      "pinch": {
+        "name": "Pinch",
+        "abbreviation": "pinch"
+      },
+      "slice": {
+        "name": "Slice",
+        "abbreviation": "slice"
+      },
+      "can": {
+        "name": "Can",
+        "abbreviation": "can"
+      },
+      "package": {
+        "name": "Package",
+        "abbreviation": "pkg."
+      }
+    }
+  },
   "settings": {
     "title": "Settings",
     "language": {
