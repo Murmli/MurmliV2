@@ -53,6 +53,10 @@ dependencies:
   package_info_plus: ^10.2.2
   crypto: ^3.0.8
   uuid: ^4.6.0
+  intl: ^0.20.3
+
+  # Assets
+  flutter_svg: ^2.5.1
 
   # Authentication
   sign_in_with_apple: ^8.2.0
