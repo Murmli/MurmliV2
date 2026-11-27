@@ -19,6 +19,7 @@ Future<ProviderContainer> pumpApp(
   WidgetTester tester, {
   Map<String, Object> storedPreferences = const {},
   Flavor? flavor,
+  bool? debugBuild,
   Account? signedInAccount,
   Future<ResponseBody> Function(RequestOptions request) respondFromAuth =
       respondAsAuth,
@@ -32,6 +33,7 @@ Future<ProviderContainer> pumpApp(
       ...storedPreferences,
     }),
     flavor: flavor,
+    debugBuild: debugBuild,
     secureStorage: {
       if (signedInAccount != null) ...storedSession(signedInAccount.id),
     },

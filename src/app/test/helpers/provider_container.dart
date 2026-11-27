@@ -45,11 +45,14 @@ ProviderContainer createContainer(
           (ref, notifier) => signedInAccount,
         ),
       if (clock != null) appClockProvider.overrideWithValue(clock),
-      appDatabaseProvider.overrideWith((ref) {
-        final openedDatabase = database ?? AppDatabase(NativeDatabase.memory());
-        ref.onDispose(() => unawaited(openedDatabase.close()));
-        return openedDatabase;
-      }),
+      if (database != null)
+        appDatabaseProvider.overrideWithValue(database)
+      else
+        appDatabaseProvider.overrideWith((ref) {
+          final inMemoryDatabase = AppDatabase(NativeDatabase.memory());
+          ref.onDispose(() => unawaited(inMemoryDatabase.close()));
+          return inMemoryDatabase;
+        }),
     ],
   );
 }

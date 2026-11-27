@@ -60,7 +60,8 @@
       },
       "calories": {
         "label": "Calories",
-        "title": "Calories"
+        "title": "Calories",
+        "resetSampleData": "Reset the sample shopping list"
       }
     }
   },
