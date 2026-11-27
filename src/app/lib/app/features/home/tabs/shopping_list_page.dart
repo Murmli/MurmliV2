@@ -4,6 +4,8 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../shopping_list/providers/shopping_list_overview_provider.dart';
+import '../../shopping_list/widgets/shopping_list_all_checked_banner.dart';
+import '../../shopping_list/widgets/shopping_list_checked_section.dart';
 import '../../shopping_list/widgets/shopping_list_empty_state.dart';
 import '../../shopping_list/widgets/shopping_list_group_card.dart';
 import '../../shopping_list/widgets/shopping_list_progress.dart';
@@ -18,26 +20,28 @@ class ShoppingListPage extends ConsumerWidget {
     if (overview == null) {
       return const Center(child: CircularProgressIndicator());
     }
+    if (overview.totalCount == 0) {
+      return const ShoppingListEmptyState();
+    }
     return Column(
       children: [
-        if (overview.totalCount > 0)
-          ShoppingListProgress(
-            checkedCount: overview.checkedCount,
-            totalCount: overview.totalCount,
-          ),
+        ShoppingListProgress(
+          checkedCount: overview.checkedCount,
+          totalCount: overview.totalCount,
+        ),
         Expanded(
-          child: overview.groups.isEmpty
-              ? const ShoppingListEmptyState()
-              : ListView.builder(
-                  padding: EdgeInsetsDirectional.only(
-                    bottom:
-                        MediaQuery.paddingOf(context).bottom +
-                        AppSpacing.space16,
-                  ),
-                  itemCount: overview.groups.length,
-                  itemBuilder: (context, index) =>
-                      ShoppingListGroupCard(group: overview.groups[index]),
-                ),
+          child: ListView(
+            padding: EdgeInsetsDirectional.only(
+              bottom: MediaQuery.paddingOf(context).bottom + AppSpacing.space16,
+            ),
+            children: [
+              if (overview.groups.isEmpty) const ShoppingListAllCheckedBanner(),
+              for (final group in overview.groups)
+                ShoppingListGroupCard(group: group),
+              if (overview.checkedItems.isNotEmpty)
+                ShoppingListCheckedSection(items: overview.checkedItems),
+            ],
+          ),
         ),
       ],
     );

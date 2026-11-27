@@ -141,6 +141,13 @@
     "empty": {
       "title": "No open items",
       "hint": "Your items appear here as soon as you add some."
+    },
+    "checkItem": "Check off $name",
+    "uncheckItem": "Reopen $name",
+    "checkedSection": "Checked · $count",
+    "allChecked": {
+      "title": "All done",
+      "hint": "You have checked off every item."
     }
   },
   "settings": {
