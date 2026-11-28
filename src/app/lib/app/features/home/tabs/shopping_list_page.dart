@@ -6,10 +6,10 @@ import '../../../core/theme/app_spacing.dart';
 import '../../shopping_list/providers/pending_shopping_list_entries_provider.dart';
 import '../../shopping_list/providers/shopping_list_overview_provider.dart';
 import '../../shopping_list/widgets/shopping_list_all_checked_banner.dart';
-import '../../shopping_list/widgets/shopping_list_checked_section.dart';
+import '../../shopping_list/widgets/shopping_list_checked_section_sliver.dart';
 import '../../shopping_list/widgets/shopping_list_empty_state.dart';
 import '../../shopping_list/widgets/shopping_list_entry_field.dart';
-import '../../shopping_list/widgets/shopping_list_group_card.dart';
+import '../../shopping_list/widgets/shopping_list_group_sliver.dart';
 import '../../shopping_list/widgets/shopping_list_pending_entries.dart';
 import '../../shopping_list/widgets/shopping_list_progress.dart';
 
@@ -35,23 +35,33 @@ class ShoppingListPage extends ConsumerWidget {
         Expanded(
           child: overview.totalCount == 0 && pendingEntries.isEmpty
               ? const ShoppingListEmptyState()
-              : ListView(
+              : CustomScrollView(
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsetsDirectional.only(
-                    bottom:
-                        MediaQuery.paddingOf(context).bottom +
-                        AppSpacing.space16,
-                  ),
-                  children: [
+                  slivers: [
                     if (pendingEntries.isNotEmpty)
-                      ShoppingListPendingEntries(texts: pendingEntries),
+                      SliverToBoxAdapter(
+                        child: ShoppingListPendingEntries(
+                          texts: pendingEntries,
+                        ),
+                      ),
                     if (overview.groups.isEmpty && overview.totalCount > 0)
-                      const ShoppingListAllCheckedBanner(),
+                      const SliverToBoxAdapter(
+                        child: ShoppingListAllCheckedBanner(),
+                      ),
                     for (final group in overview.groups)
-                      ShoppingListGroupCard(group: group),
+                      ShoppingListGroupSliver(group: group),
                     if (overview.checkedItems.isNotEmpty)
-                      ShoppingListCheckedSection(items: overview.checkedItems),
+                      ShoppingListCheckedSectionSliver(
+                        items: overview.checkedItems,
+                      ),
+                    SliverPadding(
+                      padding: EdgeInsetsDirectional.only(
+                        bottom:
+                            MediaQuery.paddingOf(context).bottom +
+                            AppSpacing.space16,
+                      ),
+                    ),
                   ],
                 ),
         ),

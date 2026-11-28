@@ -1,0 +1,101 @@
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../../../../i18n/strings.g.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_motion.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../models/shopping_list_item.dart';
+import '../providers/checked_section_expanded_provider.dart';
+import 'shopping_list_item_row.dart';
+import 'shopping_list_pinned_header.dart';
+
+class ShoppingListCheckedSectionSliver extends ConsumerWidget {
+  const ShoppingListCheckedSectionSliver({required this.items, super.key});
+
+  static const _minimumHeaderHeight = 40.0;
+
+  final List<ShoppingListItem> items;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.colors;
+    final isExpanded = ref.watch(checkedSectionExpandedProvider);
+    final titleStyle = TextTheme.of(context).titleSmall!
+        .copyWith(color: colors.inkSecondary);
+    return SliverMainAxisGroup(
+      slivers: [
+        ShoppingListPinnedHeader(
+          contentHeight: math.max(
+            _minimumHeaderHeight,
+            ShoppingListPinnedHeader.lineHeightOf(context, titleStyle),
+          ),
+          child: Semantics(
+            container: true,
+            button: true,
+            header: true,
+            expanded: isExpanded,
+            child: InkWell(
+              onTap: () => unawaited(
+                ref.read(checkedSectionExpandedProvider.notifier).toggle(),
+              ),
+              child: Row(
+                spacing: 6,
+                children: [
+                  AnimatedRotation(
+                    turns: isExpanded ? 0 : -0.25,
+                    duration: AppMotion.short(context),
+                    child: Icon(
+                      Icons.expand_more,
+                      size: 16,
+                      color: colors.inkSecondary,
+                    ),
+                  ),
+                  Text(
+                    context.t.shoppingList.checkedSection(count: items.length),
+                    style: titleStyle,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsetsDirectional.only(
+            start: AppSpacing.screenMargin,
+            end: AppSpacing.screenMargin,
+            bottom: AppSpacing.space12,
+          ),
+          sliver: isExpanded
+              ? SliverToBoxAdapter(
+                  child: Container(
+                    padding: const EdgeInsetsDirectional.only(
+                      start: 4,
+                      end: AppSpacing.space16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceSecondary,
+                      borderRadius: BorderRadius.circular(AppRadius.listGroup),
+                    ),
+                    child: Column(
+                      children: [
+                        for (final (index, item) in items.indexed) ...[
+                          if (index > 0) const Divider(),
+                          ShoppingListItemRow(
+                            item: item,
+                            key: ValueKey(item.id),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                )
+              : null,
+        ),
+      ],
+    );
+  }
+}
