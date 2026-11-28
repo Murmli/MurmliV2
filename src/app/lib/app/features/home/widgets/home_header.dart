@@ -25,14 +25,13 @@ class HomeHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Flexible(
+          Expanded(
             child: Text(
               title,
               style: TextTheme.of(context).titleLarge,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          const Spacer(),
           IconButton(
             tooltip: context.t.home.settingsTooltip,
             icon: Icon(Icons.settings_outlined, color: colors.inkSecondary),
