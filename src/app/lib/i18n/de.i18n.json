@@ -140,7 +140,12 @@
     "recipeCount": "$count Rezepte",
     "empty": {
       "title": "Keine offenen Artikel",
-      "hint": "Hier erscheinen deine Artikel, sobald du welche hinzufügst."
+      "hint": "Trag oben ein, was du brauchst, zum Beispiel „2 Liter Milch“."
+    },
+    "entry": {
+      "hint": "Artikel hinzufügen",
+      "add": "Hinzufügen",
+      "processing": "„$text“ wird verarbeitet"
     },
     "checkItem": "$name abhaken",
     "uncheckItem": "$name wieder öffnen",

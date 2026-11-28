@@ -140,7 +140,12 @@
     "recipeCount": "$count recipes",
     "empty": {
       "title": "No open items",
-      "hint": "Your items appear here as soon as you add some."
+      "hint": "Type what you need above, for example “2 Liter Milch”."
+    },
+    "entry": {
+      "hint": "Add item",
+      "add": "Add",
+      "processing": "Processing “$text”"
     },
     "checkItem": "Check off $name",
     "uncheckItem": "Reopen $name",
