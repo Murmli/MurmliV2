@@ -495,6 +495,7 @@ Hintergrund und Entscheidungen: [docs/app.md](docs/app.md)
 - IDs der App nur aus `newUuid()` (`src/app/lib/app/core/identifiers/new_uuid.dart`).
 - Modelle nur mit dart_mappable, nie freezed.
 - Icon und Farbfamilie einer Marktkategorie nur in `src/app/lib/app/features/shopping_list/market_category_appearance.dart`, Icons nur als SVG unter `src/app/assets/icons/categories/` (eine Datei je `MarketCategory`), angezeigt nur über `MarketCategoryTile`.
+- Den Kopf eines Tabs (Titel, Einstellungen) zeigt die `HomePage` per `HomeHeader`; ein Tab mit `HomeTab.rendersOwnHeader` zeigt denselben `HomeHeader` selbst, kein Tab baut einen eigenen Kopf.
 - In der Einkaufsliste hakt nur die Kachel Artikel ab (über `ShoppingListItemRow`), ein Tap auf den Rest der Zeile öffnet das Artikelmenü (`showShoppingListItemMenu`), Wischen löscht. Aktionen auf einem einzelnen Artikel nur als Einträge in diesem Menü.
 - Freitext der Einkaufsliste nur über `shoppingItemParserProvider` zerlegen, die Artikel daraus nur über `PendingShoppingListEntries.submit` schreiben; die UI kennt `MockShoppingItemParser` nicht.
 - Anmeldung nur über `signedInAccountProvider`. Session-Token und JWT liegen nur dort, den sicheren Speicher (`flutter_secure_storage`) nutzt nur er, das JWT wird nie gespeichert. Im Flavor `local` nur E-Mail und Passwort, weder Apple noch Google, E-Mail und Passwort nie außerhalb von `local`. Sonst Apple nur auf iOS und Google nur auf Android. Anmeldedaten von Apple und Google, Nonces, Tokens, E-Mail und Passwort nie loggen oder an Sentry melden.
