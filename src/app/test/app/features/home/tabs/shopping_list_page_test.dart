@@ -124,6 +124,11 @@ void main() {
     matching: find.byType(ShoppingListItemRow),
   );
 
+  Finder inEntryField(Finder finder) => find.descendant(
+    of: find.byType(ShoppingListEntryField),
+    matching: finder,
+  );
+
   Finder inCheckedSection(String itemName) => find.descendant(
     of: find.byType(ShoppingListCheckedSectionSliver),
     matching: find.text(itemName),
@@ -393,7 +398,7 @@ void main() {
           find.text(shoppingList.checkedSection(count: 1)),
           findsOneWidget,
         );
-        expect(find.text('1/2'), findsOneWidget);
+        expect(find.text('1 / 2'), findsOneWidget);
         expect(storedItem(container, itemId).checked, isTrue);
         expect(find.text(shoppingList.item.delete), findsNothing);
       },
@@ -544,11 +549,11 @@ void main() {
     );
 
     testWidgets(
-      'shows the progress as a counter in the header and announces it in words',
+      'shows the progress as a counter in the entry field and announces it in words',
       (tester) async {
         await openShoppingListTab(tester, debugBuild: true);
 
-        expect(find.text('2/16'), findsOneWidget);
+        expect(inEntryField(find.text('2 / 16')), findsOneWidget);
         expect(
           find.bySemanticsLabel(shoppingList.progress(checked: 2, total: 16)),
           findsOneWidget,
@@ -556,9 +561,40 @@ void main() {
       },
     );
 
+    testWidgets(
+      'hides the progress while text is entered and shows it again after submitting',
+      (tester) async {
+        await openShoppingListTab(tester, debugBuild: true);
+
+        await tester.enterText(find.byType(TextField), 'Milch');
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ShoppingListProgressCounter), findsNothing);
+
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await finishParsing(tester);
+
+        expect(
+          inEntryField(find.byType(ShoppingListProgressCounter)),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'with large text shows the progress without spaces around the slash',
+      (tester) async {
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await openShoppingListTab(tester, debugBuild: true);
+
+        expect(inEntryField(find.text('2/16')), findsOneWidget);
+      },
+    );
+
     testWidgets('updates the progress when an item is checked', (tester) async {
       final container = await openShoppingListTab(tester, debugBuild: true);
-      expect(find.text('2/16'), findsOneWidget);
+      expect(find.text('2 / 16'), findsOneWidget);
 
       final list = container.read(currentShoppingListProvider).requireValue!;
       await check(
@@ -567,7 +603,7 @@ void main() {
         list.items.firstWhere((item) => !item.checked).id,
       );
 
-      expect(find.text('3/16'), findsOneWidget);
+      expect(find.text('3 / 16'), findsOneWidget);
     });
     testWidgets(
       'submitting free text shows it as pending and then adds the parsed item to its category',

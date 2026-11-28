@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -11,16 +10,19 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../providers/pending_shopping_list_entries_provider.dart';
+import 'shopping_list_progress_counter.dart';
 
 class ShoppingListEntryField extends HookConsumerWidget {
   const ShoppingListEntryField({
     required this.listId,
-    this.progress,
+    required this.checkedCount,
+    required this.totalCount,
     super.key,
   });
 
   final String listId;
-  final double? progress;
+  final int checkedCount;
+  final int totalCount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -45,7 +47,7 @@ class ShoppingListEntryField extends HookConsumerWidget {
       ),
       child: Container(
         height: 52,
-        padding: const EdgeInsetsDirectional.only(start: 22, end: 1),
+        padding: const EdgeInsetsDirectional.only(start: 22, end: 5),
         decoration: ShapeDecoration(
           shape: const StadiumBorder(),
           color: colors.surface,
@@ -71,21 +73,25 @@ class ShoppingListEntryField extends HookConsumerWidget {
                 onEditingComplete: submit,
               ),
             ),
-            SizedBox.square(
-              dimension: _ProgressRing.size,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  if (progress case final progress?)
-                    _ProgressRing(progress: progress),
-                  AnimatedSwitcher(
-                    duration: AppMotion.short(context),
-                    child: hasText
-                        ? _AddButton(onTap: submit)
-                        : const _MicrophoneIcon(),
-                  ),
-                ],
-              ),
+            AnimatedSwitcher(
+              duration: AppMotion.short(context),
+              child: totalCount > 0 && !hasText
+                  ? Padding(
+                      padding: const EdgeInsetsDirectional.symmetric(
+                        horizontal: AppSpacing.space8,
+                      ),
+                      child: ShoppingListProgressCounter(
+                        checkedCount: checkedCount,
+                        totalCount: totalCount,
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            AnimatedSwitcher(
+              duration: AppMotion.short(context),
+              child: hasText
+                  ? _AddButton(onTap: submit)
+                  : const _MicrophoneIcon(),
             ),
           ],
         ),
@@ -144,76 +150,4 @@ class _ButtonCircle extends StatelessWidget {
       ),
     );
   }
-}
-
-class _ProgressRing extends StatelessWidget {
-  const _ProgressRing({required this.progress});
-
-  static const size = 50.0;
-
-  final double progress;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return ExcludeSemantics(
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(end: progress),
-        duration: AppMotion.short(context),
-        builder: (context, animatedProgress, _) => CustomPaint(
-          size: const Size.square(size),
-          painter: _ProgressRingPainter(
-            progress: animatedProgress,
-            trackColor: colors.surfaceSecondary,
-            progressColor: colors.onTarget,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ProgressRingPainter extends CustomPainter {
-  const _ProgressRingPainter({
-    required this.progress,
-    required this.trackColor,
-    required this.progressColor,
-  });
-
-  static const _strokeWidth = 3.0;
-
-  final double progress;
-  final Color trackColor;
-  final Color progressColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final ring = Rect.fromCircle(
-      center: size.center(Offset.zero),
-      radius: (size.shortestSide - _strokeWidth) / 2,
-    );
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = _strokeWidth
-      ..color = trackColor;
-    canvas.drawOval(ring, paint);
-    if (progress <= 0) {
-      return;
-    }
-    canvas.drawArc(
-      ring,
-      -math.pi / 2,
-      progress * 2 * math.pi,
-      false,
-      paint
-        ..color = progressColor
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_ProgressRingPainter oldDelegate) =>
-      progress != oldDelegate.progress ||
-      trackColor != oldDelegate.trackColor ||
-      progressColor != oldDelegate.progressColor;
 }

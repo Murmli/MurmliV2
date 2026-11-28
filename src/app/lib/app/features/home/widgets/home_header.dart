@@ -9,15 +9,13 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 
 class HomeHeader extends StatelessWidget {
-  const HomeHeader({required this.title, this.titleTrailing, super.key});
+  const HomeHeader({required this.title, super.key});
 
   final String title;
-  final Widget? titleTrailing;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final titleTrailing = this.titleTrailing;
     return Padding(
       padding: const EdgeInsetsDirectional.fromSTEB(
         AppSpacing.screenMargin,
@@ -34,10 +32,6 @@ class HomeHeader extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (titleTrailing != null) ...[
-            const SizedBox(width: AppSpacing.space8),
-            titleTrailing,
-          ],
           const Spacer(),
           IconButton(
             tooltip: context.t.home.settingsTooltip,

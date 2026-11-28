@@ -13,7 +13,6 @@ import '../../shopping_list/widgets/shopping_list_empty_state.dart';
 import '../../shopping_list/widgets/shopping_list_entry_field.dart';
 import '../../shopping_list/widgets/shopping_list_group_sliver.dart';
 import '../../shopping_list/widgets/shopping_list_pending_entries.dart';
-import '../../shopping_list/widgets/shopping_list_progress_counter.dart';
 import '../home_tab.dart';
 import '../widgets/home_header.dart';
 
@@ -42,15 +41,7 @@ class ShoppingListPage extends ConsumerWidget {
         SliverFloatingHeader(
           child: Material(
             color: background,
-            child: HomeHeader(
-              title: title,
-              titleTrailing: hasItems
-                  ? ShoppingListProgressCounter(
-                      checkedCount: overview.checkedCount,
-                      totalCount: overview.totalCount,
-                    )
-                  : null,
-            ),
+            child: HomeHeader(title: title),
           ),
         ),
         PinnedHeaderSliver(
@@ -58,9 +49,8 @@ class ShoppingListPage extends ConsumerWidget {
             color: background,
             child: ShoppingListEntryField(
               listId: overview.listId,
-              progress: hasItems
-                  ? overview.checkedCount / overview.totalCount
-                  : null,
+              checkedCount: overview.checkedCount,
+              totalCount: overview.totalCount,
             ),
           ),
         ),
