@@ -4,6 +4,7 @@ import 'package:clock/clock.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:hooks_riverpod/misc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:talker/talker.dart';
 
@@ -29,6 +30,7 @@ ProviderContainer createContainer(
   Clock? clock,
   Map<String, String>? secureStorage,
   AppDatabase? database,
+  List<Override> overrides = const [],
 }) {
   FlutterSecureStorage.setMockInitialValues(secureStorage ?? {});
   return ProviderContainer.test(
@@ -53,6 +55,7 @@ ProviderContainer createContainer(
           ref.onDispose(() => unawaited(inMemoryDatabase.close()));
           return inMemoryDatabase;
         }),
+      ...overrides,
     ],
   );
 }
