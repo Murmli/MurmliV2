@@ -11,7 +11,7 @@ analyzer:
     - ios/**
     - "**/*.g.dart"
     - "**/*.gr.dart"
-    - "**/*.freezed.dart"
+    - "**/*.mapper.dart"
 
 linter:
   rules:

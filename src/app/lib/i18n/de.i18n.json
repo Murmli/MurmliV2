@@ -60,7 +60,80 @@
       },
       "calories": {
         "label": "Kalorien",
-        "title": "Kalorien"
+        "title": "Kalorien",
+        "resetSampleData": "Beispieldaten der Einkaufsliste zurücksetzen"
+      }
+    }
+  },
+  "shoppingList": {
+    "categories": {
+      "vegetables": "Gemüse",
+      "fruits": "Früchte",
+      "bakery": "Bäckerei",
+      "refrigerated": "Kühlregal",
+      "dairy": "Milchprodukte",
+      "meatAndFish": "Fleisch & Fisch",
+      "grainsAndPasta": "Pasta, Reis & Getreide",
+      "cannedGoods": "Konserven",
+      "brothsAndSauces": "Brühen & Saucen",
+      "spices": "Gewürze",
+      "vinegarAndOils": "Essige & Öle",
+      "bakingAndCooking": "Backen & Kochen",
+      "cerealsAndMuesli": "Müsli & Cornflakes",
+      "nuts": "Nüsse",
+      "snacks": "Snacks",
+      "sweets": "Süßigkeiten",
+      "beverages": "Getränke",
+      "householdGoods": "Haushaltswaren",
+      "personalCare": "Körperpflege",
+      "petFood": "Tiernahrung",
+      "frozen": "Tiefkühlkost",
+      "miscellaneous": "Verschiedenes"
+    },
+    "units": {
+      "gram": {
+        "name": "Gramm",
+        "abbreviation": "g"
+      },
+      "kilogram": {
+        "name": "Kilogramm",
+        "abbreviation": "kg"
+      },
+      "milliliter": {
+        "name": "Milliliter",
+        "abbreviation": "ml"
+      },
+      "liter": {
+        "name": "Liter",
+        "abbreviation": "l"
+      },
+      "piece": {
+        "name": "Stück",
+        "abbreviation": "Stk."
+      },
+      "tablespoon": {
+        "name": "Esslöffel",
+        "abbreviation": "EL"
+      },
+      "teaspoon": {
+        "name": "Teelöffel",
+        "abbreviation": "TL"
+      },
+      "pinch": {
+        "name": "Prise",
+        "abbreviation": "Prise"
+      },
+      "slice": {
+        "name": "Scheibe",
+        "abbreviation": "Scheibe"
+      },
+      "can": {
+        "name": "Dose",
+        "abbreviation": "Dose"
+      },
+      "package": {
+        "name": "Packung",
+        "abbreviation": "Pck."
       }
     }
   },
