@@ -1619,5 +1619,61 @@ void main() {
         isFalse,
       );
     });
+
+    Future<void> clearCheckedSectionAndConfirm(WidgetTester tester) async {
+      await tester.tap(
+        find.descendant(
+          of: find.byType(ShoppingListCheckedSectionSliver),
+          matching: find.widgetWithText(
+            TextButton,
+            shoppingList.checkedSectionClear,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapDialogButton(tester, menu.deleteCheckedDialog.confirm);
+    }
+
+    Future<void> addOneOpenAndOneCheckedItem(
+      WidgetTester tester,
+      ProviderContainer container,
+    ) async {
+      await addItem(tester, container, 'Milch', MarketCategory.dairy);
+      await check(
+        tester,
+        container,
+        await addItem(tester, container, 'Kaffee', MarketCategory.beverages),
+      );
+    }
+
+    testWidgets(
+      'clearing the checked section after confirming keeps only the open items',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        await addOneOpenAndOneCheckedItem(tester, container);
+
+        await clearCheckedSectionAndConfirm(tester);
+
+        expect(storedItems(container).map((item) => item.name), ['Milch']);
+      },
+    );
+
+    testWidgets(
+      'clearing the collapsed checked section after confirming removes the checked items',
+      (tester) async {
+        final container = await openShoppingListTab(
+          tester,
+          debugBuild: false,
+          storedPreferences: {
+            PreferenceKeys.shoppingListCheckedExpanded: false,
+          },
+        );
+        await addOneOpenAndOneCheckedItem(tester, container);
+
+        await clearCheckedSectionAndConfirm(tester);
+
+        expect(storedItems(container).map((item) => item.name), ['Milch']);
+      },
+    );
   });
 }

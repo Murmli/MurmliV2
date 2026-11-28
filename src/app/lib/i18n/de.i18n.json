@@ -150,6 +150,7 @@
     "checkItem": "$name abhaken",
     "uncheckItem": "$name wieder öffnen",
     "checkedSection": "Abgehakt · $count",
+    "checkedSectionClear": "Leeren",
     "allChecked": {
       "title": "Alles erledigt",
       "hint": "Du hast alle Artikel abgehakt."

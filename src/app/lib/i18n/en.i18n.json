@@ -150,6 +150,7 @@
     "checkItem": "Check off $name",
     "uncheckItem": "Reopen $name",
     "checkedSection": "Checked · $count",
+    "checkedSectionClear": "Clear",
     "allChecked": {
       "title": "All done",
       "hint": "You have checked off every item."
