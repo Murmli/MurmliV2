@@ -143,8 +143,42 @@ void main() {
           .items
           .singleWhere((item) => item.id == itemId);
 
+  final editor = shoppingList.editor;
+
   Future<void> openMenu(WidgetTester tester, String itemName) async {
     await tester.tap(find.text(itemName));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> openEditor(WidgetTester tester, String itemName) async {
+    await openMenu(tester, itemName);
+    await tester.tap(find.text(shoppingList.item.edit));
+    await tester.pumpAndSettle();
+  }
+
+  Finder editorField(String label) => find.widgetWithText(TextField, label);
+
+  Future<void> selectEntry(
+    WidgetTester tester,
+    Finder dropdownMenu,
+    String entry,
+  ) async {
+    await tester.ensureVisible(dropdownMenu);
+    await tester.tap(dropdownMenu);
+    await tester.pumpAndSettle();
+    final entryText = find.text(entry).last;
+    await tester.ensureVisible(entryText);
+    await tester.pumpAndSettle();
+    await tester.tap(entryText);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> tapSave(WidgetTester tester) async {
+    // Rebuilds the editor so the button's callback sees the entered text.
+    await tester.pump();
+    final saveButton = find.widgetWithText(FilledButton, editor.save);
+    await tester.ensureVisible(saveButton);
+    await tester.tap(saveButton);
     await tester.pumpAndSettle();
   }
 
@@ -631,10 +665,164 @@ void main() {
 
         await openMenu(tester, 'Butter');
 
+        expect(find.text(shoppingList.item.edit), findsOneWidget);
         expect(find.text(shoppingList.item.delete), findsOneWidget);
         expect(storedItem(container, itemId).checked, isFalse);
       },
     );
+
+    testWidgets(
+      'editing name, quantity, unit and category stores them and moves the item to the new category',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        final itemId = await addItem(
+          tester,
+          container,
+          'Milch',
+          MarketCategory.dairy,
+        );
+
+        await openEditor(tester, 'Milch');
+        await tester.enterText(editorField(editor.name), 'Orangensaft');
+        await tester.enterText(editorField(editor.quantity), '1,5');
+        await selectEntry(
+          tester,
+          find.byType(DropdownMenu<MeasurementUnit?>),
+          shoppingList.units.liter.name,
+        );
+        await selectEntry(
+          tester,
+          find.byType(DropdownMenu<MarketCategory>),
+          categories.beverages,
+        );
+        await tapSave(tester);
+
+        expect(find.text(editor.title), findsNothing);
+        expect(
+          find.descendant(
+            of: rowOf('Orangensaft'),
+            matching: find.text('1,5 l'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.ancestor(
+              of: find.text(categories.beverages),
+              matching: find.byType(ShoppingListGroupSliver),
+            ),
+            matching: find.text('Orangensaft'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text(categories.dairy), findsNothing);
+        final item = storedItem(container, itemId);
+        expect(item.name, 'Orangensaft');
+        expect(item.quantity, 1.5);
+        expect(item.unit, MeasurementUnit.liter);
+        expect(item.category, MarketCategory.beverages);
+      },
+    );
+
+    testWidgets('removing quantity and unit stores the item without both', (
+      tester,
+    ) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      final itemId = await addItem(
+        tester,
+        container,
+        'Milch',
+        MarketCategory.dairy,
+        quantity: 2,
+        unit: MeasurementUnit.liter,
+      );
+
+      await openEditor(tester, 'Milch');
+      await tester.enterText(editorField(editor.quantity), '');
+      await selectEntry(
+        tester,
+        find.byType(DropdownMenu<MeasurementUnit?>),
+        editor.noUnit,
+      );
+      await tapSave(tester);
+
+      final item = storedItem(container, itemId);
+      expect(item.quantity, isNull);
+      expect(item.unit, isNull);
+      expect(
+        find.descendant(of: rowOf('Milch'), matching: find.byType(Text)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a name of only spaces cannot be saved', (tester) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      final itemId = await addItem(
+        tester,
+        container,
+        'Milch',
+        MarketCategory.dairy,
+      );
+
+      await openEditor(tester, 'Milch');
+      await tester.enterText(editorField(editor.name), '   ');
+      await tapSave(tester);
+
+      expect(find.text(editor.title), findsOneWidget);
+      expect(storedItem(container, itemId).name, 'Milch');
+    });
+
+    testWidgets('a quantity of 0 shows an error and cannot be saved', (
+      tester,
+    ) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      final itemId = await addItem(
+        tester,
+        container,
+        'Milch',
+        MarketCategory.dairy,
+        quantity: 2,
+      );
+
+      await openEditor(tester, 'Milch');
+      await tester.enterText(editorField(editor.quantity), '0');
+      await tester.pump();
+
+      expect(find.text(editor.invalidQuantity), findsOneWidget);
+      await tapSave(tester);
+      expect(find.text(editor.title), findsOneWidget);
+      expect(storedItem(container, itemId).quantity, 2);
+    });
+
+    testWidgets('editing an item with recipes keeps its recipe shares', (
+      tester,
+    ) async {
+      final container = await openShoppingListTab(tester, debugBuild: true);
+      final before = storedItems(container)
+          .singleWhere((item) => item.name == 'Sauerrahm');
+      await tester.scrollUntilVisible(
+        find.text('Sauerrahm'),
+        100,
+        scrollable: find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await Scrollable.ensureVisible(
+        tester.element(find.text('Sauerrahm')),
+        alignment: 0.5,
+      );
+      await tester.pumpAndSettle();
+
+      await openEditor(tester, 'Sauerrahm');
+      await tester.enterText(editorField(editor.name), 'Saure Sahne');
+      await tapSave(tester);
+
+      final item = storedItem(container, before.id);
+      expect(item.name, 'Saure Sahne');
+      expect(item.recipeShares, hasLength(2));
+      expect(item.recipeShares, before.recipeShares);
+    });
 
     testWidgets('deleting through the menu removes the item right away', (
       tester,

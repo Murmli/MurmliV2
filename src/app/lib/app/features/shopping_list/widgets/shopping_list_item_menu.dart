@@ -6,8 +6,9 @@ import '../models/shopping_list_item.dart';
 import '../providers/shopping_list_repository.dart';
 import '../quantity_label.dart';
 import 'market_category_tile.dart';
+import 'shopping_list_item_editor.dart';
 
-enum _ItemAction { delete }
+enum _ItemAction { edit, delete }
 
 Future<void> showShoppingListItemMenu(
   BuildContext context,
@@ -19,8 +20,16 @@ Future<void> showShoppingListItemMenu(
     useRootNavigator: true,
     builder: (_) => _ItemMenu(item: item),
   );
-  if (action == _ItemAction.delete && context.mounted) {
-    await ref.read(shoppingListRepositoryProvider).deleteItem(item.id);
+  if (!context.mounted) {
+    return;
+  }
+  switch (action) {
+    case _ItemAction.edit:
+      await showShoppingListItemEditor(context, item);
+    case _ItemAction.delete:
+      await ref.read(shoppingListRepositoryProvider).deleteItem(item.id);
+    case null:
+      break;
   }
 }
 
@@ -48,6 +57,11 @@ class _ItemMenu extends StatelessWidget {
             subtitle: quantity.isEmpty ? null : Text(quantity),
           ),
           const Divider(),
+          ListTile(
+            leading: const Icon(Icons.edit_outlined),
+            title: Text(translations.shoppingList.item.edit),
+            onTap: () => Navigator.of(context).pop(_ItemAction.edit),
+          ),
           ListTile(
             leading: const Icon(Icons.delete_outline),
             title: Text(translations.shoppingList.item.delete),

@@ -9,6 +9,9 @@ String quantityLabel(
   String languageCode,
 ) => [
   if (item.quantity case final quantity?)
-    NumberFormat('0.###', languageCode).format(quantity),
+    formatQuantity(quantity, languageCode),
   ?item.unit?.abbreviation(translations),
 ].join(' ');
+
+String formatQuantity(double quantity, String languageCode) =>
+    NumberFormat('0.###', languageCode).format(quantity);

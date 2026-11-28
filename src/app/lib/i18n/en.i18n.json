@@ -156,7 +156,18 @@
     },
     "item": {
       "openMenu": "Show actions",
+      "edit": "Edit",
       "delete": "Delete"
+    },
+    "editor": {
+      "title": "Edit item",
+      "name": "Name",
+      "quantity": "Quantity",
+      "unit": "Unit",
+      "noUnit": "No unit",
+      "category": "Category",
+      "save": "Save",
+      "invalidQuantity": "Enter a number greater than 0."
     }
   },
   "settings": {
