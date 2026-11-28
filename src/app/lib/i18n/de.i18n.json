@@ -155,9 +155,13 @@
       "hint": "Du hast alle Artikel abgehakt."
     },
     "item": {
-      "openMenu": "Aktionen anzeigen",
-      "edit": "Bearbeiten",
+      "quickEdit": "Schnell bearbeiten",
+      "openDetails": "Alle Angaben bearbeiten",
       "delete": "Löschen"
+    },
+    "quickEditor": {
+      "details": "Details",
+      "category": "Kategorie ändern"
     },
     "editor": {
       "title": "Artikel bearbeiten",

@@ -155,9 +155,13 @@
       "hint": "You have checked off every item."
     },
     "item": {
-      "openMenu": "Show actions",
-      "edit": "Edit",
+      "quickEdit": "Quick edit",
+      "openDetails": "Edit all details",
       "delete": "Delete"
+    },
+    "quickEditor": {
+      "details": "Details",
+      "category": "Change category"
     },
     "editor": {
       "title": "Edit item",

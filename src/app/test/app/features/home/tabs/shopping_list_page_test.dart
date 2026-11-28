@@ -167,14 +167,15 @@ void main() {
 
   final editor = shoppingList.editor;
 
-  Future<void> openMenu(WidgetTester tester, String itemName) async {
+  final quickEditor = shoppingList.quickEditor;
+
+  Future<void> openQuickEditor(WidgetTester tester, String itemName) async {
     await tester.tap(find.text(itemName));
     await tester.pumpAndSettle();
   }
 
   Future<void> openEditor(WidgetTester tester, String itemName) async {
-    await openMenu(tester, itemName);
-    await tester.tap(find.text(shoppingList.item.edit));
+    await tester.longPress(find.text(itemName));
     await tester.pumpAndSettle();
   }
 
@@ -879,27 +880,253 @@ void main() {
         );
       },
     );
+
+    testWidgets('swiping a row to the start removes the item', (tester) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      await addItem(tester, container, 'Butter', MarketCategory.dairy);
+      await addItem(tester, container, 'Brot', MarketCategory.bakery);
+      final row = rowOf('Butter');
+
+      await tester.drag(row, Offset(-tester.getSize(row).width, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Butter'), findsNothing);
+      expect(storedItems(container).map((item) => item.name), ['Brot']);
+      expect(tester.takeException(), isNull);
+    });
   });
 
-  group('item menu', () {
+  group('quick editor', () {
+    Finder quickSave() => find.byTooltip(editor.save);
+
     testWidgets(
-      'tapping the name of an open item opens its menu without checking it',
+      'tapping the name of an open item opens the quick editor with its values and the name focused without checking it',
       (tester) async {
         final container = await openShoppingListTab(tester, debugBuild: false);
         final itemId = await addItem(
           tester,
           container,
-          'Butter',
+          'Milch',
           MarketCategory.dairy,
+          quantity: 1.5,
+          unit: MeasurementUnit.liter,
         );
 
-        await openMenu(tester, 'Butter');
+        await openQuickEditor(tester, 'Milch');
 
-        expect(find.text(shoppingList.item.edit), findsOneWidget);
-        expect(find.text(shoppingList.item.delete), findsOneWidget);
+        final nameField = find.descendant(
+          of: editorField(editor.name),
+          matching: find.byType(EditableText),
+        );
+        expect(
+          tester.widget<EditableText>(nameField).focusNode.hasFocus,
+          isTrue,
+        );
+        expect(tester.testTextInput.isVisible, isTrue);
+        expect(
+          tester.widget<TextField>(editorField(editor.name)).controller!.text,
+          'Milch',
+        );
+        expect(
+          tester
+              .widget<TextField>(editorField(editor.quantity))
+              .controller!
+              .text,
+          '1,5',
+        );
+        expect(
+          find.descendant(
+            of: editorField(editor.quantity),
+            matching: find.text(shoppingList.units.liter.abbreviation),
+          ),
+          findsOneWidget,
+        );
         expect(storedItem(container, itemId).checked, isFalse);
       },
     );
+
+    testWidgets(
+      'changing name and quantity and pressing done stores them and keeps the unit',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        final itemId = await addItem(
+          tester,
+          container,
+          'Milch',
+          MarketCategory.dairy,
+          quantity: 1,
+          unit: MeasurementUnit.liter,
+        );
+
+        await openQuickEditor(tester, 'Milch');
+        await tester.enterText(editorField(editor.name), 'Hafermilch');
+        await tester.enterText(editorField(editor.quantity), '1,5');
+        await tester.pump();
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+
+        expect(quickSave(), findsNothing);
+        final item = storedItem(container, itemId);
+        expect(item.name, 'Hafermilch');
+        expect(item.quantity, 1.5);
+        expect(item.unit, MeasurementUnit.liter);
+        expect(item.category, MarketCategory.dairy);
+      },
+    );
+
+    testWidgets('a name of only spaces is not stored', (tester) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      final itemId = await addItem(
+        tester,
+        container,
+        'Milch',
+        MarketCategory.dairy,
+      );
+
+      await openQuickEditor(tester, 'Milch');
+      await tester.enterText(editorField(editor.name), '   ');
+      await tester.pump();
+      await tester.tap(quickSave());
+      await tester.pumpAndSettle();
+
+      expect(quickSave(), findsOneWidget);
+      expect(storedItem(container, itemId).name, 'Milch');
+    });
+
+    testWidgets(
+      'a quantity of 0 shows an error and pressing done stores nothing',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        final itemId = await addItem(
+          tester,
+          container,
+          'Milch',
+          MarketCategory.dairy,
+          quantity: 2,
+        );
+
+        await openQuickEditor(tester, 'Milch');
+        await tester.enterText(editorField(editor.quantity), '0');
+        await tester.pump();
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+
+        expect(find.text(editor.invalidQuantity), findsOneWidget);
+        expect(quickSave(), findsOneWidget);
+        expect(storedItem(container, itemId).quantity, 2);
+      },
+    );
+
+    testWidgets(
+      'choosing a category through the tile and saving moves the item to it',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        final itemId = await addItem(
+          tester,
+          container,
+          'Orangensaft',
+          MarketCategory.dairy,
+        );
+
+        await openQuickEditor(tester, 'Orangensaft');
+        await tester.tap(find.byTooltip(quickEditor.category));
+        await tester.pumpAndSettle();
+        final beverages = find.widgetWithText(
+          MenuItemButton,
+          categories.beverages,
+        );
+        await tester.ensureVisible(beverages);
+        await tester.pumpAndSettle();
+        await tester.tap(beverages);
+        await tester.pumpAndSettle();
+        await tester.tap(quickSave());
+        await tester.pumpAndSettle();
+
+        expect(
+          storedItem(container, itemId).category,
+          MarketCategory.beverages,
+        );
+        expect(
+          find.descendant(
+            of: find.ancestor(
+              of: find.text(categories.beverages),
+              matching: find.byType(ShoppingListGroupSliver),
+            ),
+            matching: find.text('Orangensaft'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text(categories.dairy), findsNothing);
+      },
+    );
+
+    testWidgets('the delete button removes the item right away', (
+      tester,
+    ) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      await addItem(tester, container, 'Butter', MarketCategory.dairy);
+      await addItem(tester, container, 'Brot', MarketCategory.bakery);
+
+      await openQuickEditor(tester, 'Butter');
+      await tester.tap(find.byTooltip(shoppingList.item.delete));
+      await tester.pumpAndSettle();
+
+      expect(quickSave(), findsNothing);
+      expect(find.text('Butter'), findsNothing);
+      expect(storedItems(container).map((item) => item.name), ['Brot']);
+    });
+
+    testWidgets('dismissing the quick editor discards the changes', (
+      tester,
+    ) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      final itemId = await addItem(
+        tester,
+        container,
+        'Milch',
+        MarketCategory.dairy,
+      );
+
+      await openQuickEditor(tester, 'Milch');
+      await tester.enterText(editorField(editor.name), 'Hafermilch');
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pumpAndSettle();
+
+      expect(quickSave(), findsNothing);
+      expect(storedItem(container, itemId).name, 'Milch');
+      expect(find.text('Milch'), findsOneWidget);
+    });
+
+    testWidgets('details opens the detailed editor', (tester) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      await addItem(tester, container, 'Milch', MarketCategory.dairy);
+
+      await openQuickEditor(tester, 'Milch');
+      await tester.tap(find.text(quickEditor.details));
+      await tester.pumpAndSettle();
+
+      expect(quickSave(), findsNothing);
+      expect(find.text(editor.title), findsOneWidget);
+    });
+  });
+
+  group('detailed editor', () {
+    testWidgets('long pressing the name of an item opens the detailed editor', (
+      tester,
+    ) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      final itemId = await addItem(
+        tester,
+        container,
+        'Milch',
+        MarketCategory.dairy,
+      );
+
+      await openEditor(tester, 'Milch');
+
+      expect(find.text(editor.title), findsOneWidget);
+      expect(storedItem(container, itemId).checked, isFalse);
+    });
 
     testWidgets(
       'editing name, quantity, unit and category stores them and moves the item to the new category',
@@ -1049,53 +1276,6 @@ void main() {
       expect(item.name, 'Saure Sahne');
       expect(item.recipeShares, hasLength(2));
       expect(item.recipeShares, before.recipeShares);
-    });
-
-    testWidgets('deleting through the menu removes the item right away', (
-      tester,
-    ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
-      await addItem(tester, container, 'Butter', MarketCategory.dairy);
-      await addItem(tester, container, 'Brot', MarketCategory.bakery);
-
-      await openMenu(tester, 'Butter');
-      await tester.tap(find.text(shoppingList.item.delete));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Butter'), findsNothing);
-      expect(storedItems(container).map((item) => item.name), ['Brot']);
-    });
-
-    testWidgets('deleting a checked item through the menu removes it', (
-      tester,
-    ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
-      await check(
-        tester,
-        container,
-        await addItem(tester, container, 'Kaffee', MarketCategory.beverages),
-      );
-
-      await openMenu(tester, 'Kaffee');
-      await tester.tap(find.text(shoppingList.item.delete));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Kaffee'), findsNothing);
-      expect(storedItems(container), isEmpty);
-    });
-
-    testWidgets('swiping a row to the start removes the item', (tester) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
-      await addItem(tester, container, 'Butter', MarketCategory.dairy);
-      await addItem(tester, container, 'Brot', MarketCategory.bakery);
-      final row = rowOf('Butter');
-
-      await tester.drag(row, Offset(-tester.getSize(row).width, 0));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Butter'), findsNothing);
-      expect(storedItems(container).map((item) => item.name), ['Brot']);
-      expect(tester.takeException(), isNull);
     });
   });
 }

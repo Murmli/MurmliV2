@@ -17,7 +17,8 @@ import '../providers/recently_toggled_item_provider.dart';
 import '../providers/shopping_list_repository.dart';
 import '../quantity_label.dart';
 import 'market_category_tile.dart';
-import 'shopping_list_item_menu.dart';
+import 'shopping_list_item_editor.dart';
+import 'shopping_list_item_quick_editor.dart';
 
 class ShoppingListItemRow extends HookConsumerWidget {
   ShoppingListItemRow({
@@ -150,12 +151,20 @@ class ShoppingListItemRow extends HookConsumerWidget {
                         child: MergeSemantics(
                           child: Semantics(
                             button: true,
-                            onTapHint: context.t.shoppingList.item.openMenu,
+                            onTapHint: context.t.shoppingList.item.quickEdit,
+                            onLongPressHint:
+                                context.t.shoppingList.item.openDetails,
                             child: Material(
                               type: MaterialType.transparency,
                               child: InkWell(
                                 onTap: () => unawaited(
-                                  showShoppingListItemMenu(context, ref, item),
+                                  showShoppingListItemQuickEditor(
+                                    context,
+                                    item,
+                                  ),
+                                ),
+                                onLongPress: () => unawaited(
+                                  showShoppingListItemEditor(context, item),
                                 ),
                                 child: Row(
                                   spacing: 10,
