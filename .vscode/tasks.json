@@ -9,6 +9,13 @@
       "problemMatcher": []
     },
     {
+      "label": "App: database schema check",
+      "type": "shell",
+      "command": "fvm dart run drift_dev make-migrations && git add --intent-to-add drift_schemas test/drift lib/app/core/database && git diff --exit-code -- drift_schemas test/drift lib/app/core/database",
+      "options": { "cwd": "${workspaceFolder}/src/app" },
+      "problemMatcher": []
+    },
+    {
       "label": "App: format check",
       "type": "shell",
       "command": "fvm dart format --output=none --set-exit-if-changed .",
