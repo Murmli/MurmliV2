@@ -179,7 +179,7 @@ void main() {
       await tester.tap(resetButton());
       await tester.pumpAndSettle();
       await tester.tap(
-        find.widgetWithText(TextButton, categoryOrder.resetDialog.confirm).last,
+        find.widgetWithText(FilledButton, categoryOrder.resetDialog.confirm),
       );
       await tester.pumpAndSettle();
 

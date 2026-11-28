@@ -478,7 +478,7 @@ void main() {
           await tester.pump(const Duration(seconds: 1));
 
           expect(requests.api.requests, hasLength(1));
-          expect(find.byType(AlertDialog), findsNothing);
+          expect(find.byType(Dialog), findsNothing);
           expect(find.byType(CircularProgressIndicator), findsOneWidget);
           pendingDeletion.complete(ResponseBody.fromString('', 204));
           await tester.pumpAndSettle();

@@ -38,6 +38,7 @@ class CategoryOrderPage extends HookConsumerWidget {
       final dialogTranslations = translations.categoryOrder.resetDialog;
       final isConfirmed = await showConfirmationDialog(
         context,
+        icon: Icons.restart_alt,
         title: dialogTranslations.title,
         message: dialogTranslations.message,
         cancelLabel: dialogTranslations.cancel,

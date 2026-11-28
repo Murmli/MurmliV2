@@ -5,6 +5,8 @@ import 'app_spacing.dart';
 import 'app_typography.dart';
 
 abstract final class AppTheme {
+  static const _scrim = Color(0x7317110C);
+
   static final light = _build(AppColors.light, Brightness.light);
   static final dark = _build(AppColors.dark, Brightness.dark);
 
@@ -134,6 +136,17 @@ abstract final class AppTheme {
           2,
         ),
         avatarBoxConstraints: BoxConstraints.tight(const Size.square(18)),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: colors.surface,
+        surfaceTintColor: Colors.transparent,
+        barrierColor: _scrim,
+        insetPadding: const EdgeInsets.all(AppSpacing.space24),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(
+            Radius.circular(AppRadius.featureCard),
+          ),
+        ),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: colors.surface,

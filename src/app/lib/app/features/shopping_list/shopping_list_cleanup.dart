@@ -21,6 +21,8 @@ Future<void> confirmAndDeleteCheckedItems(
   final dialog = context.t.shoppingList.menu.deleteCheckedDialog;
   final confirmed = await showConfirmationDialog(
     context,
+    icon: Icons.checklist_rtl,
+    isDestructive: true,
     title: dialog.title,
     message: dialog.message(n: count),
     cancelLabel: dialog.cancel,
@@ -42,6 +44,8 @@ Future<void> confirmAndDeleteAllItems(
   final dialog = context.t.shoppingList.menu.deleteAllDialog;
   final confirmed = await showConfirmationDialog(
     context,
+    icon: Icons.delete_sweep_outlined,
+    isDestructive: true,
     title: dialog.title,
     message: dialog.message(n: list.items.length),
     cancelLabel: dialog.cancel,

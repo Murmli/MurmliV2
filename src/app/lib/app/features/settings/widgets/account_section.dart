@@ -55,6 +55,7 @@ class AccountSection extends ConsumerWidget {
     final offlineTranslations = context.t.settings.account.signOutOfflineDialog;
     final isConfirmed = await showConfirmationDialog(
       context,
+      icon: Icons.logout,
       title: offlineTranslations.title,
       message: offlineTranslations.message,
       cancelLabel: offlineTranslations.cancel,
@@ -81,6 +82,7 @@ class AccountSection extends ConsumerWidget {
     final translations = context.t.settings.account.deleteDialog;
     final isConfirmed = await showSlideToConfirmDialog(
       context,
+      icon: Icons.delete_outline,
       title: translations.title,
       message: translations.message,
       cancelLabel: translations.cancel,

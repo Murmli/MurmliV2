@@ -1473,7 +1473,7 @@ void main() {
         find.descendant(of: find.byType(BottomSheet), matching: finder);
 
     Finder inDialog(Finder finder) =>
-        find.descendant(of: find.byType(AlertDialog), matching: finder);
+        find.descendant(of: find.byType(Dialog), matching: finder);
 
     Finder menuEntry(String title) =>
         inMenu(find.widgetWithText(ListTile, title));
@@ -1484,7 +1484,7 @@ void main() {
     }
 
     Future<void> tapDialogButton(WidgetTester tester, String label) async {
-      await tester.tap(inDialog(find.widgetWithText(TextButton, label)));
+      await tester.tap(inDialog(find.text(label)));
       await tester.pumpAndSettle();
     }
 
