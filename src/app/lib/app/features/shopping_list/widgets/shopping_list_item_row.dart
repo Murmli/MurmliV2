@@ -17,6 +17,7 @@ import '../providers/recently_toggled_item_provider.dart';
 import '../providers/shopping_list_repository.dart';
 import '../quantity_label.dart';
 import 'market_category_tile.dart';
+import 'recipe_dot.dart';
 import 'shopping_list_item_editor.dart';
 import 'shopping_list_item_menu.dart';
 
@@ -295,7 +296,7 @@ class _RecipeLine extends StatelessWidget {
       spacing: 6,
       children: [
         ExcludeSemantics(
-          child: hasSingleRecipe ? const _RecipeDot() : const _RecipeDotPair(),
+          child: hasSingleRecipe ? const RecipeDot() : const _RecipeDotPair(),
         ),
         Flexible(
           child: Text(
@@ -328,36 +329,12 @@ class _RecipeDotPair extends StatelessWidget {
     child: Stack(
       clipBehavior: Clip.none,
       children: [
-        const PositionedDirectional(start: 0, child: _RecipeDot()),
+        const PositionedDirectional(start: 0, child: RecipeDot()),
         PositionedDirectional(
           start: 4,
-          child: _RecipeDot(border: context.colors.surface),
+          child: RecipeDot(border: context.colors.surface),
         ),
       ],
-    ),
-  );
-}
-
-class _RecipeDot extends StatelessWidget {
-  const _RecipeDot({this.border});
-
-  final Color? border;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 6,
-    height: 6,
-    decoration: BoxDecoration(
-      color: context.colors.primary,
-      shape: BoxShape.circle,
-      border: switch (border) {
-        final color? => Border.all(
-          color: color,
-          width: 1.5,
-          strokeAlign: BorderSide.strokeAlignOutside,
-        ),
-        null => null,
-      },
     ),
   );
 }

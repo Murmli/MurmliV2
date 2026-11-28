@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../providers/shopping_list_overview_provider.dart';
 import '../shopping_list_cleanup.dart';
+import 'count_badge.dart';
 import 'shopping_list_sheet_entry.dart';
 
 enum _ListAction { sortCategories, deleteChecked, deleteAll, settings }
@@ -153,48 +154,10 @@ class _CountedEntry extends StatelessWidget {
       icon: icon,
       label: label,
       onTap: hasItems ? onTap : null,
-      trailing: hasItems ? _CountBadge(count) : null,
+      trailing: hasItems ? CountBadge(count) : null,
       semanticsValue: hasItems
           ? context.t.shoppingList.menu.itemCount(n: count)
           : null,
-    );
-  }
-}
-
-class _CountBadge extends StatelessWidget {
-  const _CountBadge(this.count);
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-      child: DecoratedBox(
-        decoration: ShapeDecoration(
-          color: colors.surfaceSecondary,
-          shape: const StadiumBorder(),
-        ),
-        child: Padding(
-          padding: const EdgeInsetsDirectional.symmetric(
-            horizontal: AppSpacing.space8,
-          ),
-          child: Center(
-            widthFactor: 1,
-            heightFactor: 1,
-            child: Text(
-              '$count',
-              style: TextTheme.of(context).labelSmall!.copyWith(
-                fontSize: 12,
-                height: 16 / 12,
-                fontWeight: FontWeight.w700,
-                color: colors.inkSecondary,
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

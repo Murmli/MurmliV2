@@ -1,15 +1,20 @@
 import 'dart:async';
 
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../../i18n/strings.g.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../models/recipe_share.dart';
 import '../models/shopping_list_item.dart';
 import '../providers/shopping_list_repository.dart';
 import '../quantity_label.dart';
+import 'count_badge.dart';
 import 'market_category_tile.dart';
+import 'recipe_dot.dart';
 import 'shopping_list_item_editor.dart';
 import 'shopping_list_sheet_entry.dart';
 
@@ -116,11 +121,14 @@ class _ItemMenu extends ConsumerWidget {
             icon: Icons.swap_horiz,
             label: itemTranslations.alternative,
           ),
-          if (item.recipeShares.isNotEmpty)
+          if (item.recipeShares case [final recipeShare])
             _MenuEntry(
               icon: Icons.menu_book_outlined,
               label: itemTranslations.showRecipe,
-            ),
+              subtitle: recipeShare.recipeTitle,
+            )
+          else if (item.recipeShares.isNotEmpty)
+            _RecipesEntry(recipeShares: item.recipeShares),
           _MenuEntry(
             icon: Icons.delete_outline,
             label: itemTranslations.delete,
@@ -138,12 +146,14 @@ class _MenuEntry extends StatelessWidget {
   const _MenuEntry({
     required this.icon,
     required this.label,
+    this.subtitle,
     this.isDestructive = false,
     this.onTap,
   });
 
   final IconData icon;
   final String label;
+  final String? subtitle;
   final bool isDestructive;
   final VoidCallback? onTap;
 
@@ -153,6 +163,7 @@ class _MenuEntry extends StatelessWidget {
     return ShoppingListSheetEntry(
       icon: icon,
       label: label,
+      subtitle: subtitle,
       isDestructive: isDestructive,
       onTap: onTap,
       trailing: isPlaceholder ? const _ComingSoonPill() : null,
@@ -161,6 +172,102 @@ class _MenuEntry extends StatelessWidget {
           : null,
     );
   }
+}
+
+class _RecipesEntry extends HookWidget {
+  const _RecipesEntry({required this.recipeShares});
+
+  final List<RecipeShare> recipeShares;
+
+  @override
+  Widget build(BuildContext context) {
+    final isExpanded = useState(false);
+    final duration = AppMotion.short(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ShoppingListSheetEntry(
+          icon: Icons.menu_book_outlined,
+          label: context.t.shoppingList.item.showRecipes,
+          onTap: () => isExpanded.value = !isExpanded.value,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: AppSpacing.space8,
+            children: [
+              CountBadge(recipeShares.length),
+              AnimatedRotation(
+                turns: isExpanded.value ? 0.5 : 0,
+                duration: duration,
+                child: Icon(
+                  Icons.expand_more,
+                  color: context.colors.inkSecondary,
+                ),
+              ),
+            ],
+          ),
+          semanticsValue: context.t.shoppingList.recipeCount(
+            count: recipeShares.length,
+          ),
+          isExpanded: isExpanded.value,
+        ),
+        AnimatedSize(
+          duration: duration,
+          alignment: AlignmentDirectional.topStart,
+          child: isExpanded.value
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final recipeShare in recipeShares)
+                      _RecipeRow(title: recipeShare.recipeTitle),
+                  ],
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+      ],
+    );
+  }
+}
+
+/// A placeholder until recipes can be opened.
+class _RecipeRow extends StatelessWidget {
+  const _RecipeRow({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    button: true,
+    enabled: false,
+    label: context.t.shoppingList.item.comingSoonLabel(action: title),
+    excludeSemantics: true,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 40),
+      child: Padding(
+        // Lines the dot up with the labels next to the 40 px icon tiles.
+        padding: const EdgeInsetsDirectional.only(start: 54),
+        child: Row(
+          spacing: AppSpacing.space8,
+          children: [
+            const RecipeDot(),
+            Expanded(
+              child: Text(
+                title,
+                style: TextTheme.of(context).bodyMedium!.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.inkSecondary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const _ComingSoonPill(),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _ComingSoonPill extends StatelessWidget {

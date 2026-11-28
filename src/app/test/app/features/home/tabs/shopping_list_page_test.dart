@@ -1084,17 +1084,25 @@ void main() {
   });
 
   group('item menu', () {
-    Future<void> showSauerrahm(WidgetTester tester) async {
+    Future<void> showSampleItem(WidgetTester tester, String itemName) async {
       await tester.scrollUntilVisible(
-        find.text('Sauerrahm'),
+        find.text(itemName),
         100,
         scrollable: listScrollable,
       );
       await Scrollable.ensureVisible(
-        tester.element(find.text('Sauerrahm')),
+        tester.element(find.text(itemName)),
         alignment: 0.5,
       );
       await tester.pumpAndSettle();
+    }
+
+    Future<void> openSampleItemMenu(
+      WidgetTester tester,
+      String itemName,
+    ) async {
+      await showSampleItem(tester, itemName);
+      await openItemMenu(tester, itemName);
     }
 
     testWidgets(
@@ -1133,16 +1141,69 @@ void main() {
       expect(inSheet(find.text('Milch')), findsOneWidget);
     });
 
-    testWidgets('shows the recipe action for an item with recipes', (
-      tester,
-    ) async {
-      await openShoppingListTab(tester, debugBuild: true);
-      await showSauerrahm(tester);
+    testWidgets(
+      'for an item with one recipe shows the recipe action with the recipe title',
+      (tester) async {
+        await openShoppingListTab(tester, debugBuild: true);
 
-      await openItemMenu(tester, 'Sauerrahm');
+        await openSampleItemMenu(tester, 'Paprika');
 
-      expect(inSheet(find.text(itemMenu.showRecipe)), findsOneWidget);
-    });
+        expect(inSheet(find.text(itemMenu.showRecipe)), findsOneWidget);
+        expect(inSheet(find.text('Gulasch')), findsOneWidget);
+        expect(inSheet(find.text(itemMenu.showRecipes)), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'for an item with several recipes shows their count and toggles their titles on tap',
+      (tester) async {
+        await openShoppingListTab(tester, debugBuild: true);
+
+        await openSampleItemMenu(tester, 'Sauerrahm');
+
+        expect(inSheet(find.text(itemMenu.showRecipe)), findsNothing);
+        expect(inSheet(find.text(itemMenu.showRecipes)), findsOneWidget);
+        expect(inSheet(find.text('2')), findsOneWidget);
+        expect(inSheet(find.text('Gulasch')), findsNothing);
+        expect(inSheet(find.text('Ofenkartoffeln')), findsNothing);
+
+        await tester.tap(inSheet(find.text(itemMenu.showRecipes)));
+        await tester.pumpAndSettle();
+
+        expect(inSheet(find.text('Gulasch')), findsOneWidget);
+        expect(inSheet(find.text('Ofenkartoffeln')), findsOneWidget);
+
+        await tester.tap(inSheet(find.text(itemMenu.showRecipes)));
+        await tester.pumpAndSettle();
+
+        expect(inSheet(find.text('Gulasch')), findsNothing);
+        expect(inSheet(find.text('Ofenkartoffeln')), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'a listed recipe is announced as coming soon and tapping it keeps the menu open and changes nothing',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: true);
+        final itemsBefore = storedItems(container);
+        await openSampleItemMenu(tester, 'Sauerrahm');
+        await tester.tap(inSheet(find.text(itemMenu.showRecipes)));
+        await tester.pumpAndSettle();
+
+        expect(
+          tester.getSemantics(
+            find.bySemanticsLabel(itemMenu.comingSoonLabel(action: 'Gulasch')),
+          ),
+          isSemantics(isButton: true, isEnabled: false, hasTapAction: false),
+        );
+        await tester.tap(inSheet(find.text('Gulasch')));
+        await tester.pumpAndSettle();
+
+        expect(inSheet(find.text('Ofenkartoffeln')), findsOneWidget);
+        expect(find.text(editor.title), findsNothing);
+        expect(storedItems(container), itemsBefore);
+      },
+    );
 
     testWidgets('edit closes the menu and opens the editor', (tester) async {
       final container = await openShoppingListTab(tester, debugBuild: false);
@@ -1177,10 +1238,9 @@ void main() {
       'the placeholders are announced as coming soon and tapping them keeps the menu open and changes nothing',
       (tester) async {
         final container = await openShoppingListTab(tester, debugBuild: true);
-        await showSauerrahm(tester);
         final itemsBefore = storedItems(container);
 
-        await openItemMenu(tester, 'Sauerrahm');
+        await openSampleItemMenu(tester, 'Paprika');
         for (final placeholder in [itemMenu.alternative, itemMenu.showRecipe]) {
           expect(
             tester.getSemantics(

@@ -8,21 +8,27 @@ class ShoppingListSheetEntry extends StatelessWidget {
   const ShoppingListSheetEntry({
     required this.icon,
     required this.label,
+    this.subtitle,
     this.isDestructive = false,
     this.onTap,
     this.trailing,
     this.semanticsLabel,
     this.semanticsValue,
+    this.isExpanded,
     super.key,
   });
 
   final IconData icon;
   final String label;
+  final String? subtitle;
   final bool isDestructive;
   final VoidCallback? onTap;
   final Widget? trailing;
   final String? semanticsLabel;
   final String? semanticsValue;
+
+  /// Non-null marks the entry as an expander in the given state.
+  final bool? isExpanded;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +45,8 @@ class ShoppingListSheetEntry extends StatelessWidget {
       button: true,
       enabled: !isDisabled,
       label: semanticsLabel ?? label,
-      value: semanticsValue,
+      value: semanticsValue ?? subtitle,
+      expanded: isExpanded,
       onTap: onTap,
       excludeSemantics: true,
       child: Material(
@@ -69,12 +76,30 @@ class ShoppingListSheetEntry extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  child: Text(
-                    label,
-                    style: textTheme.bodyMedium!.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: labelColor,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        style: textTheme.bodyMedium!.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: labelColor,
+                        ),
+                      ),
+                      if (subtitle case final subtitle?)
+                        Text(
+                          subtitle,
+                          style: textTheme.labelSmall!.copyWith(
+                            fontSize: 12,
+                            height: 16 / 12,
+                            fontWeight: FontWeight.w600,
+                            color: colors.inkSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
                   ),
                 ),
                 ?trailing,
