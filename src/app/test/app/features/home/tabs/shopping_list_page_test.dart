@@ -1487,13 +1487,46 @@ void main() {
         await tapMenuEntry(tester, menu.deleteChecked);
 
         expect(
-          inDialog(find.text(menu.deleteCheckedDialog.message(n: 2))),
+          inDialog(
+            find.text(
+              menu.deleteCheckedDialog.namedMessage(
+                n: 2,
+                names: 'Brot und Kaffee',
+              ),
+            ),
+          ),
           findsOneWidget,
         );
-        await tapDialogButton(tester, menu.deleteCheckedDialog.confirm);
+        await tapDialogButton(tester, menu.deleteCheckedDialog.confirm(n: 2));
 
         expect(storedItems(container).map((item) => item.name), ['Milch']);
         expect(find.byType(ShoppingListCheckedSectionSliver), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'the removal of more than three checked items names only their count',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        for (final name in ['Brot', 'Kaffee', 'Tee', 'Reis']) {
+          await check(
+            tester,
+            container,
+            await addItem(tester, container, name, MarketCategory.bakery),
+          );
+        }
+
+        await openListMenu(tester);
+        await tapMenuEntry(tester, menu.deleteChecked);
+
+        expect(
+          inDialog(find.text(menu.deleteCheckedDialog.countMessage(n: 4))),
+          findsOneWidget,
+        );
+        expect(
+          inDialog(find.text(menu.deleteCheckedDialog.confirm(n: 4))),
+          findsOneWidget,
+        );
       },
     );
 
@@ -1518,7 +1551,7 @@ void main() {
 
         await openListMenu(tester);
         await tapMenuEntry(tester, menu.deleteAll);
-        await tapDialogButton(tester, menu.deleteAllDialog.confirm);
+        await tapDialogButton(tester, menu.deleteAllDialog.confirm(n: 2));
 
         expect(storedItems(container), isEmpty);
         expect(find.byType(ShoppingListEmptyState), findsOneWidget);
@@ -1528,6 +1561,28 @@ void main() {
         );
       },
     );
+
+    testWidgets('clearing the list names up to three items in the list order', (
+      tester,
+    ) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      await addOneOpenAndTwoCheckedItems(tester, container);
+
+      await openListMenu(tester);
+      await tapMenuEntry(tester, menu.deleteAll);
+
+      expect(
+        inDialog(
+          find.text(
+            menu.deleteAllDialog.namedMessage(
+              n: 3,
+              names: 'Milch, Brot und Kaffee',
+            ),
+          ),
+        ),
+        findsOneWidget,
+      );
+    });
 
     testWidgets('cancelling clearing the list keeps all items', (tester) async {
       final container = await openShoppingListTab(tester, debugBuild: false);
@@ -1618,7 +1673,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tapDialogButton(tester, menu.deleteCheckedDialog.confirm);
+      await tapDialogButton(tester, menu.deleteCheckedDialog.confirm(n: 1));
     }
 
     Future<void> addOneOpenAndOneCheckedItem(

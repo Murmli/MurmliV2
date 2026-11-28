@@ -190,23 +190,35 @@
         "one": "$n Artikel",
         "other": "$n Artikel"
       },
+      "and": "und",
       "deleteCheckedDialog": {
-        "title": "Abgehakte Artikel entfernen?",
-        "message(plural)": {
-          "one": "$n abgehakter Artikel wird entfernt. Offene Artikel bleiben.",
-          "other": "$n abgehakte Artikel werden entfernt. Offene Artikel bleiben."
+        "title(plural)": {
+          "one": "$n abgehakten Artikel entfernen?",
+          "other": "$n abgehakte Artikel entfernen?"
         },
+        "namedMessage(plural)": {
+          "one": "$names wird entfernt. Das lässt sich nicht rückgängig machen.",
+          "other": "$names werden entfernt. Das lässt sich nicht rückgängig machen."
+        },
+        "countMessage": "$n abgehakte Artikel werden entfernt. Das lässt sich nicht rückgängig machen.",
         "cancel": "Abbrechen",
-        "confirm": "Entfernen"
+        "confirm(plural)": {
+          "one": "$n Artikel entfernen",
+          "other": "$n Artikel entfernen"
+        }
       },
       "deleteAllDialog": {
         "title": "Liste leeren?",
-        "message(plural)": {
-          "one": "$n Artikel wird entfernt, auch wenn er noch offen ist.",
-          "other": "Alle $n Artikel werden entfernt, auch die offenen."
+        "namedMessage(plural)": {
+          "one": "$names wird entfernt. Das lässt sich nicht rückgängig machen.",
+          "other": "$names werden entfernt, auch die offenen. Das lässt sich nicht rückgängig machen."
         },
+        "countMessage": "Alle $n Artikel werden entfernt, auch die offenen. Das lässt sich nicht rückgängig machen.",
         "cancel": "Abbrechen",
-        "confirm": "Leeren"
+        "confirm(plural)": {
+          "one": "$n Artikel entfernen",
+          "other": "$n Artikel entfernen"
+        }
       }
     },
     "categoryOrder": {

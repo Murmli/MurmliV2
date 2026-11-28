@@ -190,23 +190,35 @@
         "one": "$n item",
         "other": "$n items"
       },
+      "and": "and",
       "deleteCheckedDialog": {
-        "title": "Remove checked items?",
-        "message(plural)": {
-          "one": "$n checked item will be removed. Open items stay.",
-          "other": "$n checked items will be removed. Open items stay."
+        "title(plural)": {
+          "one": "Remove $n checked item?",
+          "other": "Remove $n checked items?"
         },
+        "namedMessage(plural)": {
+          "one": "$names will be removed. This can't be undone.",
+          "other": "$names will be removed. This can't be undone."
+        },
+        "countMessage": "$n checked items will be removed. This can't be undone.",
         "cancel": "Cancel",
-        "confirm": "Remove"
+        "confirm(plural)": {
+          "one": "Remove $n item",
+          "other": "Remove $n items"
+        }
       },
       "deleteAllDialog": {
         "title": "Clear list?",
-        "message(plural)": {
-          "one": "$n item will be removed, even if it is still open.",
-          "other": "All $n items will be removed, including open ones."
+        "namedMessage(plural)": {
+          "one": "$names will be removed. This can't be undone.",
+          "other": "$names will be removed, including open ones. This can't be undone."
         },
+        "countMessage": "All $n items will be removed, including open ones. This can't be undone.",
         "cancel": "Cancel",
-        "confirm": "Clear"
+        "confirm(plural)": {
+          "one": "Remove $n item",
+          "other": "Remove $n items"
+        }
       }
     },
     "categoryOrder": {
