@@ -5,8 +5,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:app/app/core/authentication/signed_in_account_provider.dart';
 import 'package:app/app/core/database/app_database.dart';
-import 'package:app/app/core/database/signed_out_data_wipe_provider.dart';
 import 'package:app/app/core/flavor/flavor.dart';
+import 'package:app/app/core/sync/sync_core.dart';
 import 'package:app/app/features/shopping_list/models/market_category.dart';
 import 'package:app/app/features/shopping_list/providers/first_shopping_list_provider.dart';
 import 'package:app/app/features/shopping_list/providers/shopping_list_repository.dart';
@@ -26,7 +26,7 @@ void main() {
       database: database,
     );
     container
-      ..read(signedOutDataWipeProvider)
+      ..read(syncCoreProvider)
       ..read(firstShoppingListProvider);
     await pumpEventQueue();
     return container;
@@ -36,6 +36,14 @@ void main() {
     for (final table in database.allTables)
       table.actualTableName: (await database.select(table).get()).length,
   };
+
+  Future<void> expectAllLocalDataWiped() async {
+    final rowCounts = await rowCountsByTable()
+      ..remove(database.syncStates.actualTableName);
+    final state = await database.select(database.syncStates).getSingle();
+    expect(rowCounts.values, everyElement(0));
+    expect((state.accountId, state.deviceId, state.token), (null, null, null));
+  }
 
   Future<void> insertSyncRows() async {
     await database
@@ -52,7 +60,12 @@ void main() {
         );
     await database
         .into(database.syncStates)
-        .insert(SyncStatesCompanion.insert(id: const Value(1)));
+        .insertOnConflictUpdate(
+          SyncStatesCompanion.insert(
+            id: const Value(1),
+            token: const Value('token'),
+          ),
+        );
     await database
         .into(database.syncScopes)
         .insert(
@@ -86,7 +99,7 @@ void main() {
     addTearDown(database.close);
   });
 
-  group('SignedOutDataWipe', () {
+  group('SyncCore wipe', () {
     test(
       'sign-out empties all tables and the next sign-in creates a new list',
       () async {
@@ -100,11 +113,10 @@ void main() {
 
         await container.read(signedInAccountProvider.notifier).signOut();
         await pumpEventQueue();
-        final rowCountsAfterSignOut = await rowCountsByTable();
+        await expectAllLocalDataWiped();
         await signIn(container);
         await pumpEventQueue();
 
-        expect(rowCountsAfterSignOut.values, everyElement(0));
         final newList = await repository.watchList().first;
         expect(newList, isNotNull);
         expect(newList?.id, isNot(firstList.id));
@@ -124,7 +136,7 @@ void main() {
 
       await startApp();
 
-      expect((await rowCountsByTable()).values, everyElement(0));
+      await expectAllLocalDataWiped();
     });
   });
 }
