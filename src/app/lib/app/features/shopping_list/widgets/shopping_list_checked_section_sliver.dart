@@ -10,6 +10,7 @@ import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../models/shopping_list_item.dart';
 import '../providers/checked_section_expanded_provider.dart';
+import '../shopping_list_cleanup.dart';
 import 'shopping_list_item_row.dart';
 import 'shopping_list_pinned_header.dart';
 import 'shopping_list_section.dart';
@@ -22,8 +23,6 @@ class ShoppingListCheckedSectionSliver extends ConsumerWidget {
     super.key,
   });
 
-  static const _minimumHeaderHeight = 40.0;
-
   final List<ShoppingListItem> items;
   final int count;
   final Set<String> leavingItemIds;
@@ -32,43 +31,61 @@ class ShoppingListCheckedSectionSliver extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.colors;
     final isExpanded = ref.watch(checkedSectionExpandedProvider);
-    final titleStyle = TextTheme.of(context).titleSmall!
-        .copyWith(color: colors.inkSecondary);
+    final translations = context.t.shoppingList;
+    final textTheme = TextTheme.of(context);
+    final titleStyle = textTheme.titleSmall!.copyWith(
+      color: colors.inkSecondary,
+    );
     return ShoppingListSection(
       items: items,
       leavingItemIds: leavingItemIds,
-      headerContentHeight: math.max(
-        _minimumHeaderHeight,
+      headerContentHeight: [
+        kMinInteractiveDimension,
         ShoppingListPinnedHeader.lineHeightOf(context, titleStyle),
-      ),
-      header: Semantics(
-        container: true,
-        button: true,
-        header: true,
-        expanded: isExpanded,
-        child: InkWell(
-          onTap: () => unawaited(
-            ref.read(checkedSectionExpandedProvider.notifier).toggle(),
-          ),
-          child: Row(
-            spacing: 6,
-            children: [
-              AnimatedRotation(
-                turns: isExpanded ? 0 : -0.25,
-                duration: AppMotion.short(context),
-                child: Icon(
-                  Icons.expand_more,
-                  size: 16,
-                  color: colors.inkSecondary,
+        ShoppingListPinnedHeader.lineHeightOf(context, textTheme.labelLarge!),
+      ].reduce(math.max),
+      header: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Semantics(
+              container: true,
+              button: true,
+              header: true,
+              expanded: isExpanded,
+              child: InkWell(
+                onTap: () => unawaited(
+                  ref.read(checkedSectionExpandedProvider.notifier).toggle(),
+                ),
+                child: Row(
+                  spacing: 6,
+                  children: [
+                    AnimatedRotation(
+                      turns: isExpanded ? 0 : -0.25,
+                      duration: AppMotion.short(context),
+                      child: Icon(
+                        Icons.expand_more,
+                        size: 16,
+                        color: colors.inkSecondary,
+                      ),
+                    ),
+                    Text(
+                      translations.checkedSection(count: count),
+                      style: titleStyle,
+                    ),
+                  ],
                 ),
               ),
-              Text(
-                context.t.shoppingList.checkedSection(count: count),
-                style: titleStyle,
-              ),
-            ],
+            ),
           ),
-        ),
+          Center(
+            child: TextButton(
+              onPressed: () =>
+                  unawaited(confirmAndDeleteCheckedItems(context, ref)),
+              child: Text(translations.checkedSectionClear),
+            ),
+          ),
+        ],
       ),
       body: isExpanded
           ? Container(
