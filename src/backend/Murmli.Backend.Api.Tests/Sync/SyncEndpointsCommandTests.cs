@@ -570,6 +570,8 @@ public class SyncEndpointsCommandTests(SyncApiFixture fixture) : IClassFixture<S
     [Theory]
     [InlineData("timeMissing")]
     [InlineData("idMalformed")]
+    [InlineData("unknownKind")]
+    [InlineData("unregisteredDataType")]
     public async Task Sync_UnparseableCommand_RejectedInvalidOnEveryResendWithoutClaim(string malformation)
     {
         var device = await SyncTestDevice.SignInAsync(fixture.Api);
@@ -578,6 +580,8 @@ public class SyncEndpointsCommandTests(SyncApiFixture fixture) : IClassFixture<S
         {
             "timeMissing" => (SyncTestCommands.Without(create, "time"), SyncTestCommands.GetId(create)),
             "idMalformed" => (SyncTestCommands.With(create, "id", "not-a-guid"), null),
+            "unknownKind" => (SyncTestCommands.With(create, "kind", "move"), SyncTestCommands.GetId(create)),
+            "unregisteredDataType" => (SyncTestCommands.With(create, "dataType", "unknownType"), SyncTestCommands.GetId(create)),
             _ => throw new ArgumentOutOfRangeException(nameof(malformation), malformation, null),
         };
 

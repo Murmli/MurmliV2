@@ -66,11 +66,14 @@ internal sealed class SyncCommandParser(SyncDataTypeRegistry registry)
             scopeId is { } targetScopeId && recordId is { } targetRecordId && dataTypeName is not null && registry.TryGet(dataTypeName, out _)
                 ? new SyncCommandTarget(targetScopeId, dataTypeName, targetRecordId)
                 : null;
+        // Unknown kinds and data types stay unclaimed: sync.processed_commands holds no string a device chose
         if (
             commandId is not { } claimedCommandId
             || ReadString(members, KindMember) is not { } kind
             || scopeId is not { Version: 4 } claimedScopeId
             || dataTypeName is null
+            || !SyncCommandKind.TryParse(kind, out var commandKind)
+            || !registry.TryGet(dataTypeName, out var dataType)
             || recordId is not { Version: 4 } claimedRecordId
             || ReadTime(members) is not { } time
         )
@@ -89,8 +92,6 @@ internal sealed class SyncCommandParser(SyncDataTypeRegistry registry)
         var claimedTarget = new SyncCommandTarget(claimedScopeId, dataTypeName, claimedRecordId);
         if (
             hasUnknownMember
-            || !SyncCommandKind.TryParse(kind, out var commandKind)
-            || !registry.TryGet(dataTypeName, out var dataType)
             || !listedTypes.Contains(dataType)
             || claimedRecordId == claimedScopeId
             || !TryParseFields(members, commandKind, dataType, out var changes)

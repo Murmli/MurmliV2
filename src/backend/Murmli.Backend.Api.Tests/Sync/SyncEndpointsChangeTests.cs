@@ -28,6 +28,7 @@ public class SyncEndpointsChangeTests(SyncApiFixture fixture) : IClassFixture<Sy
     [InlineData("timeMissing")]
     [InlineData("timeAsString")]
     [InlineData("kindMissing")]
+    [InlineData("unknownKind")]
     [InlineData("idMalformed")]
     [InlineData("idVersion7")]
     [InlineData("recordIdVersion7")]
@@ -81,6 +82,7 @@ public class SyncEndpointsChangeTests(SyncApiFixture fixture) : IClassFixture<Sy
             "timeMissing" => (SyncTestCommands.Without(change, "time"), new(changeId, "rejected", "invalid"), null, false),
             "timeAsString" => (SyncTestCommands.With(change, "time", "1767225600000"), new(changeId, "rejected", "invalid"), null, false),
             "kindMissing" => (SyncTestCommands.Without(change, "kind"), new(changeId, "rejected", "invalid"), null, false),
+            "unknownKind" => (SyncTestCommands.With(change, "kind", "move"), new(changeId, "rejected", "invalid"), null, false),
             "idMalformed" => (SyncTestCommands.With(change, "id", "not-a-guid"), new(null, "rejected", "invalid"), null, false),
             "idVersion7" => (SyncTestCommands.With(change, "id", Guid.CreateVersion7()), new(null, "rejected", "invalid"), null, false),
             "recordIdVersion7" => (
