@@ -145,6 +145,7 @@
     "entry": {
       "hint": "Add item",
       "add": "Add",
+      "attach": "Attach photo or voice note",
       "processing": "Processing “$text”",
       "sorting": "Sorting …"
     },

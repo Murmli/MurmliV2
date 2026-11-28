@@ -145,6 +145,7 @@
     "entry": {
       "hint": "Artikel hinzufügen",
       "add": "Hinzufügen",
+      "attach": "Foto oder Sprachnotiz anhängen",
       "processing": "„$text“ wird verarbeitet",
       "sorting": "Wird eingeordnet …"
     },

@@ -960,17 +960,56 @@ void main() {
       expect(tester.testTextInput.isVisible, isTrue);
     });
 
-    testWidgets('tapping the add button adds the entered item', (tester) async {
+    testWidgets('tapping the send button adds the entered item', (
+      tester,
+    ) async {
       final container = await openShoppingListTab(tester, debugBuild: false);
-      final addButton = find.byTooltip(shoppingList.entry.add);
-      expect(addButton, findsNothing);
 
       await tester.enterText(find.byType(TextField), '500g Hackfleisch');
       await tester.pump();
-      await tester.tap(addButton);
+      expect(
+        tester.getSemantics(find.bySemanticsLabel(shoppingList.entry.add)),
+        isSemantics(isButton: true, isEnabled: true, hasTapAction: true),
+      );
+      await tester.tap(find.bySemanticsLabel(shoppingList.entry.add));
       await finishParsing(tester);
 
       expect(storedItems(container).map((item) => item.name), ['Hackfleisch']);
+    });
+
+    testWidgets('disables the send button while the field holds only spaces', (
+      tester,
+    ) async {
+      await openShoppingListTab(tester, debugBuild: false);
+
+      await tester.enterText(find.byType(TextField), '   ');
+      await tester.pump();
+
+      expect(
+        tester.getSemantics(find.bySemanticsLabel(shoppingList.entry.add)),
+        isSemantics(isEnabled: false, hasTapAction: false),
+      );
+    });
+
+    testWidgets('tapping the paperclip changes nothing', (tester) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      await tester.enterText(find.byType(TextField), '2 Liter Milch');
+      await tester.pump();
+
+      await tester.tap(find.bySemanticsLabel(shoppingList.entry.attach));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSemantics(find.bySemanticsLabel(shoppingList.entry.attach)),
+        isSemantics(isEnabled: false, hasTapAction: false),
+      );
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.byType(ShoppingListPendingEntries), findsNothing);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '2 Liter Milch',
+      );
+      expect(storedItems(container), isEmpty);
     });
     testWidgets(
       'keeps the header of a category on top while scrolling through its items until the next category pushes it away',
