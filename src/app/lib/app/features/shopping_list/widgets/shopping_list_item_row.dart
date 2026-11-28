@@ -18,7 +18,7 @@ import '../providers/shopping_list_repository.dart';
 import '../quantity_label.dart';
 import 'market_category_tile.dart';
 import 'shopping_list_item_editor.dart';
-import 'shopping_list_item_quick_editor.dart';
+import 'shopping_list_item_menu.dart';
 
 class ShoppingListItemRow extends HookConsumerWidget {
   ShoppingListItemRow({
@@ -167,17 +167,14 @@ class ShoppingListItemRow extends HookConsumerWidget {
                         child: MergeSemantics(
                           child: Semantics(
                             button: true,
-                            onTapHint: context.t.shoppingList.item.quickEdit,
+                            onTapHint: context.t.shoppingList.item.openMenu,
                             onLongPressHint:
                                 context.t.shoppingList.item.openDetails,
                             child: Material(
                               type: MaterialType.transparency,
                               child: InkWell(
                                 onTap: () => unawaited(
-                                  showShoppingListItemQuickEditor(
-                                    context,
-                                    item,
-                                  ),
+                                  showShoppingListItemMenu(context, item),
                                 ),
                                 onLongPress: () => unawaited(
                                   showShoppingListItemEditor(context, item),

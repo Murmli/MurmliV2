@@ -158,14 +158,14 @@
       "hint": "You have checked off every item."
     },
     "item": {
-      "quickEdit": "Quick edit",
+      "openMenu": "Show actions",
       "openDetails": "Edit all details",
-      "delete": "Delete"
-    },
-    "quickEditor": {
-      "details": "Details",
-      "category": "Change category",
-      "recipes": "Recipes: $names"
+      "edit": "Edit",
+      "alternative": "Find alternative",
+      "showRecipe": "Show recipe",
+      "delete": "Delete",
+      "comingSoon": "Soon",
+      "comingSoonLabel": "$action, coming soon"
     },
     "editor": {
       "title": "Edit item",

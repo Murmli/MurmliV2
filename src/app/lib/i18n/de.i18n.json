@@ -158,14 +158,14 @@
       "hint": "Du hast alle Artikel abgehakt."
     },
     "item": {
-      "quickEdit": "Schnell bearbeiten",
+      "openMenu": "Aktionen anzeigen",
       "openDetails": "Alle Angaben bearbeiten",
-      "delete": "Löschen"
-    },
-    "quickEditor": {
-      "details": "Details",
-      "category": "Kategorie ändern",
-      "recipes": "Rezepte: $names"
+      "edit": "Bearbeiten",
+      "alternative": "Alternative finden",
+      "showRecipe": "Rezept anzeigen",
+      "delete": "Löschen",
+      "comingSoon": "Bald",
+      "comingSoonLabel": "$action, bald verfügbar"
     },
     "editor": {
       "title": "Artikel bearbeiten",
