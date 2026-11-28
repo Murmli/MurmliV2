@@ -404,6 +404,7 @@ Hintergrund und Entscheidungen: [docs/api.md](docs/api.md)
 - Fehler, auf die Clients eigens reagieren, als Problem Details mit `type` `tag:murmli.de,2026:<code>` aus `ProblemTypes`, geschrieben per `TypedResults.Problem` (auch ohne JSON im `Accept`-Header mit Body). Clients reagieren auf `type`, nie auf den bloßen Status.
 - Rate-Limits nur im Endpunkt, keine Middleware zum Rate Limiting (`AddRateLimiter`, `UseRateLimiter`); für `/v1/sync` über `SyncRateLimiter` (Anfragen je Gerät und Konto nach dem Abruf des Kontos und vor dem Lesen des Bodys, Kommandos je Konto nach der Prüfung ihrer Zahl); 429 nur per `RateLimitedProblem` mit `Retry-After`. Partitionsschlüssel aus IDs, die ein Gerät wählt, nur als String, nie als `Guid` oder Tupel daraus ([docs/api.md](docs/api.md#entscheidungen)).
 - Keine Middleware zur Antwortkompression (`AddResponseCompression`, `UseResponseCompression`). Komprimiert wird nur in `/v1/sync` und nur eine Antwort, in der mindestens ein Block einen vollständigen Stand hat ([docs/sync.md](docs/sync.md#kompression)); jede andere Antwort bleibt wegen BREACH unkomprimiert.
+- Zahlen im JSON der API nur streng lesen: `ConfigureHttpJsonOptions` in `AddApi()` behält `NumberHandling = JsonNumberHandling.Strict`, eigene `JsonSerializerOptions` eines Endpunkts (wie in `/v1/sync`) setzen es ebenso, nie die Web-Standards mit `AllowReadingFromString` ([docs/api.md](docs/api.md#entscheidungen)).
 
 ## Authentifizierung
 
