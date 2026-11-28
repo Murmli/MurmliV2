@@ -1,65 +1,134 @@
+import 'dart:async';
+
+import 'package:flutter/services.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../../i18n/strings.g.dart';
 import '../../../core/theme/app_colors.dart';
 import '../models/recipe_share.dart';
 import '../models/shopping_list_item.dart';
+import '../providers/shopping_list_repository.dart';
 import '../quantity_label.dart';
 import 'market_category_tile.dart';
 
-class ShoppingListItemRow extends StatelessWidget {
+class ShoppingListItemRow extends ConsumerWidget {
   const ShoppingListItemRow({required this.item, super.key});
 
   final ShoppingListItem item;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.colors;
     final textTheme = TextTheme.of(context);
     final quantity = quantityLabel(
       item,
       context.t,
       TranslationProvider.of(context).locale.languageCode,
     );
-    return MergeSemantics(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 48),
+    void toggleChecked() {
+      unawaited(HapticFeedback.selectionClick());
+      unawaited(
+        ref
+            .read(shoppingListRepositoryProvider)
+            .setChecked(item.id, checked: !item.checked),
+      );
+    }
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: IntrinsicHeight(
         child: Row(
-          spacing: 10,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 8,
           children: [
-            SizedBox.square(
-              dimension: 44,
-              child: Center(child: MarketCategoryTile(category: item.category)),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    item.name,
-                    style: textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+            Semantics(
+              container: true,
+              button: true,
+              excludeSemantics: true,
+              label: item.checked
+                  ? context.t.shoppingList.uncheckItem(name: item.name)
+                  : context.t.shoppingList.checkItem(name: item.name),
+              onTap: toggleChecked,
+              child: SizedBox(
+                width: 48,
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: toggleChecked,
+                    child: Center(
+                      child: item.checked
+                          ? const _CheckedTile()
+                          : MarketCategoryTile(category: item.category),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                  if (item.recipeShares.isNotEmpty)
-                    _RecipeLine(recipeShares: item.recipeShares),
-                ],
-              ),
-            ),
-            if (quantity.isNotEmpty)
-              Text(
-                quantity,
-                style: textTheme.labelLarge?.copyWith(
-                  color: context.colors.inkSecondary,
                 ),
               ),
+            ),
+            Expanded(
+              child: MergeSemantics(
+                child: Row(
+                  spacing: 10,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            item.name,
+                            style: textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: item.checked ? colors.inkTertiary : null,
+                              decoration: item.checked
+                                  ? TextDecoration.lineThrough
+                                  : null,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (!item.checked && item.recipeShares.isNotEmpty)
+                            _RecipeLine(recipeShares: item.recipeShares),
+                        ],
+                      ),
+                    ),
+                    if (quantity.isNotEmpty)
+                      Text(
+                        quantity,
+                        style: textTheme.labelLarge?.copyWith(
+                          color: item.checked
+                              ? colors.inkTertiary
+                              : colors.inkSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+class _CheckedTile extends StatelessWidget {
+  const _CheckedTile();
+
+  static const _size = 36.0;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: _size,
+    height: _size,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: context.colors.onTarget,
+      borderRadius: BorderRadius.circular(_size * 0.32),
+    ),
+    child: Icon(Icons.check_rounded, size: 20, color: context.colors.surface),
+  );
 }
 
 class _RecipeLine extends StatelessWidget {

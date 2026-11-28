@@ -1,6 +1,7 @@
 import 'package:dart_mappable/dart_mappable.dart';
 
 import 'shopping_list_group.dart';
+import 'shopping_list_item.dart';
 
 part 'shopping_list_overview.mapper.dart';
 
@@ -10,9 +11,11 @@ class ShoppingListOverview with ShoppingListOverviewMappable {
     required this.checkedCount,
     required this.totalCount,
     required this.groups,
+    required this.checkedItems,
   });
 
   final int checkedCount;
   final int totalCount;
   final List<ShoppingListGroup> groups;
+  final List<ShoppingListItem> checkedItems;
 }

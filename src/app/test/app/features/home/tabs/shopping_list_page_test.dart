@@ -1,14 +1,19 @@
+import 'package:clock/clock.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:app/app/core/authentication/account.dart';
+import 'package:app/app/core/storage/preference_keys.dart';
+import 'package:app/app/core/storage/shared_preferences_provider.dart';
 import 'package:app/app/features/shopping_list/models/market_category.dart';
 import 'package:app/app/features/shopping_list/models/measurement_unit.dart';
 import 'package:app/app/features/shopping_list/models/shopping_list.dart';
+import 'package:app/app/features/shopping_list/models/shopping_list_item.dart';
 import 'package:app/app/features/shopping_list/providers/first_shopping_list_provider.dart';
 import 'package:app/app/features/shopping_list/providers/shopping_list_overview_provider.dart';
 import 'package:app/app/features/shopping_list/providers/shopping_list_repository.dart';
+import 'package:app/app/features/shopping_list/widgets/shopping_list_checked_section.dart';
 import 'package:app/app/features/shopping_list/widgets/shopping_list_group_card.dart';
 import 'package:app/app/features/shopping_list/widgets/shopping_list_item_row.dart';
 import 'package:app/i18n/strings.g.dart';
@@ -17,15 +22,20 @@ import '../../../../helpers/pump_app.dart';
 
 void main() {
   final translations = AppLocale.de.buildSync();
-  final categories = translations.shoppingList.categories;
+  final shoppingList = translations.shoppingList;
+  final categories = shoppingList.categories;
 
   Future<ProviderContainer> openShoppingListTab(
     WidgetTester tester, {
     required bool debugBuild,
+    Map<String, Object> storedPreferences = const {},
+    Clock? clock,
   }) async {
     final container = await pumpApp(
       tester,
       debugBuild: debugBuild,
+      storedPreferences: storedPreferences,
+      clock: clock,
       signedInAccount: const Account(id: 'account'),
     );
     container.read(firstShoppingListProvider);
@@ -101,16 +111,28 @@ void main() {
     matching: find.byType(ShoppingListItemRow),
   );
 
+  Finder inCheckedSection(String itemName) => find.descendant(
+    of: find.byType(ShoppingListCheckedSection),
+    matching: find.text(itemName),
+  );
+
+  ShoppingListItem storedItem(ProviderContainer container, String itemId) =>
+      container
+          .read(currentShoppingListProvider)
+          .requireValue!
+          .items
+          .singleWhere((item) => item.id == itemId);
+
   group('ShoppingListPage', () {
     testWidgets(
-      'groups the open items by category in the default order and hides checked items',
+      'groups the open items by category in the default order and lists checked items in the checked section',
       (tester) async {
         final container = await openShoppingListTab(tester, debugBuild: false);
 
         await addMixedItems(tester, container);
 
         expect(find.text(categories.frozen), findsNothing);
-        expect(find.text('Tiefkühlpizza'), findsNothing);
+        expect(inCheckedSection('Tiefkühlpizza'), findsOneWidget);
         expect(
           topOf(tester, categories.vegetables),
           lessThan(topOf(tester, categories.dairy)),
@@ -194,9 +216,7 @@ void main() {
         expect(
           find.descendant(
             of: rowOf('Sauerrahm'),
-            matching: find.text(
-              translations.shoppingList.recipeCount(count: 2),
-            ),
+            matching: find.text(shoppingList.recipeCount(count: 2)),
           ),
           findsOneWidget,
         );
@@ -206,28 +226,204 @@ void main() {
     testWidgets('without items shows the empty state', (tester) async {
       await openShoppingListTab(tester, debugBuild: false);
 
-      expect(find.text(translations.shoppingList.empty.title), findsOneWidget);
+      expect(find.text(shoppingList.empty.title), findsOneWidget);
       expect(find.byType(ShoppingListGroupCard), findsNothing);
     });
 
-    testWidgets('with only checked items shows the empty state', (
+    testWidgets(
+      'with only checked items shows the all checked hint instead of the empty state',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+
+        await check(
+          tester,
+          container,
+          await addItem(tester, container, 'Kaffee', MarketCategory.beverages),
+        );
+
+        expect(find.text(shoppingList.allChecked.title), findsOneWidget);
+        expect(find.text(shoppingList.empty.title), findsNothing);
+        expect(inCheckedSection('Kaffee'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'tapping the tile of an open item checks it and moves it to the checked section',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        final itemId = await addItem(
+          tester,
+          container,
+          'Butter',
+          MarketCategory.dairy,
+        );
+        await addItem(tester, container, 'Brot', MarketCategory.bakery);
+
+        await tester.tap(
+          find.bySemanticsLabel(shoppingList.checkItem(name: 'Butter')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(inCheckedSection('Butter'), findsOneWidget);
+        expect(
+          find.text(shoppingList.checkedSection(count: 1)),
+          findsOneWidget,
+        );
+        expect(
+          find.text(shoppingList.progress(checked: 1, total: 2)),
+          findsOneWidget,
+        );
+        expect(storedItem(container, itemId).checked, isTrue);
+      },
+    );
+
+    testWidgets(
+      'tapping the tile of a checked item reopens it in its category group',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        await addItem(tester, container, 'Brot', MarketCategory.bakery);
+        final itemId = await addItem(
+          tester,
+          container,
+          'Butter',
+          MarketCategory.dairy,
+        );
+        await check(tester, container, itemId);
+
+        await tester.tap(
+          find.bySemanticsLabel(shoppingList.uncheckItem(name: 'Butter')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.descendant(
+            of: find.byType(ShoppingListGroupCard),
+            matching: find.text('Butter'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.byType(ShoppingListCheckedSection), findsNothing);
+        expect(storedItem(container, itemId).checked, isFalse);
+      },
+    );
+
+    testWidgets(
+      'checking an item through the screen reader stores it as checked',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        final itemId = await addItem(
+          tester,
+          container,
+          'Butter',
+          MarketCategory.dairy,
+        );
+
+        tester.semantics.tap(
+          find.semantics.byLabel(shoppingList.checkItem(name: 'Butter')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(storedItem(container, itemId).checked, isTrue);
+        semantics.dispose();
+      },
+    );
+
+    testWidgets('lists the last checked item first in the checked section', (
+      tester,
+    ) async {
+      var now = DateTime.utc(2026, 11, 28, 10);
+      final container = await openShoppingListTab(
+        tester,
+        debugBuild: false,
+        clock: Clock(() => now),
+      );
+      await addItem(tester, container, 'Butter', MarketCategory.dairy);
+      await addItem(tester, container, 'Brot', MarketCategory.bakery);
+
+      await tester.tap(
+        find.bySemanticsLabel(shoppingList.checkItem(name: 'Butter')),
+      );
+      await tester.pumpAndSettle();
+      now = now.add(const Duration(seconds: 1));
+      await tester.tap(
+        find.bySemanticsLabel(shoppingList.checkItem(name: 'Brot')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(topOf(tester, 'Brot'), lessThan(topOf(tester, 'Butter')));
+    });
+
+    testWidgets(
+      'tapping the checked section header collapses and expands the section',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        await check(
+          tester,
+          container,
+          await addItem(tester, container, 'Kaffee', MarketCategory.beverages),
+        );
+        final header = find.text(shoppingList.checkedSection(count: 1));
+
+        await tester.tap(header);
+        await tester.pumpAndSettle();
+        expect(find.text('Kaffee'), findsNothing);
+
+        await tester.tap(header);
+        await tester.pumpAndSettle();
+        expect(find.text('Kaffee'), findsOneWidget);
+      },
+    );
+
+    testWidgets('collapsing the checked section stores the collapsed state', (
       tester,
     ) async {
       final container = await openShoppingListTab(tester, debugBuild: false);
-
       await check(
         tester,
         container,
         await addItem(tester, container, 'Kaffee', MarketCategory.beverages),
       );
 
-      expect(find.text(translations.shoppingList.empty.title), findsOneWidget);
-      expect(find.byType(ShoppingListGroupCard), findsNothing);
+      await tester.tap(find.text(shoppingList.checkedSection(count: 1)));
+      await tester.pumpAndSettle();
+
+      expect(
+        container
+            .read(sharedPreferencesProvider)
+            .getBool(PreferenceKeys.shoppingListCheckedExpanded),
+        isFalse,
+      );
     });
+
+    testWidgets(
+      'with a stored collapsed state keeps the checked section collapsed',
+      (tester) async {
+        final container = await openShoppingListTab(
+          tester,
+          debugBuild: false,
+          storedPreferences: {
+            PreferenceKeys.shoppingListCheckedExpanded: false,
+          },
+        );
+
+        await check(
+          tester,
+          container,
+          await addItem(tester, container, 'Kaffee', MarketCategory.beverages),
+        );
+
+        expect(
+          find.text(shoppingList.checkedSection(count: 1)),
+          findsOneWidget,
+        );
+        expect(find.text('Kaffee'), findsNothing);
+      },
+    );
 
     testWidgets('updates the progress when an item is checked', (tester) async {
       final container = await openShoppingListTab(tester, debugBuild: true);
-      final progress = translations.shoppingList.progress;
+      final progress = shoppingList.progress;
       expect(find.text(progress(checked: 2, total: 16)), findsOneWidget);
 
       final list = container.read(currentShoppingListProvider).requireValue!;

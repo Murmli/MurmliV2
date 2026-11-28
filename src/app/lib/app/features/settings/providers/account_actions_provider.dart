@@ -6,6 +6,7 @@ import '../../../core/flavor/flavor.dart';
 import '../../../core/flavor/flavor_provider.dart';
 import '../../../core/storage/preference_keys.dart';
 import '../../../core/storage/shared_preferences_provider.dart';
+import '../../shopping_list/providers/checked_section_expanded_provider.dart';
 import '../app_language.dart';
 import 'app_language_provider.dart';
 import 'apple_disconnect_notice_provider.dart';
@@ -58,7 +59,8 @@ class AccountActions extends _$AccountActions {
     }
     ref
       ..invalidate(selectedAppLanguageProvider)
-      ..invalidate(appThemeModeProvider);
+      ..invalidate(appThemeModeProvider)
+      ..invalidate(checkedSectionExpandedProvider);
     await AppLanguage.system.apply();
   }
 

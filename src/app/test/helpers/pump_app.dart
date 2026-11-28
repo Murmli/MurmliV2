@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -21,6 +22,7 @@ Future<ProviderContainer> pumpApp(
   Flavor? flavor,
   bool? debugBuild,
   Account? signedInAccount,
+  Clock? clock,
   Future<ResponseBody> Function(RequestOptions request) respondFromAuth =
       respondAsAuth,
 }) async {
@@ -34,6 +36,7 @@ Future<ProviderContainer> pumpApp(
     }),
     flavor: flavor,
     debugBuild: debugBuild,
+    clock: clock,
     secureStorage: {
       if (signedInAccount != null) ...storedSession(signedInAccount.id),
     },

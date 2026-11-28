@@ -141,6 +141,13 @@
     "empty": {
       "title": "Keine offenen Artikel",
       "hint": "Hier erscheinen deine Artikel, sobald du welche hinzufügst."
+    },
+    "checkItem": "$name abhaken",
+    "uncheckItem": "$name wieder öffnen",
+    "checkedSection": "Abgehakt · $count",
+    "allChecked": {
+      "title": "Alles erledigt",
+      "hint": "Du hast alle Artikel abgehakt."
     }
   },
   "settings": {

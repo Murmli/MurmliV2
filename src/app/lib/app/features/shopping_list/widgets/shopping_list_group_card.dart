@@ -53,7 +53,7 @@ class ShoppingListGroupCard extends StatelessWidget {
           ),
           Container(
             padding: const EdgeInsetsDirectional.only(
-              start: 6,
+              start: 4,
               end: AppSpacing.space16,
             ),
             decoration: BoxDecoration(
@@ -65,7 +65,7 @@ class ShoppingListGroupCard extends StatelessWidget {
               children: [
                 for (final (index, item) in group.items.indexed) ...[
                   if (index > 0) const Divider(),
-                  ShoppingListItemRow(item: item),
+                  ShoppingListItemRow(item: item, key: ValueKey(item.id)),
                 ],
               ],
             ),
