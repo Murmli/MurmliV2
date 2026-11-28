@@ -7,6 +7,8 @@ Lokale Checks (Befehle in [AGENTS.md](../AGENTS.md#ci)):
 - `dotnet test` braucht Docker, Node aus `src/auth/.nvmrc` (die AppHost-Tests starten `auth`, Aspire führt davor `npm install` in `src/auth` aus) und beim ersten Build Netzwerk für `dnx aspire.cli` (sonst ASPIRE009).
 - `dotnet restore` meldet neue Advisories nur mit `--force`.
 
+Lasttests laufen nie in der CI ([#137](https://github.com/Murmli/MurmliV2/issues/137), [sync.md](sync.md#lasttests)); die Simulation läuft derzeit nicht in der CI, ob ein kleiner fester Satz mitläuft, entscheidet [#136](https://github.com/Murmli/MurmliV2/issues/136) nach der Laufzeit.
+
 ## App
 
 - Das R8-Mapping lädt das Sentry Android Gradle Plugin schon im Build, nur mit der Gradle-Property `sentryUploadProguardMapping` (gesetzt per `ORG_GRADLE_PROJECT_sentryUploadProguardMapping`). Ohne sie bleibt es im Dry-Run und bettet nur die UUID des Mappings in die App ein. Dart-Symbole und native Debug-Dateien lädt danach `dart run sentry_dart_plugin`.
@@ -32,3 +34,5 @@ Lokale Checks (Befehle in [AGENTS.md](../AGENTS.md#ci)):
 | R8-Mapping über das Sentry Android Gradle Plugin | Das Android-SDK ordnet das Mapping über eine UUID in den Assets der App zu, die das Plugin vor R8 erzeugt. `sentry_dart_plugin` lädt keine Mappings hoch. |
 | Upload-Fehler lassen den Job scheitern | Fehlende Symbole sollen auffallen, auch um den Preis eines blockierten Deploys. |
 | Environment mit `deployment: false` | Build- und Upload-Jobs deployen nichts, Deployments nach `development` stammen nur aus `deploy-backend.yml`. |
+| Backend-Job mit `timeout-minutes: 20` | Die Tests des Abgleichs mit gleichzeitigen Anfragen können bei einem Fehler hängen; ohne Timeout liefe der Job bis zum Standard von 6 Stunden. |
+| Lasttests nie in der CI | Ein Lauf dauert lange, und auf geteilten Runnern entstünden keine vergleichbaren Werte; Messwerte gehören ohnehin ins BackOffice ([sync.md](sync.md#lasttests)). |

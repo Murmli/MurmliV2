@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "id": "shopping/lists/rename-later-time-wins",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/141 Liste umbenennen: Die spätere Gerätezeit gewinnt",
+  "dataTypes": ["shoppingList", "shoppingListItem"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [
+    { "device": "phone", "kind": "create", "dataType": "shoppingList", "scope": "list", "record": "list", "at": -60000, "fields": { "name": "Einkauf" } }
+  ],
+  "race": [
+    { "label": "older", "device": "phone", "kind": "setFields", "dataType": "shoppingList", "scope": "list", "record": "list", "at": -2000, "fields": { "name": "Wocheneinkauf" } },
+    { "label": "newer", "device": "tablet", "kind": "setFields", "dataType": "shoppingList", "scope": "list", "record": "list", "at": -1000, "fields": { "name": "Drogerie" } }
+  ],
+  "expect": {
+    "results": { "older": { "status": "applied" }, "newer": { "status": "applied" } },
+    "records": [ { "dataType": "shoppingList", "record": "list", "fields": { "name": "Drogerie" } } ],
+    "absent": []
+  },
+  "expectByOrder": {
+    "newer>older": { "results": { "older": { "status": "ignored", "cause": "lostToNewer" }, "newer": { "status": "applied" } } }
+  }
+}

@@ -1,0 +1,122 @@
+using System.Collections.Frozen;
+using System.Text.Json;
+using Murmli.Backend.Sync.DataTypes;
+using Murmli.Backend.Sync.Extensions;
+
+namespace Murmli.Backend.Sync.Protocol;
+
+internal sealed class SyncCommandParser(SyncDataTypeRegistry registry)
+{
+    private const string IdMember = "id";
+
+    private const string KindMember = "kind";
+
+    private const string ScopeIdMember = "scopeId";
+
+    private const string DataTypeMember = "dataType";
+
+    private const string RecordIdMember = "recordId";
+
+    private const string TimeMember = "time";
+
+    private const string FieldsMember = "fields";
+
+    private static readonly FrozenSet<string> CommandMembers = FrozenSet.Create(
+        StringComparer.Ordinal,
+        IdMember,
+        KindMember,
+        ScopeIdMember,
+        DataTypeMember,
+        RecordIdMember,
+        TimeMember,
+        FieldsMember
+    );
+
+    public SyncParsedCommand Parse(JsonElement command, IReadOnlyList<SyncDataType> listedTypes)
+    {
+        if (command.ValueKind != JsonValueKind.Object)
+        {
+            return new SyncParsedCommand(null, null, null, null, null, null);
+        }
+
+        var members = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        var hasUnknownMember = false;
+        foreach (var member in command.EnumerateObject())
+        {
+            if (!member.TryGetReadableName(out var name) || !CommandMembers.Contains(name))
+            {
+                hasUnknownMember = true;
+            }
+            else if (!members.TryAdd(name, member.Value))
+            {
+                // A duplicated member is ambiguous: the default element is unreadable wherever it is used
+                members[name] = default;
+            }
+        }
+
+        var commandId = ReadId(members, IdMember) is { Version: 4 } id ? id : (Guid?)null;
+        var scopeId = ReadId(members, ScopeIdMember);
+        var recordId = ReadId(members, RecordIdMember);
+        var dataTypeName = ReadString(members, DataTypeMember);
+        var kind = ReadString(members, KindMember);
+        SyncCommandKind? knownKind = kind is not null && SyncCommandKind.TryParse(kind, out var parsedKind) ? parsedKind : null;
+        var dataType = dataTypeName is not null && registry.TryGet(dataTypeName, out var registeredDataType) ? registeredDataType : null;
+        var target =
+            scopeId is { } targetScopeId && recordId is { } targetRecordId && dataType is not null
+                ? SyncCommandTarget.FromCommand(targetScopeId, dataType.Name, targetRecordId, kind)
+                : null;
+        // Unknown kinds and data types stay unclaimed: sync.processed_commands holds no string a device chose
+        if (
+            commandId is not { } claimedCommandId
+            || knownKind is not { } commandKind
+            || scopeId is not { Version: 4 } claimedScopeId
+            || dataType is null
+            || recordId is not { Version: 4 } claimedRecordId
+            || ReadTime(members) is not { } time
+        )
+        {
+            return new SyncParsedCommand(commandId, knownKind, dataType, target, null, null);
+        }
+
+        var claim = new SyncCommandClaim(claimedCommandId, commandKind.Key, claimedScopeId, dataType.Name, claimedRecordId, time);
+        var claimedTarget = SyncCommandTarget.FromCommand(claimedScopeId, dataType.Name, claimedRecordId, claim.Kind);
+        if (
+            hasUnknownMember
+            || !listedTypes.Contains(dataType)
+            || (dataType.IsScopeRoot ? claimedRecordId != claimedScopeId : claimedRecordId == claimedScopeId)
+            || !TryParseFields(members, commandKind, dataType, out var changes)
+        )
+        {
+            return new SyncParsedCommand(commandId, knownKind, dataType, claimedTarget, claim, null);
+        }
+
+        return new SyncParsedCommand(commandId, knownKind, dataType, claimedTarget, claim, new SyncCommand(claim, commandKind, dataType, changes));
+    }
+
+    private static Guid? ReadId(Dictionary<string, JsonElement> members, string name) =>
+        ReadString(members, name) is { } text && Guid.TryParseExact(text, "D", out var id) ? id : null;
+
+    private static string? ReadString(Dictionary<string, JsonElement> members, string name) =>
+        members.TryGetValue(name, out var element) && element.TryGetReadableString(out var text) ? text : null;
+
+    private static DateTimeOffset? ReadTime(Dictionary<string, JsonElement> members) =>
+        members.TryGetValue(TimeMember, out var element) && element.TryGetUnixMilliseconds(out var time) ? time : null;
+
+    private static bool TryParseFields(
+        Dictionary<string, JsonElement> members,
+        SyncCommandKind kind,
+        SyncDataType dataType,
+        out SyncFieldChanges? changes
+    )
+    {
+        changes = null;
+        var hasFields = members.TryGetValue(FieldsMember, out var fields);
+        if (kind == SyncCommandKind.Delete)
+        {
+            return !hasFields || fields.ValueKind == JsonValueKind.Null;
+        }
+
+        changes = hasFields ? dataType.ParseFields(fields, kind, isServerWrite: false) : null;
+        return changes is not null;
+    }
+}

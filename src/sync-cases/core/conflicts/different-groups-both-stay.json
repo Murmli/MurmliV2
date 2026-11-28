@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "id": "core/conflicts/different-groups-both-stay",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/122 Je Feld gewinnt die spätere Zeit",
+  "dataTypes": ["testBoard", "testCard"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [
+    { "device": "phone", "kind": "create", "dataType": "testBoard", "scope": "board", "record": "board", "at": -60000, "fields": { "title": "Groceries" } },
+    { "device": "phone", "kind": "create", "dataType": "testCard", "scope": "board", "record": "card", "at": -50000, "fields": { "text": "milk", "done": false } }
+  ],
+  "race": [
+    { "label": "amount", "device": "phone", "kind": "setFields", "dataType": "testCard", "scope": "board", "record": "card", "at": -2000, "fields": { "count": 2, "measure": "liter" } },
+    { "label": "done", "device": "tablet", "kind": "setFields", "dataType": "testCard", "scope": "board", "record": "card", "at": -1000, "fields": { "done": true } }
+  ],
+  "expect": {
+    "results": { "amount": { "status": "applied" }, "done": { "status": "applied" } },
+    "records": [ { "dataType": "testCard", "record": "card", "fields": { "text": "milk", "done": true, "count": 2, "measure": "liter" } } ],
+    "absent": []
+  },
+  "expectByOrder": {}
+}

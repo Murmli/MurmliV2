@@ -7,4 +7,8 @@ public class User
     public required string AuthUserId { get; set; }
 
     public required DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset? DeletionStartedAt { get; set; }
+
+    public DateOnly? LastRequestOn { get; set; }
 }

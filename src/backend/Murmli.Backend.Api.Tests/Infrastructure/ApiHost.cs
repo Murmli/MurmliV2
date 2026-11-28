@@ -5,17 +5,25 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Time.Testing;
 using Murmli.Backend.Api.Extensions;
+using Murmli.Backend.Api.Tests.Infrastructure.TestDataTypes;
 using Murmli.Backend.Api.Users;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Extensions;
+using Murmli.Backend.Sync.Cleanup;
+using Murmli.Backend.Sync.Extensions;
+using Murmli.Backend.Sync.Writing;
 using Murmli.Backend.Telemetry.Extensions;
+using OpenTelemetry;
 using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
 namespace Murmli.Backend.Api.Tests.Infrastructure;
@@ -46,13 +54,24 @@ internal sealed class ApiHost : IAsyncDisposable
 
     public AuthServiceHttpMessageHandler AuthService { get; }
 
+    public IServiceProvider Services => application.Services;
+
     public static async Task<ApiHost> StartAsync(
         string connectionString,
         IReadOnlyDictionary<string, string?>? additionalConfiguration = null,
         bool mapFailingEndpoint = false,
         ICollection<Activity>? activities = null,
         ICollection<LogRecord>? logRecords = null,
-        bool mapExplicitlyAuthorizedEndpoint = false
+        bool mapExplicitlyAuthorizedEndpoint = false,
+        bool testDataTypes = false,
+        FakeTimeProvider? timeProvider = null,
+        bool waitingCleanupContributor = false,
+        bool testCleanupContributors = false,
+        ICollection<SyncCleanupContext>? cleanupContexts = null,
+        bool invalidBootstrapContributor = false,
+        ICollection<MetricSnapshot>? metricSnapshots = null,
+        bool disturbedCleanupContributor = false,
+        CancellationTokenSource? cleanupCancellation = null
     )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -70,11 +89,53 @@ internal sealed class ApiHost : IAsyncDisposable
                 ["Authentication:Schemes:Bearer:SigningKeys:0:Value"] = TestTokens.SigningKeyBase64,
                 ["AuthService:BaseAddress"] = "http://auth.test",
                 ["AuthService:Key"] = AuthServiceKey,
+                ["Sync:Cleanup:Enabled"] = "false",
+                ["Sync:RateLimits:DeviceRequestsPerMinute"] = "1000000",
+                ["Sync:RateLimits:AccountRequestsPerMinute"] = "1000000",
+                ["Sync:RateLimits:AccountCommandsPerHour"] = "100000000",
             }
         );
         builder.Configuration.AddInMemoryCollection(additionalConfiguration);
         builder.AddTelemetry();
         builder.AddApi();
+        if (testDataTypes)
+        {
+            builder.Services.ConfigureDbContext<MurmliDbContext>(options =>
+                options.ReplaceService<IModelCustomizer, SyncTestModelCustomizer>()
+            );
+            builder.Services.AddSyncDataType<TestNoteType>().AddSyncDataType<TestBoardType>().AddSyncDataType<TestCardType>();
+        }
+
+        if (waitingCleanupContributor)
+        {
+            builder.Services.AddSyncCleanupContributor<WaitingCleanupContributor>();
+        }
+
+        if (testCleanupContributors)
+        {
+            builder.Services.AddSyncCleanupContributor<ThrowingCleanupContributor>().AddSyncCleanupContributor<ConstantCleanupContributor>();
+        }
+
+        if (cleanupContexts is not null)
+        {
+            builder.Services.AddSingleton(cleanupContexts).AddSyncCleanupContributor<RecordingCleanupContributor>();
+        }
+
+        if (disturbedCleanupContributor)
+        {
+            builder.Services.AddSyncCleanupContributor<DisturbedCleanupContributor>();
+        }
+
+        if (cleanupCancellation is not null)
+        {
+            builder.Services.AddSingleton(cleanupCancellation).AddSyncCleanupContributor<CancellingCleanupContributor>();
+        }
+
+        if (invalidBootstrapContributor)
+        {
+            builder.Services.AddSyncAccountBootstrapContributor<InvalidBootstrapContributor>();
+        }
+
         if (activities is not null)
         {
             builder.Services.ConfigureOpenTelemetryTracerProvider(tracing => tracing.AddInMemoryExporter(activities));
@@ -85,8 +146,16 @@ internal sealed class ApiHost : IAsyncDisposable
             builder.Services.ConfigureOpenTelemetryLoggerProvider(logging => logging.AddInMemoryExporter(logRecords));
         }
 
+        if (metricSnapshots is not null)
+        {
+            // Delta temporality: every export holds only the measurements since the previous one, so FlushMetrics separates setup from the measured requests
+            builder.Services.ConfigureOpenTelemetryMeterProvider(metrics =>
+                metrics.AddInMemoryExporter(metricSnapshots, reader => reader.TemporalityPreference = MetricReaderTemporalityPreference.Delta)
+            );
+        }
+
         // Npgsql only writes UTC values to timestamp with time zone
-        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        timeProvider ??= new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
         builder.Services.AddSingleton<TimeProvider>(timeProvider);
         var authService = new AuthServiceHttpMessageHandler();
         builder.Services.ConfigureAll<HttpClientFactoryOptions>(options =>
@@ -95,6 +164,14 @@ internal sealed class ApiHost : IAsyncDisposable
 
         var application = builder.Build();
         await application.MigrateDatabaseAsync(cancellationToken);
+        if (testDataTypes)
+        {
+            await using var scope = application.Services.CreateAsyncScope();
+            await scope
+                .ServiceProvider.GetRequiredService<MurmliDbContext>()
+                .Database.ExecuteSqlRawAsync(SyncTestSchema.Ddl, cancellationToken);
+        }
+
         application.UseApi();
         if (mapFailingEndpoint)
         {
@@ -126,11 +203,27 @@ internal sealed class ApiHost : IAsyncDisposable
         return Assert.IsType<UserResponse>(user).Id;
     }
 
+    public async Task<HttpStatusCode> DeleteMeAsync(string authUserId)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, "/v1/users/me");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", TestTokens.Create(authUserId));
+        using var response = await HttpClient.SendAsync(request, TestContext.Current.CancellationToken);
+        return response.StatusCode;
+    }
+
+    public async Task<SyncServerWriteResult> WriteAsServerAsync(SyncServerCommand command)
+    {
+        await using var scope = application.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<SyncServerWriter>().WriteAsync(command, TestContext.Current.CancellationToken);
+    }
+
     public async Task<T> QueryDatabaseAsync<T>(Func<MurmliDbContext, Task<T>> query)
     {
         await using var scope = application.Services.CreateAsyncScope();
         return await query(scope.ServiceProvider.GetRequiredService<MurmliDbContext>());
     }
+
+    public void FlushMetrics() => Assert.True(Services.GetRequiredService<MeterProvider>().ForceFlush());
 
     public async ValueTask DisposeAsync()
     {

@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "id": "core/deletion/deleted-id-stays-deleted",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/122 Ein gelöschter Datensatz lässt sich nicht wieder anlegen, auch nicht mit derselben ID",
+  "dataTypes": ["testNote"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [
+    { "device": "phone", "kind": "create", "dataType": "testNote", "scope": "$personal", "record": "note", "at": -60000, "fields": { "title": "original" } },
+    { "device": "phone", "kind": "delete", "dataType": "testNote", "scope": "$personal", "record": "note", "at": -50000 }
+  ],
+  "race": [
+    { "label": "recreate", "device": "phone", "kind": "create", "dataType": "testNote", "scope": "$personal", "record": "note", "at": -1000, "fields": { "title": "again" } },
+    { "label": "change", "device": "tablet", "kind": "setFields", "dataType": "testNote", "scope": "$personal", "record": "note", "at": -500, "fields": { "title": "changed" } }
+  ],
+  "expect": {
+    "results": { "recreate": { "status": "ignored", "cause": "targetDeleted" }, "change": { "status": "ignored", "cause": "targetDeleted" } },
+    "records": [],
+    "absent": [ { "dataType": "testNote", "record": "note" } ]
+  },
+  "expectByOrder": {}
+}

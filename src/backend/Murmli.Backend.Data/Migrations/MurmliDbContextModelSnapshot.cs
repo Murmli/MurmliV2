@@ -65,6 +65,14 @@ namespace Murmli.Backend.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTimeOffset?>("DeletionStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deletion_started_at");
+
+                    b.Property<DateOnly?>("LastRequestOn")
+                        .HasColumnType("date")
+                        .HasColumnName("last_request_on");
+
                     b.HasKey("Id")
                         .HasName("pk_users");
 
@@ -214,6 +222,459 @@ namespace Murmli.Backend.Data.Migrations
                         .HasName("pk_product_import_runs");
 
                     b.ToTable("product_import_runs", "products");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.ShoppingLists.ShoppingList", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset>("NameChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("name_changed_at");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_id");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_lists");
+
+                    b.HasIndex("ScopeId", "Version")
+                        .HasDatabaseName("ix_lists_scope_id_version");
+
+                    b.ToTable("lists", "shopping", t =>
+                        {
+                            t.HasCheckConstraint("ck_lists_scope_id", "scope_id = id");
+                        });
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.ShoppingLists.ShoppingListItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AmountChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("amount_changed_at");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("category");
+
+                    b.Property<DateTimeOffset>("CategoryChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("category_changed_at");
+
+                    b.Property<DateTimeOffset>("ChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("changed_at");
+
+                    b.Property<Guid?>("ChangedByMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("changed_by_member_id");
+
+                    b.Property<bool>("Checked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("checked");
+
+                    b.Property<DateTimeOffset?>("CheckedArrivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_arrived_at");
+
+                    b.Property<DateTimeOffset>("CheckedChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_changed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedByMemberId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_member_id");
+
+                    b.Property<string>("Language")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("language");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset>("NameChangedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("name_changed_at");
+
+                    b.Property<decimal?>("Quantity")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_id");
+
+                    b.Property<string>("Unit")
+                        .HasColumnType("text")
+                        .HasColumnName("unit");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_items");
+
+                    b.HasIndex("ChangedByMemberId")
+                        .HasDatabaseName("ix_items_changed_by_member_id")
+                        .HasFilter("changed_by_member_id IS NOT NULL");
+
+                    b.HasIndex("CheckedArrivedAt")
+                        .HasDatabaseName("ix_items_checked_arrived_at")
+                        .HasFilter("checked_arrived_at IS NOT NULL");
+
+                    b.HasIndex("CreatedByMemberId")
+                        .HasDatabaseName("ix_items_created_by_member_id")
+                        .HasFilter("created_by_member_id IS NOT NULL");
+
+                    b.HasIndex("ScopeId", "Version")
+                        .HasDatabaseName("ix_items_scope_id_version");
+
+                    b.ToTable("items", "shopping");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.CleanupLease", b =>
+                {
+                    b.Property<bool>("Singleton")
+                        .HasColumnType("boolean")
+                        .HasColumnName("singleton");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid?>("Holder")
+                        .HasColumnType("uuid")
+                        .HasColumnName("holder");
+
+                    b.HasKey("Singleton")
+                        .HasName("pk_cleanup_lease");
+
+                    b.ToTable("cleanup_lease", "sync", t =>
+                        {
+                            t.HasCheckConstraint("ck_cleanup_lease_singleton", "singleton");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Singleton = true
+                        });
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.DatabaseIdentity", b =>
+                {
+                    b.Property<bool>("Singleton")
+                        .HasColumnType("boolean")
+                        .HasColumnName("singleton");
+
+                    b.Property<Guid>("Value")
+                        .HasColumnType("uuid")
+                        .HasColumnName("value");
+
+                    b.HasKey("Singleton")
+                        .HasName("pk_database_identity");
+
+                    b.ToTable("database_identity", "sync", t =>
+                        {
+                            t.HasCheckConstraint("ck_database_identity_singleton", "singleton");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Singleton = true,
+                            Value = new Guid("3643d4ef-a971-42c0-be19-cc2c3180dc55")
+                        });
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.ProcessedSyncCommand", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<Guid>("CommandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("command_id");
+
+                    b.Property<string>("Cause")
+                        .HasColumnType("text")
+                        .HasColumnName("cause");
+
+                    b.Property<string>("DataType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("data_type");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTimeOffset>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("RecordId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("record_id");
+
+                    b.Property<DateTimeOffset>("RetainFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retain_from");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_id");
+
+                    b.Property<string>("Status")
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.HasKey("AccountId", "CommandId")
+                        .HasName("pk_processed_commands");
+
+                    b.HasIndex("RetainFrom")
+                        .HasDatabaseName("ix_processed_commands_retain_from");
+
+                    b.HasIndex("AccountId", "ScopeId")
+                        .HasDatabaseName("ix_processed_commands_root_deletes")
+                        .HasFilter("kind = 'delete' AND status = 'applied' AND record_id = scope_id");
+
+                    b.ToTable("processed_commands", "sync");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncMemberEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("role");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_id");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("state");
+
+                    b.HasKey("Id")
+                        .HasName("pk_member_entries");
+
+                    b.HasIndex("AccountId")
+                        .HasDatabaseName("ix_member_entries_account_id");
+
+                    b.HasIndex("ScopeId", "AccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_member_entries_scope_id_account_id");
+
+                    b.ToTable("member_entries", "sync");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncScope", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("Epoch")
+                        .HasColumnType("integer")
+                        .HasColumnName("epoch");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("OwnerAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_account_id");
+
+                    b.Property<long>("TombstoneFloor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("tombstone_floor");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_scopes");
+
+                    b.HasIndex("OwnerAccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_scopes_owner_account_id_personal")
+                        .HasFilter("kind = 'personal'");
+
+                    b.HasIndex("OwnerAccountId", "Kind")
+                        .HasDatabaseName("ix_scopes_owner_account_id_kind");
+
+                    b.ToTable("scopes", "sync");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncTombstone", b =>
+                {
+                    b.Property<string>("DataType")
+                        .HasColumnType("text")
+                        .HasColumnName("data_type");
+
+                    b.Property<Guid>("RecordId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("record_id");
+
+                    b.Property<DateTimeOffset>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_id");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("DataType", "RecordId")
+                        .HasName("pk_tombstones");
+
+                    b.HasIndex("DeletedAt")
+                        .HasDatabaseName("ix_tombstones_deleted_at");
+
+                    b.HasIndex("ScopeId", "Version")
+                        .HasDatabaseName("ix_tombstones_scope_id_version");
+
+                    b.ToTable("tombstones", "sync");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.ShoppingLists.ShoppingList", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Sync.SyncScope", null)
+                        .WithMany()
+                        .HasForeignKey("ScopeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_lists_scopes_scope_id");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.ShoppingLists.ShoppingListItem", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Sync.SyncMemberEntry", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByMemberId")
+                        .OnDelete(DeleteBehavior.ClientNoAction)
+                        .HasConstraintName("fk_items_member_entries_changed_by_member_id");
+
+                    b.HasOne("Murmli.Backend.Data.Sync.SyncMemberEntry", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByMemberId")
+                        .OnDelete(DeleteBehavior.ClientNoAction)
+                        .HasConstraintName("fk_items_member_entries_created_by_member_id");
+
+                    b.HasOne("Murmli.Backend.Data.Sync.SyncScope", null)
+                        .WithMany()
+                        .HasForeignKey("ScopeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_items_scopes_scope_id");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.ProcessedSyncCommand", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_processed_commands_users_account_id");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncMemberEntry", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_member_entries_users_account_id");
+
+                    b.HasOne("Murmli.Backend.Data.Sync.SyncScope", null)
+                        .WithMany()
+                        .HasForeignKey("ScopeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_member_entries_scopes_scope_id");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncScope", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerAccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_scopes_users_owner_account_id");
+                });
+
+            modelBuilder.Entity("Murmli.Backend.Data.Sync.SyncTombstone", b =>
+                {
+                    b.HasOne("Murmli.Backend.Data.Sync.SyncScope", null)
+                        .WithMany()
+                        .HasForeignKey("ScopeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_tombstones_scopes_scope_id");
                 });
 #pragma warning restore 612, 618
         }

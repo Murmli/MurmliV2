@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "id": "shopping/items/later-check-wins",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/141 Abhaken und zurückholen: Die spätere Gerätezeit gewinnt (65)",
+  "dataTypes": ["shoppingList", "shoppingListItem"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [
+    { "device": "phone", "kind": "create", "dataType": "shoppingList", "scope": "list", "record": "list", "at": -60000, "fields": { "name": "Einkauf" } },
+    { "device": "phone", "kind": "create", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -50000, "fields": { "name": "Milch", "category": "dairy", "language": "de" } }
+  ],
+  "race": [
+    { "label": "check", "device": "phone", "kind": "setFields", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -2000, "fields": { "checked": true } },
+    { "label": "uncheck", "device": "tablet", "kind": "setFields", "dataType": "shoppingListItem", "scope": "list", "record": "milk", "at": -1000, "fields": { "checked": false } }
+  ],
+  "expect": {
+    "results": { "check": { "status": "applied" }, "uncheck": { "status": "applied" } },
+    "records": [ { "dataType": "shoppingListItem", "record": "milk", "fields": { "checked": false } } ],
+    "absent": []
+  },
+  "expectByOrder": {
+    "uncheck>check": { "results": { "check": { "status": "ignored", "cause": "lostToNewer" }, "uncheck": { "status": "applied" } } }
+  }
+}

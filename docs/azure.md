@@ -20,6 +20,14 @@ Betriebsdoku (Einrichtung, Deploy-Ablauf): [BackOffice, docs/03_Betrieb/Deployme
 - Aspire meldet sich nur über die `az`-Session an, `AZURE_CLIENT_ID`, `AZURE_FEDERATED_TOKEN_FILE` und Workload Identity wirken nicht.
 - Die OIDC-Assertion gilt nur fünf Minuten, deshalb holt der Workflow die Tokens direkt nach dem Login ([microsoft/aspire#19560](https://github.com/microsoft/aspire/issues/19560)). Resource-Strings mit `/` am Ende verfehlen den Cache, eine fehlende Audience endet in AADSTS700024.
 
+## Aufräumen des Abgleichs
+
+Abgelaufene Löschmarkierungen und Kommando-IDs entfernt der Hintergrunddienst `SyncCleanupService` in der API ([sync.md](sync.md#aufbewahrung-und-aufräumen)), ohne eigene Ressource; derselbe Lauf schließt hängengebliebene Kontolöschungen ab ([authentication.md](authentication.md#konto-löschen)). Er läuft eine Minute nach jedem Start der API und danach alle 24 Stunden, solange die Instanz läuft. In Dev, wo die API auf null Instanzen herunterfährt, läuft er also bei jedem Kaltstart und täglich nur während der Nutzung; ohne Nutzung wächst dort nichts nach. Mehrere Instanzen und die Revisionen eines Deploys stören sich nicht, die Lease in `sync.cleanup_lease` lässt höchstens einen Lauf zu. `Sync:Cleanup:Enabled=false` schaltet ihn ab; derzeit setzt keine Umgebung einen `Sync:Cleanup:*`-Wert.
+
+## Sicherung einspielen
+
+Nach dem Einspielen einer Sicherung erneuert ein Mensch die Kennung der Datenbank mit `UPDATE sync.database_identity SET value = gen_random_uuid();` ([database.md](database.md#abgleich)), sonst verpassen Geräte Änderungen, deren Versionen ihr Token schon zu kennen glaubt. Den Zugang zur Datenbank beschreibt die Betriebsdoku (oben, Abschnitt „Eigener Zugang zur Datenbank“).
+
 ## Entscheidungen
 
 | Entscheidung | Grund |
@@ -35,5 +43,6 @@ Betriebsdoku (Einrichtung, Deploy-Ablauf): [BackOffice, docs/03_Betrieb/Deployme
 | Ressourcennamen und Naming-Schema bleiben | Eine Umbenennung legt neue, leere Ressourcen an. Aspire löscht beim Deploy nie etwas, die alten kosten weiter. |
 | Gemeinsame Identity `backend-identity` | Aspire macht jede Identity zu einem eigenen Postgres-Entra-Admin mit eigener Rolle, Tabellen gehören der migrierenden Rolle. Verworfen: getrennte Identities, gegenseitiger Zugriff ginge nur über Azure-spezifisches Verhalten von `azure_pg_admin` und wäre lokal nicht testbar. Auch `auth` hat sie, sein Modul `auth-roles-postgres` gleicht denen der anderen Apps (derselbe Principal) und brauchte keine Vorbereitung in Azure. |
 | Ausgeschlossene Azure-Features | Preview oder Zusatzkosten. |
+| Aufräumen des Abgleichs als Hintergrunddienst in der API | Keine neue Ressource und kein neuer Ressourcenname, kein weiteres Postgres-Admin-Modul je Deploy (`ServerIsBusy`), kein eigener Verbindungspool neben den 35 Verbindungen des Servers. Dass er in Dev nur läuft, während die API läuft, ist unschädlich, ohne Nutzung wächst nichts nach. Verworfen: geplanter Container-Apps-Job. |
 
 Verworfene Wege für Telemetrie (OpenTelemetry-Agent der Umgebung, OTLP-Aufnahme von Azure Monitor): [telemetry.md](telemetry.md#entscheidungen).

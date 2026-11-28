@@ -5,7 +5,9 @@ namespace Murmli.Backend.Api.Tests.Infrastructure;
 
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer container = new PostgreSqlBuilder("postgres:18").Build();
+    private readonly PostgreSqlContainer container = new PostgreSqlBuilder("postgres:18")
+        .WithCommand("-c", "max_connections=300")
+        .Build();
 
     public string CreateDatabaseConnectionString() =>
         new NpgsqlConnectionStringBuilder(container.GetConnectionString())

@@ -13,6 +13,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="Docker.DotNet.Enhanced" />
         <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
         <PackageReference Include="OpenTelemetry.Exporter.InMemory" />
         <PackageReference Include="Testcontainers.PostgreSql" />
@@ -24,7 +25,19 @@
     </ItemGroup>
 
     <ItemGroup>
+        <None Include="..\..\sync-cases\**\*.json" LinkBase="Fixtures\SyncCases" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <ItemGroup>
         <Using Include="Xunit" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <AssemblyMetadata Include="ApiHostProject" Value="$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)..', 'Murmli.Backend.Api.Host', 'Murmli.Backend.Api.Host.csproj'))" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <RuntimeHostConfigurationOption Include="System.IO.Compression.UseStrictValidation" Value="true" />
     </ItemGroup>
 
 </Project>

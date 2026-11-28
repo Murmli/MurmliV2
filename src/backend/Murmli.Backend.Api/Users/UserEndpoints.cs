@@ -13,9 +13,17 @@ internal static class UserEndpoints
         CancellationToken cancellationToken
     )
     {
-        var account = await userRegistry.GetOrCreateAsync(user.GetAuthUserId(), user.GetIssuedAt(), cancellationToken);
+        var authUserId = user.GetAuthUserId();
+        var account = await userRegistry.GetOrCreateAsync(authUserId, user.GetIssuedAt(), cancellationToken);
         if (account is null)
         {
+            return TypedResults.Unauthorized();
+        }
+
+        if (account.DeletionStartedAt is not null)
+        {
+            // Signing in finishes a deletion that stopped after the marker, like a repeated DELETE
+            await userRegistry.CompleteDeletionAsync(authUserId, CancellationToken.None);
             return TypedResults.Unauthorized();
         }
 

@@ -4,6 +4,7 @@ using Murmli.Backend.Api.AuthService;
 using Murmli.Backend.Api.Extensions;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Identity;
+using Murmli.Backend.Sync.Accounts;
 using Npgsql;
 
 namespace Murmli.Backend.Api.Users;
@@ -11,6 +12,7 @@ namespace Murmli.Backend.Api.Users;
 internal sealed partial class UserRegistry(
     MurmliDbContext context,
     AuthServiceClient authServiceClient,
+    SyncAccountLifecycle syncAccountLifecycle,
     TimeProvider timeProvider,
     ILogger<UserRegistry> logger
 )
@@ -33,11 +35,13 @@ internal sealed partial class UserRegistry(
             return null;
         }
 
+        var now = timeProvider.GetUtcNow();
         var user = new User
         {
             Id = Guid.NewGuid(),
             AuthUserId = authUserId,
-            CreatedAt = timeProvider.GetUtcNow(),
+            CreatedAt = now,
+            LastRequestOn = DateOnly.FromDateTime(now.UtcDateTime),
         };
         context.Users.Add(user);
         try
@@ -59,24 +63,45 @@ internal sealed partial class UserRegistry(
     public async Task<bool> DeleteAsync(string authUserId, CancellationToken cancellationToken = default)
     {
         var userId = await context.Users.FindIdAsync(authUserId, cancellationToken);
+        await AddDeletionRecordAsync(authUserId, cancellationToken);
+        if (userId is { } accountId)
+        {
+            await syncAccountLifecycle.MarkDeletingAsync(accountId, cancellationToken);
+        }
 
-        var now = timeProvider.GetUtcNow();
-        context.DeletedUsers.Add(new DeletedUser { AuthUserId = authUserId, DeletedAt = now });
-        await context.SaveChangesAsync(cancellationToken);
+        return await CompleteDeletionAsync(authUserId, cancellationToken);
+    }
 
-        await context.Users.Where(user => user.AuthUserId == authUserId).ExecuteDeleteAsync(cancellationToken);
-
-        await context
-            .DeletedUsers.Where(deletedUser => deletedUser.DeletedAt < now - DeletionRecordRetention)
-            .ExecuteDeleteAsync(cancellationToken);
+    public async Task<bool> CompleteDeletionAsync(string authUserId, CancellationToken cancellationToken = default)
+    {
+        var userId = await context.Users.FindIdAsync(authUserId, cancellationToken);
+        if (userId is { } accountId)
+        {
+            await syncAccountLifecycle.DeleteOwnedScopesAsync(accountId, cancellationToken);
+        }
 
         if (!await authServiceClient.TryDeleteUserAsync(authUserId, cancellationToken))
         {
             return false;
         }
 
+        // Written after the deletion in auth, so no token the user can still present is newer than this record
+        var deletedAt = await AddDeletionRecordAsync(authUserId, cancellationToken);
+        await context.Users.Where(user => user.AuthUserId == authUserId).ExecuteDeleteAsync(cancellationToken);
+        await context
+            .DeletedUsers.Where(deletedUser => deletedUser.DeletedAt < deletedAt - DeletionRecordRetention)
+            .ExecuteDeleteAsync(cancellationToken);
+
         LogUserDeleted(userId);
         return true;
+    }
+
+    private async Task<DateTimeOffset> AddDeletionRecordAsync(string authUserId, CancellationToken cancellationToken)
+    {
+        var deletedAt = timeProvider.GetUtcNow();
+        context.DeletedUsers.Add(new DeletedUser { AuthUserId = authUserId, DeletedAt = deletedAt });
+        await context.SaveChangesAsync(cancellationToken);
+        return deletedAt;
     }
 
     private Task<User?> FindAsync(string authUserId, CancellationToken cancellationToken) =>

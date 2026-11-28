@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "id": "core/creation/create-on-id-in-other-scope-is-rejected",
+  "rule": "https://github.com/Murmli/MurmliV2/issues/122 Anlegen: Gibt es die ID in einem anderen Bereich, wird es abgelehnt",
+  "dataTypes": ["testBoard", "testCard"],
+  "devices": { "phone": { "account": "alice" }, "tablet": { "account": "alice" } },
+  "given": [
+    { "device": "phone", "kind": "create", "dataType": "testBoard", "scope": "groceries", "record": "groceries", "at": -60000, "fields": { "title": "Groceries" } },
+    { "device": "phone", "kind": "create", "dataType": "testBoard", "scope": "hardware", "record": "hardware", "at": -59000, "fields": { "title": "Hardware" } }
+  ],
+  "race": [
+    { "label": "inGroceries", "device": "phone", "kind": "create", "dataType": "testCard", "scope": "groceries", "record": "card", "at": -2000, "fields": { "text": "milk" } },
+    { "label": "inHardware", "device": "tablet", "kind": "create", "dataType": "testCard", "scope": "hardware", "record": "card", "at": -1000, "fields": { "text": "nails" } }
+  ],
+  "expect": {
+    "results": { "inGroceries": { "status": "applied" }, "inHardware": { "status": "rejected", "reason": "noAccess" } },
+    "records": [ { "dataType": "testCard", "record": "card", "fields": { "text": "milk" } } ],
+    "absent": []
+  },
+  "expectByOrder": {
+    "inHardware>inGroceries": {
+      "results": { "inGroceries": { "status": "rejected", "reason": "noAccess" }, "inHardware": { "status": "applied" } },
+      "records": [ { "dataType": "testCard", "record": "card", "fields": { "text": "nails" } } ]
+    }
+  }
+}
