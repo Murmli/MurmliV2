@@ -153,6 +153,12 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // The stored toggle arrives in one frame, its animations start ticking in the next.
+  Future<void> pumpIntoToggleAnimation(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+
   Finder inPendingEntries(String text) => find.descendant(
     of: find.byType(ShoppingListPendingEntries),
     matching: find.text(text),
@@ -458,7 +464,7 @@ void main() {
 
         expect(storedItem(container, itemId).checked, isTrue);
 
-        await tester.pump(const Duration(milliseconds: 50));
+        await pumpIntoToggleAnimation(tester);
 
         expect(inOpenGroups('Butter'), findsOneWidget);
         expect(inCheckedSection('Butter'), findsOneWidget);
@@ -489,7 +495,7 @@ void main() {
 
         expect(storedItem(container, itemId).checked, isFalse);
 
-        await tester.pump(const Duration(milliseconds: 50));
+        await pumpIntoToggleAnimation(tester);
 
         expect(inOpenGroups('Butter'), findsOneWidget);
         expect(inCheckedSection('Butter'), findsOneWidget);
@@ -498,6 +504,72 @@ void main() {
 
         expect(inOpenGroups('Butter'), findsOneWidget);
         expect(inCheckedSection('Butter'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'checking the only item of a category keeps its group until the group has collapsed',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        await addItem(tester, container, 'Milch', MarketCategory.dairy);
+        await addItem(tester, container, 'Karotten', MarketCategory.vegetables);
+
+        await tester.tap(
+          find.bySemanticsLabel(shoppingList.checkItem(name: 'Milch')),
+        );
+        await tester.pump();
+        await pumpIntoToggleAnimation(tester);
+
+        expect(find.text(categories.dairy), findsOneWidget);
+
+        await tester.pumpAndSettle();
+
+        expect(find.text(categories.dairy), findsNothing);
+        expect(find.text(categories.vegetables), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'reopening the only checked item keeps the checked section until it has collapsed',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        await check(
+          tester,
+          container,
+          await addItem(tester, container, 'Kaffee', MarketCategory.beverages),
+        );
+
+        await tester.tap(
+          find.bySemanticsLabel(shoppingList.uncheckItem(name: 'Kaffee')),
+        );
+        await tester.pump();
+        await pumpIntoToggleAnimation(tester);
+
+        expect(find.byType(ShoppingListCheckedSectionSliver), findsOneWidget);
+
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ShoppingListCheckedSectionSliver), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'checking the first item shows the checked section with the item',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        await addItem(tester, container, 'Milch', MarketCategory.dairy);
+        await addItem(tester, container, 'Karotten', MarketCategory.vegetables);
+
+        await tester.tap(
+          find.bySemanticsLabel(shoppingList.checkItem(name: 'Milch')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(shoppingList.checkedSection(count: 1)),
+          findsOneWidget,
+        );
+        expect(inCheckedSection('Milch'), findsOneWidget);
       },
     );
 
@@ -512,7 +584,7 @@ void main() {
           find.bySemanticsLabel(shoppingList.checkItem(name: 'Butter')),
         );
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
+        await pumpIntoToggleAnimation(tester);
 
         expect(inEntryField(find.text('1 / 2')), findsOneWidget);
         expect(

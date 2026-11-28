@@ -8,6 +8,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../models/shopping_list_group.dart';
 import 'shopping_list_item_row.dart';
 import 'shopping_list_pinned_header.dart';
+import 'shopping_list_section.dart';
 
 class ShoppingListGroupSliver extends StatelessWidget {
   const ShoppingListGroupSliver({required this.group, super.key});
@@ -24,64 +25,50 @@ class ShoppingListGroupSliver extends StatelessWidget {
     final countStyle = textTheme.labelSmall!.copyWith(
       color: colors.inkTertiary,
     );
-    return SliverMainAxisGroup(
-      slivers: [
-        ShoppingListPinnedHeader(
-          contentHeight: math.max(
-            ShoppingListPinnedHeader.lineHeightOf(context, titleStyle),
-            ShoppingListPinnedHeader.lineHeightOf(context, countStyle),
-          ),
-          child: Padding(
-            padding: const EdgeInsetsDirectional.symmetric(
-              horizontal: AppSpacing.space4,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text(
-                      group.category.label(context.t),
-                      style: titleStyle,
-                    ),
-                  ),
-                ),
-                Text('${group.count}', style: countStyle),
-              ],
-            ),
-          ),
+    return ShoppingListSection(
+      items: group.items,
+      leavingItemIds: group.leavingItemIds,
+      headerContentHeight: math.max(
+        ShoppingListPinnedHeader.lineHeightOf(context, titleStyle),
+        ShoppingListPinnedHeader.lineHeightOf(context, countStyle),
+      ),
+      header: Padding(
+        padding: const EdgeInsetsDirectional.symmetric(
+          horizontal: AppSpacing.space4,
         ),
-        SliverPadding(
-          padding: const EdgeInsetsDirectional.only(
-            start: AppSpacing.screenMargin,
-            end: AppSpacing.screenMargin,
-            bottom: AppSpacing.space12,
-          ),
-          sliver: SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsetsDirectional.only(
-                start: 4,
-                end: AppSpacing.space16,
-              ),
-              decoration: BoxDecoration(
-                color: colors.surface,
-                borderRadius: BorderRadius.circular(AppRadius.listGroup),
-                boxShadow: colors.cardShadow,
-              ),
-              child: Column(
-                children: [
-                  for (final (index, item) in group.items.indexed)
-                    ShoppingListItemRow(
-                      item: item,
-                      showDivider: index > 0,
-                      isLeaving: group.leavingItemIds.contains(item.id),
-                    ),
-                ],
+        child: Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Text(group.category.label(context.t), style: titleStyle),
               ),
             ),
-          ),
+            Text('${group.count}', style: countStyle),
+          ],
         ),
-      ],
+      ),
+      body: Container(
+        padding: const EdgeInsetsDirectional.only(
+          start: 4,
+          end: AppSpacing.space16,
+        ),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.listGroup),
+          boxShadow: colors.cardShadow,
+        ),
+        child: Column(
+          children: [
+            for (final (index, item) in group.items.indexed)
+              ShoppingListItemRow(
+                item: item,
+                showDivider: index > 0,
+                isLeaving: group.leavingItemIds.contains(item.id),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }

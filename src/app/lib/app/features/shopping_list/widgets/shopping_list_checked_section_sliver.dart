@@ -12,6 +12,7 @@ import '../models/shopping_list_item.dart';
 import '../providers/checked_section_expanded_provider.dart';
 import 'shopping_list_item_row.dart';
 import 'shopping_list_pinned_header.dart';
+import 'shopping_list_section.dart';
 
 class ShoppingListCheckedSectionSliver extends ConsumerWidget {
   const ShoppingListCheckedSectionSliver({
@@ -33,75 +34,64 @@ class ShoppingListCheckedSectionSliver extends ConsumerWidget {
     final isExpanded = ref.watch(checkedSectionExpandedProvider);
     final titleStyle = TextTheme.of(context).titleSmall!
         .copyWith(color: colors.inkSecondary);
-    return SliverMainAxisGroup(
-      slivers: [
-        ShoppingListPinnedHeader(
-          contentHeight: math.max(
-            _minimumHeaderHeight,
-            ShoppingListPinnedHeader.lineHeightOf(context, titleStyle),
+    return ShoppingListSection(
+      items: items,
+      leavingItemIds: leavingItemIds,
+      headerContentHeight: math.max(
+        _minimumHeaderHeight,
+        ShoppingListPinnedHeader.lineHeightOf(context, titleStyle),
+      ),
+      header: Semantics(
+        container: true,
+        button: true,
+        header: true,
+        expanded: isExpanded,
+        child: InkWell(
+          onTap: () => unawaited(
+            ref.read(checkedSectionExpandedProvider.notifier).toggle(),
           ),
-          child: Semantics(
-            container: true,
-            button: true,
-            header: true,
-            expanded: isExpanded,
-            child: InkWell(
-              onTap: () => unawaited(
-                ref.read(checkedSectionExpandedProvider.notifier).toggle(),
+          child: Row(
+            spacing: 6,
+            children: [
+              AnimatedRotation(
+                turns: isExpanded ? 0 : -0.25,
+                duration: AppMotion.short(context),
+                child: Icon(
+                  Icons.expand_more,
+                  size: 16,
+                  color: colors.inkSecondary,
+                ),
               ),
-              child: Row(
-                spacing: 6,
+              Text(
+                context.t.shoppingList.checkedSection(count: count),
+                style: titleStyle,
+              ),
+            ],
+          ),
+        ),
+      ),
+      body: isExpanded
+          ? Container(
+              padding: const EdgeInsetsDirectional.only(
+                start: 4,
+                end: AppSpacing.space16,
+              ),
+              decoration: BoxDecoration(
+                color: colors.surfaceSecondary,
+                borderRadius: BorderRadius.circular(AppRadius.listGroup),
+              ),
+              child: Column(
                 children: [
-                  AnimatedRotation(
-                    turns: isExpanded ? 0 : -0.25,
-                    duration: AppMotion.short(context),
-                    child: Icon(
-                      Icons.expand_more,
-                      size: 16,
-                      color: colors.inkSecondary,
+                  for (final (index, item) in items.indexed)
+                    ShoppingListItemRow(
+                      item: item,
+                      showDivider: index > 0,
+                      isLeaving: leavingItemIds.contains(item.id),
                     ),
-                  ),
-                  Text(
-                    context.t.shoppingList.checkedSection(count: count),
-                    style: titleStyle,
-                  ),
                 ],
               ),
-            ),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsetsDirectional.only(
-            start: AppSpacing.screenMargin,
-            end: AppSpacing.screenMargin,
-            bottom: AppSpacing.space12,
-          ),
-          sliver: isExpanded
-              ? SliverToBoxAdapter(
-                  child: Container(
-                    padding: const EdgeInsetsDirectional.only(
-                      start: 4,
-                      end: AppSpacing.space16,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.surfaceSecondary,
-                      borderRadius: BorderRadius.circular(AppRadius.listGroup),
-                    ),
-                    child: Column(
-                      children: [
-                        for (final (index, item) in items.indexed)
-                          ShoppingListItemRow(
-                            item: item,
-                            showDivider: index > 0,
-                            isLeaving: leavingItemIds.contains(item.id),
-                          ),
-                      ],
-                    ),
-                  ),
-                )
-              : null,
-        ),
-      ],
+            )
+          : null,
     );
   }
 }
