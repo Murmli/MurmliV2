@@ -12,7 +12,7 @@ internal sealed class TestBoardType : SyncDataType<TestBoard>
 
     protected override void Define(SyncDataTypeBuilder<TestBoard> type)
     {
-        type.Named(DataTypeName, ScopeKindName).ScopeRoot(maxOwnedScopesPerAccount: 5).MaxRecordsPerScope(1);
+        type.Named(DataTypeName, ScopeKindName).ScopeRoot(maximumOwnedScopesPerAccount: 5).MaximumRecordsPerScope(1);
         type.Field("title", board => board.Title, board => board.TitleChangedAt, SyncFieldTypes.Text(0, 100)).RequiredOnCreate();
     }
 

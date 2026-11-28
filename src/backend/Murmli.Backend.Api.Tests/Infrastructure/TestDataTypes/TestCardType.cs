@@ -8,7 +8,7 @@ internal sealed class TestCardType : SyncDataType<TestCard>
 
     protected override void Define(SyncDataTypeBuilder<TestCard> type)
     {
-        type.Named(DataTypeName, TestBoardType.ScopeKindName).MaxRecordsPerScope(50);
+        type.Named(DataTypeName, TestBoardType.ScopeKindName).MaximumRecordsPerScope(50);
         type.Field("text", card => card.Text, card => card.TextChangedAt, SyncFieldTypes.Text(1, 100)).RequiredOnCreate();
         type.Group(
             "amount",

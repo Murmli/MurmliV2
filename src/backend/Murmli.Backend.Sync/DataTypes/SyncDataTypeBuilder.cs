@@ -22,9 +22,9 @@ public sealed class SyncDataTypeBuilder<TRecord>
         return this;
     }
 
-    public SyncDataTypeBuilder<TRecord> ScopeRoot(int maxOwnedScopesPerAccount)
+    public SyncDataTypeBuilder<TRecord> ScopeRoot(int maximumOwnedScopesPerAccount)
     {
-        definition = definition with { MaxOwnedScopesPerAccount = maxOwnedScopesPerAccount };
+        definition = definition with { MaximumOwnedScopesPerAccount = maximumOwnedScopesPerAccount };
         return this;
     }
 

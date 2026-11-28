@@ -6,7 +6,7 @@ internal sealed class ClosedCreateCardType : SyncDataType<TestCard>
 {
     protected override void Define(SyncDataTypeBuilder<TestCard> type)
     {
-        type.Named("closedCreateCard", TestBoardType.ScopeKindName).MaxRecordsPerScope(1);
+        type.Named("closedCreateCard", TestBoardType.ScopeKindName).MaximumRecordsPerScope(1);
         type.Field("text", card => card.Text, card => card.TextChangedAt, SyncFieldTypes.Text(0, 100)).RequiredOnCreate();
     }
 

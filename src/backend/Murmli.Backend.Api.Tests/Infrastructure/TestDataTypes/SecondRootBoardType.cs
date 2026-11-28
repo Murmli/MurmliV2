@@ -6,7 +6,7 @@ internal sealed class SecondRootBoardType : SyncDataType<TestBoard>
 {
     protected override void Define(SyncDataTypeBuilder<TestBoard> type)
     {
-        type.Named("secondBoard", TestBoardType.ScopeKindName).ScopeRoot(1).MaxRecordsPerScope(1);
+        type.Named("secondBoard", TestBoardType.ScopeKindName).ScopeRoot(1).MaximumRecordsPerScope(1);
         type.Field("title", board => board.Title, board => board.TitleChangedAt, SyncFieldTypes.Text(0, 100));
     }
 }

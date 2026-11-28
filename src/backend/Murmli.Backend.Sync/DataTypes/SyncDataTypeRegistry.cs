@@ -29,7 +29,7 @@ internal sealed class SyncDataTypeRegistry
             {
                 maximumOwnedScopesPerAccount.Add(
                     dataType,
-                    dataTypeOptions.GetValueOrDefault(dataType.Name)?.MaxOwnedScopesPerAccount ?? dataType.Definition.MaxOwnedScopesPerAccount!.Value
+                    dataTypeOptions.GetValueOrDefault(dataType.Name)?.MaxOwnedScopesPerAccount ?? dataType.Definition.MaximumOwnedScopesPerAccount!.Value
                 );
             }
         }
@@ -47,7 +47,7 @@ internal sealed class SyncDataTypeRegistry
 
     public int GetMaximumRecordsPerScope(SyncDataType dataType) => maximumRecordsPerScope[dataType];
 
-    public int GetMaxOwnedScopesPerAccount(SyncDataType rootType) => maximumOwnedScopesPerAccount[rootType];
+    public int GetMaximumOwnedScopesPerAccount(SyncDataType rootType) => maximumOwnedScopesPerAccount[rootType];
 
     public int GetDeletionThreshold(string scopeKind) => deletionThresholds.GetValueOrDefault(scopeKind);
 }

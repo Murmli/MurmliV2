@@ -346,7 +346,7 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
         var ownedScopeCount = await context
             .Set<SyncScope>()
             .CountAsync(scope => scope.OwnerAccountId == input.AccountId && scope.Kind == dataType.ScopeKind, cancellationToken);
-        if (ownedScopeCount >= registry.GetMaxOwnedScopesPerAccount(dataType))
+        if (ownedScopeCount >= registry.GetMaximumOwnedScopesPerAccount(dataType))
         {
             return (Rejected(claim, SyncRejectionReason.LimitExceeded), false);
         }

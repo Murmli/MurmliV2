@@ -6,7 +6,7 @@ internal sealed class DeviceReferenceCardType : SyncDataType<TestCard>
 {
     protected override void Define(SyncDataTypeBuilder<TestCard> type)
     {
-        type.Named("deviceReferenceCard", TestBoardType.ScopeKindName).MaxRecordsPerScope(1);
+        type.Named("deviceReferenceCard", TestBoardType.ScopeKindName).MaximumRecordsPerScope(1);
         type.Field("changedBy", card => card.ChangedByMemberId, card => card.TextChangedAt, SyncFieldTypes.MemberReference());
     }
 }

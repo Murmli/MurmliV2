@@ -15,7 +15,7 @@ public abstract class SyncDataType
 
     public string ScopeKind => Definition.ScopeKind;
 
-    public bool IsScopeRoot => Definition.MaxOwnedScopesPerAccount is not null;
+    public bool IsScopeRoot => Definition.MaximumOwnedScopesPerAccount is not null;
 
     public virtual SyncMemberRole MinimumRole(SyncCommandKind kind) => SyncMemberRole.Member;
 
@@ -71,7 +71,7 @@ public abstract class SyncDataType<TRecord> : SyncDataType
             errors.Add($"The data type {DisplayName} must call MaximumRecordsPerScope with a value of at least 1.");
         }
 
-        if (Definition.MaxOwnedScopesPerAccount < 1)
+        if (Definition.MaximumOwnedScopesPerAccount < 1)
         {
             errors.Add($"The data type {DisplayName} must call ScopeRoot with a value of at least 1.");
         }

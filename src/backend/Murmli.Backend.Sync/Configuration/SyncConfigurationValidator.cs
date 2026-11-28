@@ -39,7 +39,7 @@ internal sealed class SyncConfigurationValidator(IEnumerable<SyncDataType> dataT
             }
             else if (
                 dataTypeOptions is { MaxOwnedScopesPerAccount: not null }
-                && !definitions.Any(definition => definition.Name == dataTypeName && definition.MaxOwnedScopesPerAccount is not null)
+                && !definitions.Any(definition => definition.Name == dataTypeName && definition.MaximumOwnedScopesPerAccount is not null)
             )
             {
                 errors.Add($"{SyncOptions.SectionName}:DataTypes:{dataTypeName}:MaxOwnedScopesPerAccount applies only to scope root types.");
@@ -88,7 +88,7 @@ internal sealed class SyncConfigurationValidator(IEnumerable<SyncDataType> dataT
         )
         {
             var rootNames = kind
-                .Where(definition => definition.MaxOwnedScopesPerAccount is not null)
+                .Where(definition => definition.MaximumOwnedScopesPerAccount is not null)
                 .Select(definition => definition.Name)
                 .ToList();
             if (kind.Key == SyncScope.PersonalKind)

@@ -7,7 +7,7 @@ internal sealed class PersonalRootNoteType : SyncDataType<TestNote>
 {
     protected override void Define(SyncDataTypeBuilder<TestNote> type)
     {
-        type.Named("personalRootNote", SyncScope.PersonalKind).ScopeRoot(1).MaxRecordsPerScope(1);
+        type.Named("personalRootNote", SyncScope.PersonalKind).ScopeRoot(1).MaximumRecordsPerScope(1);
         type.Field("title", note => note.Title, note => note.TitleChangedAt, SyncFieldTypes.Text(0, 100));
     }
 }
