@@ -1,5 +1,6 @@
 using Aspire.Hosting.Azure;
 using Aspire.Hosting.JavaScript;
+using Murmli.Backend.Aspire.CustomDomain;
 using Murmli.Backend.Aspire.Telemetry;
 
 namespace Murmli.Backend.Aspire.Auth;
@@ -32,6 +33,7 @@ public static class Extensions
             .WithHttpEndpoint(port: builder.ExecutionContext.IsRunMode ? 5021 : null, env: "PORT")
             .WithExternalHttpEndpoints()
             .WithHttpHealthCheck("/health")
+            .WithCustomDomain()
             .WithReference(database)
             .WaitFor(database)
             .WithAzureUserAssignedIdentity(identity)
