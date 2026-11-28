@@ -54,6 +54,7 @@ dependencies:
   crypto: ^3.0.8
   uuid: ^4.6.0
   intl: ^0.20.3
+  connectivity_plus: ^7.3.2
 
   # Assets
   flutter_svg: ^2.5.1
@@ -74,6 +75,7 @@ dev_dependencies:
     sdk: flutter
 
   # Testing
+  fake_async: ^1.3.3
   shared_preferences_platform_interface: ^2.4.2
   path_provider_platform_interface: ^2.1.3
   sign_in_with_apple_platform_interface: ^2.0.0
