@@ -7,13 +7,13 @@ Flutter-App in `src/app`, Pfade relativ dazu. Siehe [apple.md](apple.md), [googl
 | Flavor | ID (iOS, Android) | Name | API | `auth` |
 | --- | --- | --- | --- | --- |
 | `local` | `de.murmli.app.dev` | Murmli Dev | `http://localhost:5020`, Android-Emulator `http://10.0.2.2:5020` | `http://localhost:5021`, Android-Emulator `http://10.0.2.2:5021` |
-| `development` | `de.murmli.app.dev` | Murmli Dev | `https://api.kinddune-9cab4a57.francecentral.azurecontainerapps.io` | `https://auth.kinddune-9cab4a57.francecentral.azurecontainerapps.io` |
+| `development` | `de.murmli.app.dev` | Murmli Dev | `https://api.dev.murmli.de` | `https://auth.kinddune-9cab4a57.francecentral.azurecontainerapps.io` |
 | `production` | `de.murmli.app` | Murmli | – | – |
 
 - Gemeinsame ID: `local` und `development` nicht nebeneinander installierbar, `production` schon.
 - `local` braucht `aspire run` ([AGENTS.md](../AGENTS.md#aspire-und-azure)), nur für Simulator bzw. Emulator, Geräte nutzen `development`.
 - Ab targetSdk 37 (Android 17, heute Flutters Standard 36) braucht `local` für `10.0.2.2` die [Local network permission](https://developer.android.com/privacy-and-security/local-network-permission).
-- `development` nutzt die Standard-Domain der Container-Apps-Umgebung, nach deren Neuanlage `AppEndpoints` und Tabelle anpassen.
+- `development` nutzt für `auth` die Standard-Domain der Container-Apps-Umgebung, nach deren Neuanlage `AppEndpoints` und Tabelle anpassen. Die API läuft unter `api.dev.murmli.de`, nach einer Neuanlage braucht sie die Schritte aus [azure.md](azure.md#custom-domain) und den Namen des neuen Managed Certificate in `api-certificate-name`.
 - `production` hat bis zum Release weder Adressen noch Google-Client (`_googleServerClientIdOf`), Lesen wirft `UnimplementedError` (gewollt ungeprüft bei Start und Build).
 - Flavor-Namen klein und ohne `-`, weil Flutter auf iOS den Teil nach `-` im Configuration-Namen nimmt und `flavorProvider` per `byName` auf `Flavor` abbildet.
 

@@ -28,8 +28,6 @@ Ein Managed Certificate lässt sich erst anlegen, wenn der Hostname an der App h
 
 Bis zum Deploy aus Schritt 4 setzt jeder Deploy die Bindung aus Schritt 3 wieder auf `Disabled`. Das Managed Certificate bleibt in der Umgebung, der Deploy aus Schritt 4 bindet es wieder.
 
-Noch nicht erledigt: Schritte 3 und 4 für `api.dev.murmli.de`. Bis dahin ist die Bindung deaktiviert und Clients nutzen weiter die Standard-Domain der App. Die Notiz entfällt, sobald `api-certificate-name` in `appsettings.azure-dev.json` gesetzt ist.
-
 ## Anmeldung beim Deploy (Aspire 13.6.5)
 
 - Aspire meldet sich nur über die `az`-Session an, `AZURE_CLIENT_ID`, `AZURE_FEDERATED_TOKEN_FILE` und Workload Identity wirken nicht.
