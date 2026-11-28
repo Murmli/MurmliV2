@@ -86,6 +86,23 @@ public class WebApplicationExtensionsTests(PostgresFixture postgres) : IClassFix
         Assert.True(schemas.TryGetProperty("SyncResponse", out _));
     }
 
+    [Fact]
+    public async Task UseApi_OpenApiEnabled_DescribesNumbersWithoutStrings()
+    {
+        await using var api = await ApiHost.StartAsync(connectionString, OpenApiEnabled);
+
+        using var document = await ReadDocumentAsync(api);
+
+        var serverTime = document
+            .RootElement.GetProperty("components")
+            .GetProperty("schemas")
+            .GetProperty("SyncResponse")
+            .GetProperty("properties")
+            .GetProperty("serverTime");
+        Assert.Equal("integer", serverTime.GetProperty("type").ToString());
+        Assert.False(serverTime.TryGetProperty("pattern", out _));
+    }
+
     [Theory]
     [InlineData("GET")]
     [InlineData("DELETE")]
