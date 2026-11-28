@@ -172,9 +172,11 @@
       "name": "Name",
       "quantity": "Menge",
       "unit": "Einheit",
-      "noUnit": "Keine Einheit",
       "category": "Kategorie",
+      "hint": "Menge und Einheit dürfen leer bleiben.",
+      "moreUnits": "Mehr",
       "save": "Speichern",
+      "cancel": "Abbrechen",
       "invalidQuantity": "Gib eine Zahl größer als 0 ein."
     },
     "menu": {

@@ -196,21 +196,36 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Finder editorField(String label) => find.widgetWithText(TextField, label);
+  Finder editorField(String label) => find.descendant(
+    of: find
+        .ancestor(
+          of: inSheet(find.text(label)),
+          matching: find.byType(MergeSemantics),
+        )
+        .first,
+    matching: find.byType(TextField),
+  );
 
-  Future<void> selectEntry(
-    WidgetTester tester,
-    Finder dropdownMenu,
-    String entry,
-  ) async {
-    await tester.ensureVisible(dropdownMenu);
-    await tester.tap(dropdownMenu);
+  Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+    await tester.ensureVisible(finder);
     await tester.pumpAndSettle();
-    final entryText = find.text(entry).last;
-    await tester.ensureVisible(entryText);
+    await tester.tap(finder);
     await tester.pumpAndSettle();
-    await tester.tap(entryText);
-    await tester.pumpAndSettle();
+  }
+
+  Future<void> chooseMenuEntry(WidgetTester tester, String entry) =>
+      tapVisible(tester, find.widgetWithText(MenuItemButton, entry));
+
+  Finder unitChip(MeasurementUnit unit) =>
+      find.bySemanticsLabel(unit.label(translations));
+
+  Future<void> chooseUnit(WidgetTester tester, MeasurementUnit unit) async {
+    if (unitChip(unit).evaluate().isNotEmpty) {
+      await tapVisible(tester, unitChip(unit));
+      return;
+    }
+    await tapVisible(tester, inSheet(find.text(editor.moreUnits)));
+    await chooseMenuEntry(tester, unit.label(translations));
   }
 
   Future<void> tapSave(WidgetTester tester) async {
@@ -1185,8 +1200,8 @@ void main() {
     );
   });
 
-  group('detailed editor', () {
-    testWidgets('long pressing the name of an item opens the detailed editor', (
+  group('editor', () {
+    testWidgets('long pressing the name of an item opens the editor', (
       tester,
     ) async {
       final container = await openShoppingListTab(tester, debugBuild: false);
@@ -1217,23 +1232,16 @@ void main() {
         await openEditor(tester, 'Milch');
         await tester.enterText(editorField(editor.name), 'Orangensaft');
         await tester.enterText(editorField(editor.quantity), '1,5');
-        await selectEntry(
-          tester,
-          find.byType(DropdownMenu<MeasurementUnit?>),
-          shoppingList.units.liter.name,
-        );
-        await selectEntry(
-          tester,
-          find.byType(DropdownMenu<MarketCategory>),
-          categories.beverages,
-        );
+        await chooseUnit(tester, MeasurementUnit.kilogram);
+        await tapVisible(tester, inSheet(find.text(categories.dairy)));
+        await chooseMenuEntry(tester, categories.beverages);
         await tapSave(tester);
 
         expect(find.text(editor.title), findsNothing);
         expect(
           find.descendant(
             of: rowOf('Orangensaft'),
-            matching: find.text('1,5 l'),
+            matching: find.text('1,5 kg'),
           ),
           findsOneWidget,
         );
@@ -1251,12 +1259,68 @@ void main() {
         final item = storedItem(container, itemId);
         expect(item.name, 'Orangensaft');
         expect(item.quantity, 1.5);
-        expect(item.unit, MeasurementUnit.liter);
+        expect(item.unit, MeasurementUnit.kilogram);
         expect(item.category, MarketCategory.beverages);
       },
     );
 
-    testWidgets('removing quantity and unit stores the item without both', (
+    testWidgets(
+      'every unit can be chosen through its chip or more and is then the selected chip',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        final itemId = await addItem(
+          tester,
+          container,
+          'Milch',
+          MarketCategory.dairy,
+        );
+
+        await openEditor(tester, 'Milch');
+        for (final unit in MeasurementUnit.values) {
+          await chooseUnit(tester, unit);
+
+          expect(
+            tester.getSemantics(unitChip(unit)),
+            isSemantics(isButton: true, isSelected: true),
+            reason: unit.key,
+          );
+        }
+        await tapSave(tester);
+
+        expect(storedItem(container, itemId).unit, MeasurementUnit.package);
+      },
+    );
+
+    testWidgets(
+      'tapping the selected unit chip and clearing the quantity stores the item without both',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        final itemId = await addItem(
+          tester,
+          container,
+          'Milch',
+          MarketCategory.dairy,
+          quantity: 2,
+          unit: MeasurementUnit.liter,
+        );
+
+        await openEditor(tester, 'Milch');
+        await tester.enterText(editorField(editor.quantity), '');
+        await tapVisible(tester, unitChip(MeasurementUnit.liter));
+
+        expect(unitChip(MeasurementUnit.liter), findsNothing);
+        await tapSave(tester);
+        final item = storedItem(container, itemId);
+        expect(item.quantity, isNull);
+        expect(item.unit, isNull);
+        expect(
+          find.descendant(of: rowOf('Milch'), matching: find.byType(Text)),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('cancel closes the editor and discards the changes', (
       tester,
     ) async {
       final container = await openShoppingListTab(tester, debugBuild: false);
@@ -1265,26 +1329,20 @@ void main() {
         container,
         'Milch',
         MarketCategory.dairy,
-        quantity: 2,
-        unit: MeasurementUnit.liter,
       );
 
       await openEditor(tester, 'Milch');
-      await tester.enterText(editorField(editor.quantity), '');
-      await selectEntry(
+      await tester.enterText(editorField(editor.name), 'Hafermilch');
+      await chooseUnit(tester, MeasurementUnit.gram);
+      await tapVisible(
         tester,
-        find.byType(DropdownMenu<MeasurementUnit?>),
-        editor.noUnit,
+        find.widgetWithText(OutlinedButton, editor.cancel),
       );
-      await tapSave(tester);
 
+      expect(find.text(editor.title), findsNothing);
       final item = storedItem(container, itemId);
-      expect(item.quantity, isNull);
+      expect(item.name, 'Milch');
       expect(item.unit, isNull);
-      expect(
-        find.descendant(of: rowOf('Milch'), matching: find.byType(Text)),
-        findsOneWidget,
-      );
     });
 
     testWidgets('a name of only spaces cannot be saved', (tester) async {
