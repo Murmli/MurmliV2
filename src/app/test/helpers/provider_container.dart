@@ -17,6 +17,7 @@ import 'package:app/app/core/database/app_database_provider.dart';
 import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/flavor/flavor_provider.dart';
 import 'package:app/app/core/logging/talker_provider.dart';
+import 'package:app/app/core/network/network_available_provider.dart';
 import 'package:app/app/core/storage/shared_preferences_provider.dart';
 import 'package:app/app/core/time/clock_provider.dart';
 
@@ -40,6 +41,7 @@ ProviderContainer createContainer(
         Talker(settings: TalkerSettings(useConsoleLogs: false)),
       ),
       crashReporterProvider.overrideWithValue(RecordingCrashReporter()),
+      networkAvailableProvider.overrideWithBuild((ref, notifier) => true),
       if (flavor != null) flavorProvider.overrideWithValue(flavor),
       if (debugBuild != null) debugBuildProvider.overrideWithValue(debugBuild),
       if (signedInAccount != null)

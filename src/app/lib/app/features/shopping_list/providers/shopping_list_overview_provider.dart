@@ -44,6 +44,7 @@ ShoppingListOverview? shoppingListOverview(Ref ref) {
   checkedEntries.sort(_lastCheckedFirst);
   return ShoppingListOverview(
     listId: list.id,
+    listName: list.name,
     checkedCount: list.items.where((item) => item.checked).length,
     totalCount: list.items.length,
     groups: [

@@ -16,6 +16,7 @@ import '../providers/leaving_shopping_list_items_provider.dart';
 import '../providers/recently_toggled_item_provider.dart';
 import '../providers/shopping_list_repository.dart';
 import '../quantity_label.dart';
+import '../shopping_list_write.dart';
 import 'market_category_tile.dart';
 import 'recipe_dot.dart';
 import 'shopping_list_item_editor.dart';
@@ -93,9 +94,12 @@ class ShoppingListItemRow extends HookConsumerWidget {
         }
       }
       unawaited(
-        ref
-            .read(shoppingListRepositoryProvider)
-            .setChecked(item.id, checked: !item.checked),
+        runShoppingListWrite(
+          context,
+          () => ref
+              .read(shoppingListRepositoryProvider)
+              .setChecked(item.id, checked: !item.checked),
+        ),
       );
     }
 
@@ -115,12 +119,12 @@ class ShoppingListItemRow extends HookConsumerWidget {
               key: ValueKey('dismiss-${item.id}'),
               direction: DismissDirection.endToStart,
               background: const _DeleteBackground(),
-              confirmDismiss: (_) async {
-                await ref
+              confirmDismiss: (_) => runShoppingListWrite(
+                context,
+                () => ref
                     .read(shoppingListRepositoryProvider)
-                    .deleteItem(item.id);
-                return true;
-              },
+                    .deleteItem(item.id),
+              ),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 48),
                 child: IntrinsicHeight(

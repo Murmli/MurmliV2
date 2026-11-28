@@ -6,11 +6,11 @@ import 'package:app/app/core/authentication/account.dart';
 import 'package:app/app/features/settings/settings_page.dart';
 import 'package:app/app/features/shopping_list/category_order_page.dart';
 import 'package:app/app/features/shopping_list/models/market_category.dart';
-import 'package:app/app/features/shopping_list/providers/first_shopping_list_provider.dart';
 import 'package:app/app/features/shopping_list/providers/shopping_list_overview_provider.dart';
 import 'package:app/i18n/strings.g.dart';
 
 import '../../../helpers/pump_app.dart';
+import '../../../helpers/shopping_list.dart';
 
 void main() {
   final translations = AppLocale.de.buildSync();
@@ -20,14 +20,15 @@ void main() {
 
   Future<ProviderContainer> openListMenu(
     WidgetTester tester, {
-    required bool debugBuild,
+    required bool withSampleItems,
   }) async {
     final container = await pumpApp(
       tester,
-      debugBuild: debugBuild,
       signedInAccount: const Account(id: 'account'),
+      shoppingList: TestShoppingList(
+        items: withSampleItems ? sampleShoppingListItems : const [],
+      ),
     );
-    container.read(firstShoppingListProvider);
     await tester.tap(find.text(translations.home.tabs.shoppingList.label));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip(shoppingList.menu.tooltip));
@@ -37,9 +38,12 @@ void main() {
 
   Future<ProviderContainer> openCategoryOrder(
     WidgetTester tester, {
-    required bool debugBuild,
+    required bool withSampleItems,
   }) async {
-    final container = await openListMenu(tester, debugBuild: debugBuild);
+    final container = await openListMenu(
+      tester,
+      withSampleItems: withSampleItems,
+    );
     await tester.tap(find.text(shoppingList.menu.sortCategories));
     await tester.pumpAndSettle();
     return container;
@@ -72,7 +76,7 @@ void main() {
     testWidgets('lists every category, empty ones too, in the default order', (
       tester,
     ) async {
-      await openCategoryOrder(tester, debugBuild: false);
+      await openCategoryOrder(tester, withSampleItems: false);
 
       expect(
         topOf(tester, tileOf(MarketCategory.vegetables)),
@@ -92,7 +96,7 @@ void main() {
     testWidgets('moving a category down with its button stores the new order', (
       tester,
     ) async {
-      final container = await openCategoryOrder(tester, debugBuild: false);
+      final container = await openCategoryOrder(tester, withSampleItems: false);
 
       await tester.tap(
         find.byTooltip(categoryOrder.moveDown(name: categories.vegetables)),
@@ -112,7 +116,7 @@ void main() {
     testWidgets('dragging a category by its handle stores the new order', (
       tester,
     ) async {
-      final container = await openCategoryOrder(tester, debugBuild: false);
+      final container = await openCategoryOrder(tester, withSampleItems: false);
 
       final gesture = await tester.startGesture(
         tester.getCenter(
@@ -136,7 +140,7 @@ void main() {
     testWidgets('a changed order sorts the groups of the shopping list', (
       tester,
     ) async {
-      await openCategoryOrder(tester, debugBuild: true);
+      await openCategoryOrder(tester, withSampleItems: true);
 
       await moveFruitsUp(tester);
       await tester.tap(
@@ -157,13 +161,13 @@ void main() {
     testWidgets('reset is disabled while the default order applies', (
       tester,
     ) async {
-      await openCategoryOrder(tester, debugBuild: false);
+      await openCategoryOrder(tester, withSampleItems: false);
 
       expect(tester.widget<TextButton>(resetButton()).onPressed, isNull);
     });
 
     testWidgets('cancelling the reset keeps the changed order', (tester) async {
-      final container = await openCategoryOrder(tester, debugBuild: false);
+      final container = await openCategoryOrder(tester, withSampleItems: false);
       await moveFruitsUp(tester);
 
       await tester.tap(resetButton());
@@ -181,7 +185,7 @@ void main() {
     testWidgets('confirming the reset restores the default order', (
       tester,
     ) async {
-      final container = await openCategoryOrder(tester, debugBuild: false);
+      final container = await openCategoryOrder(tester, withSampleItems: false);
       await moveFruitsUp(tester);
 
       await tester.tap(resetButton());
@@ -201,7 +205,7 @@ void main() {
 
   group('showShoppingListMenu', () {
     testWidgets('the settings entry opens the settings', (tester) async {
-      await openListMenu(tester, debugBuild: false);
+      await openListMenu(tester, withSampleItems: false);
 
       await tester.tap(find.text(translations.settings.title));
       await tester.pumpAndSettle();

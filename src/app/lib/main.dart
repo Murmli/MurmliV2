@@ -14,7 +14,6 @@ import 'app/core/storage/shared_preferences_provider.dart';
 import 'app/core/sync/sync_core.dart';
 import 'app/core/sync/sync_scheduler.dart';
 import 'app/features/settings/providers/app_language_provider.dart';
-import 'app/features/shopping_list/providers/first_shopping_list_provider.dart';
 import 'i18n/strings.g.dart';
 
 Future<void> main() async {
@@ -46,8 +45,7 @@ Future<void> main() async {
   await container.read(signedInAccountProvider.notifier).restore();
   container
     ..read(syncCoreProvider)
-    ..read(syncSchedulerProvider)
-    ..read(firstShoppingListProvider);
+    ..read(syncSchedulerProvider);
   await container.read(selectedAppLanguageProvider).apply();
 
   runApp(

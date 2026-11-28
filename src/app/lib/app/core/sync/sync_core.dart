@@ -60,6 +60,10 @@ SyncCore syncCore(Ref ref) {
   return core;
 }
 
+@riverpod
+Stream<bool> firstSyncCompleted(Ref ref) =>
+    ref.watch(syncCoreProvider).watchFirstSyncCompleted();
+
 class SyncNotReadyException implements Exception {
   const SyncNotReadyException();
 
@@ -598,12 +602,14 @@ class _SyncWriteTransaction implements SyncWriteTransaction {
     if (_local.dataTypeNamed(dataType.name) != dataType) {
       throw ArgumentError.value(dataType.name, 'dataType', 'not registered');
     }
+    final time = _nextCommandTime();
     await _local.applyCommand(
       kind,
       dataType,
       scopeId: scopeId,
       recordId: recordId,
       fields: fields,
+      time: time,
     );
     final database = _local.database;
     await database
@@ -616,7 +622,7 @@ class _SyncWriteTransaction implements SyncWriteTransaction {
             dataType: dataType.name,
             recordId: recordId,
             fields: Value(fields == null ? null : jsonEncode(fields)),
-            time: _nextCommandTime(),
+            time: time,
           ),
         );
     queuedCommand = true;

@@ -61,11 +61,21 @@
       "calories": {
         "label": "Kalorien",
         "title": "Kalorien",
-        "resetSampleData": "Beispieldaten der Einkaufsliste zurücksetzen"
+        "addSampleItems": "Beispielartikel hinzufügen"
       }
     }
   },
   "shoppingList": {
+    "defaultName": "Einkaufsliste",
+    "loading": {
+      "title": "Deine Liste wird geladen …",
+      "offline": "Sobald du online bist, erscheint deine Liste."
+    },
+    "limits": {
+      "itemName": "Der Name ist zu lang (höchstens 256 Zeichen).",
+      "quantity": "Die Menge ist ungültig. Gib eine Zahl größer als 0 bis 999.999,999 mit höchstens drei Nachkommastellen ein.",
+      "itemsPerList": "Die Liste ist voll (höchstens 1.000 Artikel)."
+    },
     "categories": {
       "vegetables": "Gemüse",
       "fruits": "Früchte",

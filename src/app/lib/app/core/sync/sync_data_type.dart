@@ -21,19 +21,24 @@ abstract interface class SyncDataType {
     required Map<String, Object?> fields,
   });
 
+  /// [time] is the time of the command in Unix milliseconds, for fields the
+  /// server fills with it.
   Future<void> createRecordIfMissing(
     AppDatabase database, {
     required String scopeId,
     required String recordId,
     required Map<String, Object?> fields,
+    required int time,
   });
 
-  /// Changes only the record with [recordId] in [scopeId].
+  /// Changes only the record with [recordId] in [scopeId]. [time] is the time
+  /// of the command in Unix milliseconds, for fields the server fills with it.
   Future<void> updateRecordIfPresent(
     AppDatabase database, {
     required String scopeId,
     required String recordId,
     required Map<String, Object?> fields,
+    required int time,
   });
 
   /// Deletes only the record with [recordId] in [scopeId].
@@ -43,7 +48,13 @@ abstract interface class SyncDataType {
     required String recordId,
   });
 
-  Future<void> deleteScopeRecords(AppDatabase database, String scopeId);
+  /// Deletes the records of [scopeId] except [keptRecordIds]. A full state
+  /// keeps the records it contains, so local data that refers to them stays.
+  Future<void> deleteScopeRecords(
+    AppDatabase database,
+    String scopeId, {
+    Set<String> keptRecordIds = const {},
+  });
 
   Future<void> deleteAllRecords(AppDatabase database);
 

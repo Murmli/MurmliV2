@@ -7,7 +7,6 @@ import 'package:app/app/features/home/home_page.dart';
 import 'package:app/app/features/home/home_tab.dart';
 import 'package:app/app/features/home/tabs/shopping_list_page.dart';
 import 'package:app/app/features/home/widgets/home_header.dart';
-import 'package:app/app/features/shopping_list/providers/first_shopping_list_provider.dart';
 import 'package:app/i18n/strings.g.dart';
 
 import '../../../helpers/pump_app.dart';
@@ -20,10 +19,7 @@ void main() {
     testWidgets('tapping a navigation bar tab shows that tab with its header', (
       tester,
     ) async {
-      (await pumpApp(
-        tester,
-        signedInAccount: const Account(id: 'account'),
-      )).read(firstShoppingListProvider);
+      await pumpApp(tester, signedInAccount: const Account(id: 'account'));
 
       await tester.tap(find.text(translations.shoppingList.label));
       await tester.pumpAndSettle();
@@ -56,10 +52,7 @@ void main() {
       'every tab shows the settings button at the far right except the shopping list, which shows its options button there',
       (tester) async {
         final semantics = tester.ensureSemantics();
-        (await pumpApp(
-          tester,
-          signedInAccount: const Account(id: 'account'),
-        )).read(firstShoppingListProvider);
+        await pumpApp(tester, signedInAccount: const Account(id: 'account'));
         final appTranslations = AppLocale.de.buildSync();
         final screenWidth = tester.getSize(find.byType(HomePage)).width;
 
@@ -103,10 +96,7 @@ void main() {
       'activating a navigation bar tab through the screen reader shows that tab',
       (tester) async {
         final semantics = tester.ensureSemantics();
-        (await pumpApp(
-          tester,
-          signedInAccount: const Account(id: 'account'),
-        )).read(firstShoppingListProvider);
+        await pumpApp(tester, signedInAccount: const Account(id: 'account'));
 
         tester.semantics.tap(
           find.semantics.byLabel(translations.shoppingList.label),

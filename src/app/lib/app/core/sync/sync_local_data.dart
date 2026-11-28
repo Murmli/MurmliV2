@@ -85,6 +85,7 @@ class SyncLocalData {
     required String scopeId,
     required String recordId,
     required Map<String, Object?>? fields,
+    required int time,
   }) async {
     switch (kind) {
       case SyncCommandKind.create:
@@ -93,6 +94,7 @@ class SyncLocalData {
           scopeId: scopeId,
           recordId: recordId,
           fields: fields ?? const {},
+          time: time,
         );
         if (dataType.rootScopeKind case final scopeKind?) {
           await database
@@ -108,6 +110,7 @@ class SyncLocalData {
           scopeId: scopeId,
           recordId: recordId,
           fields: fields ?? const {},
+          time: time,
         );
       case SyncCommandKind.delete:
         if (dataType.rootScopeKind == null) {
@@ -138,6 +141,7 @@ class SyncLocalData {
         scopeId: command.scopeId,
         recordId: command.recordId,
         fields: decodeCommandFields(command),
+        time: command.time,
       );
     }
   }
