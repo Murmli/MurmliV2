@@ -25,11 +25,16 @@ class ShoppingListItemRow extends HookConsumerWidget {
     required this.item,
     required this.showDivider,
     required this.isLeaving,
+    required this.animatesWithSection,
   }) : super(key: ValueKey((item.id, isLeaving)));
 
   final ShoppingListItem item;
   final bool showDivider;
   final bool isLeaving;
+
+  /// Whether the surrounding section collapses or expands in place of this
+  /// row's own appearing and leaving; the row then only keeps the timing.
+  final bool animatesWithSection;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -93,11 +98,14 @@ class ShoppingListItemRow extends HookConsumerWidget {
       );
     }
 
+    final rowVisibility = animatesWithSection
+        ? kAlwaysCompleteAnimation
+        : curvedVisibility;
     final row = SizeTransition(
-      sizeFactor: curvedVisibility,
+      sizeFactor: rowVisibility,
       alignment: AlignmentDirectional.topCenter,
       child: FadeTransition(
-        opacity: curvedVisibility,
+        opacity: rowVisibility,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/storage/preference_keys.dart';
 import '../../../core/storage/shared_preferences_provider.dart';
+import 'leaving_shopping_list_items_provider.dart';
 
 part 'checked_section_expanded_provider.g.dart';
 
@@ -20,5 +21,9 @@ class CheckedSectionExpanded extends _$CheckedSectionExpanded {
         .read(sharedPreferencesProvider)
         .setBool(PreferenceKeys.shoppingListCheckedExpanded, isExpanded);
     state = isExpanded;
+    // Leaving checked rows are no longer built and would never finish leaving.
+    if (!isExpanded) {
+      ref.read(leavingShoppingListItemsProvider.notifier).removeChecked();
+    }
   }
 }

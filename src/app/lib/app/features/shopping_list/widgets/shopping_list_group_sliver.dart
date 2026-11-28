@@ -65,6 +65,7 @@ class ShoppingListGroupSliver extends StatelessWidget {
                 item: item,
                 showDivider: index > 0,
                 isLeaving: group.leavingItemIds.contains(item.id),
+                animatesWithSection: group.items.length == 1,
               ),
           ],
         ),

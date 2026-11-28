@@ -119,6 +119,14 @@ void main() {
   double topOf(WidgetTester tester, String text) =>
       tester.getTopLeft(find.text(text)).dy;
 
+  // The pinned header of a section clips itself to the part shown while the
+  // section collapses or expands.
+  double headerHeightIn(WidgetTester tester, Finder section) => tester
+      .getSize(
+        find.descendant(of: section, matching: find.byType(ClipRect)).first,
+      )
+      .height;
+
   Finder rowOf(String itemName) => find.ancestor(
     of: find.text(itemName),
     matching: find.byType(ShoppingListItemRow),
@@ -508,48 +516,96 @@ void main() {
     );
 
     testWidgets(
-      'checking the only item of a category keeps its group until the group has collapsed',
+      'checking the only item of a category collapses its group gradually and moves the groups below along',
       (tester) async {
         final container = await openShoppingListTab(tester, debugBuild: false);
         await addItem(tester, container, 'Milch', MarketCategory.dairy);
-        await addItem(tester, container, 'Karotten', MarketCategory.vegetables);
+        await addItem(tester, container, 'Saft', MarketCategory.beverages);
+        final dairyGroup = find.ancestor(
+          of: find.text(categories.dairy, skipOffstage: false),
+          matching: find.byType(ShoppingListGroupSliver),
+        );
+        final headerHeightBefore = headerHeightIn(tester, dairyGroup);
+        final beveragesTopBefore = topOf(tester, categories.beverages);
 
         await tester.tap(
           find.bySemanticsLabel(shoppingList.checkItem(name: 'Milch')),
         );
         await tester.pump();
         await pumpIntoToggleAnimation(tester);
-
-        expect(find.text(categories.dairy), findsOneWidget);
-
+        await tester.pump(const Duration(milliseconds: 50));
+        final headerHeightMidway = headerHeightIn(tester, dairyGroup);
+        final beveragesTopMidway = topOf(tester, categories.beverages);
         await tester.pumpAndSettle();
+        final beveragesTopAfter = topOf(tester, categories.beverages);
 
-        expect(find.text(categories.dairy), findsNothing);
-        expect(find.text(categories.vegetables), findsOneWidget);
+        expect(headerHeightMidway, inExclusiveRange(0, headerHeightBefore));
+        expect(
+          beveragesTopMidway,
+          inExclusiveRange(beveragesTopAfter, beveragesTopBefore),
+        );
+        expect(dairyGroup, findsNothing);
       },
     );
 
     testWidgets(
-      'reopening the only checked item keeps the checked section until it has collapsed',
+      'reopening the only checked item collapses the checked section gradually',
       (tester) async {
         final container = await openShoppingListTab(tester, debugBuild: false);
+        await addItem(tester, container, 'Saft', MarketCategory.beverages);
         await check(
           tester,
           container,
           await addItem(tester, container, 'Kaffee', MarketCategory.beverages),
         );
+        final checkedSection = find.byType(
+          ShoppingListCheckedSectionSliver,
+          skipOffstage: false,
+        );
+        final headerHeightBefore = headerHeightIn(tester, checkedSection);
 
         await tester.tap(
           find.bySemanticsLabel(shoppingList.uncheckItem(name: 'Kaffee')),
         );
         await tester.pump();
         await pumpIntoToggleAnimation(tester);
-
-        expect(find.byType(ShoppingListCheckedSectionSliver), findsOneWidget);
-
+        await tester.pump(const Duration(milliseconds: 50));
+        final headerHeightMidway = headerHeightIn(tester, checkedSection);
         await tester.pumpAndSettle();
 
-        expect(find.byType(ShoppingListCheckedSectionSliver), findsNothing);
+        expect(headerHeightMidway, inExclusiveRange(0, headerHeightBefore));
+        expect(checkedSection, findsNothing);
+      },
+    );
+
+    testWidgets(
+      'collapsing the checked section while its only item is reopened removes the section',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        await addItem(tester, container, 'Saft', MarketCategory.beverages);
+        await check(
+          tester,
+          container,
+          await addItem(tester, container, 'Kaffee', MarketCategory.beverages),
+        );
+        final checkedSection = find.byType(
+          ShoppingListCheckedSectionSliver,
+          skipOffstage: false,
+        );
+
+        await tester.tap(
+          find.bySemanticsLabel(shoppingList.uncheckItem(name: 'Kaffee')),
+        );
+        await tester.pump();
+        await tester.pump();
+        await tester.tap(
+          find
+              .descendant(of: checkedSection, matching: find.byType(InkWell))
+              .first,
+        );
+        await tester.pumpAndSettle();
+
+        expect(checkedSection, findsNothing);
       },
     );
 

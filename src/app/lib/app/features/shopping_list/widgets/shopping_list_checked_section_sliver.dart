@@ -87,6 +87,7 @@ class ShoppingListCheckedSectionSliver extends ConsumerWidget {
                       item: item,
                       showDivider: index > 0,
                       isLeaving: leavingItemIds.contains(item.id),
+                      animatesWithSection: items.length == 1,
                     ),
                 ],
               ),
