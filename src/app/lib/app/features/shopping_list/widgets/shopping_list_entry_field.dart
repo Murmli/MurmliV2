@@ -10,11 +10,19 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../providers/pending_shopping_list_entries_provider.dart';
+import 'shopping_list_progress_counter.dart';
 
 class ShoppingListEntryField extends HookConsumerWidget {
-  const ShoppingListEntryField({required this.listId, super.key});
+  const ShoppingListEntryField({
+    required this.listId,
+    required this.checkedCount,
+    required this.totalCount,
+    super.key,
+  });
 
   final String listId;
+  final int checkedCount;
+  final int totalCount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -64,6 +72,20 @@ class ShoppingListEntryField extends HookConsumerWidget {
                     FocusManager.instance.primaryFocus?.unfocus(),
                 onEditingComplete: submit,
               ),
+            ),
+            AnimatedSwitcher(
+              duration: AppMotion.short(context),
+              child: totalCount > 0 && !hasText
+                  ? Padding(
+                      padding: const EdgeInsetsDirectional.symmetric(
+                        horizontal: AppSpacing.space8,
+                      ),
+                      child: ShoppingListProgressCounter(
+                        checkedCount: checkedCount,
+                        totalCount: totalCount,
+                      ),
+                    )
+                  : const SizedBox.shrink(),
             ),
             AnimatedSwitcher(
               duration: AppMotion.short(context),

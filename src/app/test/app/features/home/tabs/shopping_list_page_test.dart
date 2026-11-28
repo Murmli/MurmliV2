@@ -14,9 +14,12 @@ import 'package:app/app/features/shopping_list/providers/first_shopping_list_pro
 import 'package:app/app/features/shopping_list/providers/shopping_list_overview_provider.dart';
 import 'package:app/app/features/shopping_list/providers/shopping_list_repository.dart';
 import 'package:app/app/features/shopping_list/widgets/shopping_list_checked_section_sliver.dart';
+import 'package:app/app/features/shopping_list/widgets/shopping_list_empty_state.dart';
+import 'package:app/app/features/shopping_list/widgets/shopping_list_entry_field.dart';
 import 'package:app/app/features/shopping_list/widgets/shopping_list_group_sliver.dart';
 import 'package:app/app/features/shopping_list/widgets/shopping_list_item_row.dart';
 import 'package:app/app/features/shopping_list/widgets/shopping_list_pending_entries.dart';
+import 'package:app/app/features/shopping_list/widgets/shopping_list_progress_counter.dart';
 import 'package:app/i18n/strings.g.dart';
 
 import '../../../../helpers/pump_app.dart';
@@ -25,6 +28,7 @@ void main() {
   final translations = AppLocale.de.buildSync();
   final shoppingList = translations.shoppingList;
   final categories = shoppingList.categories;
+  final title = translations.home.tabs.shoppingList.title;
 
   Future<ProviderContainer> openShoppingListTab(
     WidgetTester tester, {
@@ -104,12 +108,25 @@ void main() {
     );
   }
 
+  // The entry field's own Scrollable lies inside the list, the list's comes first.
+  final listScrollable = find
+      .descendant(
+        of: find.byType(CustomScrollView),
+        matching: find.byType(Scrollable),
+      )
+      .first;
+
   double topOf(WidgetTester tester, String text) =>
       tester.getTopLeft(find.text(text)).dy;
 
   Finder rowOf(String itemName) => find.ancestor(
     of: find.text(itemName),
     matching: find.byType(ShoppingListItemRow),
+  );
+
+  Finder inEntryField(Finder finder) => find.descendant(
+    of: find.byType(ShoppingListEntryField),
+    matching: finder,
   );
 
   Finder inCheckedSection(String itemName) => find.descendant(
@@ -275,10 +292,7 @@ void main() {
         await tester.scrollUntilVisible(
           find.text('Sauerrahm'),
           100,
-          scrollable: find.descendant(
-            of: find.byType(CustomScrollView),
-            matching: find.byType(Scrollable),
-          ),
+          scrollable: listScrollable,
         );
         expect(
           find.descendant(
@@ -295,6 +309,54 @@ void main() {
 
       expect(find.text(shoppingList.empty.title), findsOneWidget);
       expect(find.byType(ShoppingListGroupSliver), findsNothing);
+    });
+
+    testWidgets(
+      'without items shows the title, the entry field and the empty state but no progress',
+      (tester) async {
+        await openShoppingListTab(tester, debugBuild: false);
+
+        expect(find.byType(ShoppingListProgressCounter), findsNothing);
+        expect(find.text(title), findsOneWidget);
+        expect(find.byType(ShoppingListEntryField), findsOneWidget);
+        expect(find.byType(ShoppingListEmptyState), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'hides the header while scrolling down, keeps the entry field and shows the header again when scrolling back',
+      (tester) async {
+        await openShoppingListTab(tester, debugBuild: true);
+        final scrollView = find.byType(CustomScrollView);
+
+        await tester.drag(scrollView, const Offset(0, -300));
+        await tester.pumpAndSettle();
+
+        expect(find.text(title).hitTestable(), findsNothing);
+        expect(find.byType(TextField).hitTestable(), findsOneWidget);
+
+        await tester.drag(scrollView, const Offset(0, 60));
+        await tester.pumpAndSettle();
+
+        expect(find.text(title).hitTestable(), findsOneWidget);
+        expect(find.byType(TextField).hitTestable(), findsOneWidget);
+      },
+    );
+
+    testWidgets('pins the category header below the entry field', (
+      tester,
+    ) async {
+      await openShoppingListTab(tester, debugBuild: true);
+
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -80));
+      await tester.pumpAndSettle();
+
+      expect(
+        topOf(tester, categories.vegetables),
+        greaterThanOrEqualTo(
+          tester.getBottomLeft(find.byType(ShoppingListEntryField)).dy - 1,
+        ),
+      );
     });
 
     testWidgets(
@@ -336,10 +398,7 @@ void main() {
           find.text(shoppingList.checkedSection(count: 1)),
           findsOneWidget,
         );
-        expect(
-          find.text(shoppingList.progress(checked: 1, total: 2)),
-          findsOneWidget,
-        );
+        expect(find.text('1 / 2'), findsOneWidget);
         expect(storedItem(container, itemId).checked, isTrue);
         expect(find.text(shoppingList.item.delete), findsNothing);
       },
@@ -489,10 +548,53 @@ void main() {
       },
     );
 
+    testWidgets(
+      'shows the progress as a counter in the entry field and announces it in words',
+      (tester) async {
+        await openShoppingListTab(tester, debugBuild: true);
+
+        expect(inEntryField(find.text('2 / 16')), findsOneWidget);
+        expect(
+          find.bySemanticsLabel(shoppingList.progress(checked: 2, total: 16)),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'hides the progress while text is entered and shows it again after submitting',
+      (tester) async {
+        await openShoppingListTab(tester, debugBuild: true);
+
+        await tester.enterText(find.byType(TextField), 'Milch');
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ShoppingListProgressCounter), findsNothing);
+
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await finishParsing(tester);
+
+        expect(
+          inEntryField(find.byType(ShoppingListProgressCounter)),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'with large text shows the progress without spaces around the slash',
+      (tester) async {
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        await openShoppingListTab(tester, debugBuild: true);
+
+        expect(inEntryField(find.text('2/16')), findsOneWidget);
+      },
+    );
+
     testWidgets('updates the progress when an item is checked', (tester) async {
       final container = await openShoppingListTab(tester, debugBuild: true);
-      final progress = shoppingList.progress;
-      expect(find.text(progress(checked: 2, total: 16)), findsOneWidget);
+      expect(find.text('2 / 16'), findsOneWidget);
 
       final list = container.read(currentShoppingListProvider).requireValue!;
       await check(
@@ -501,7 +603,7 @@ void main() {
         list.items.firstWhere((item) => !item.checked).id,
       );
 
-      expect(find.text(progress(checked: 3, total: 16)), findsOneWidget);
+      expect(find.text('3 / 16'), findsOneWidget);
     });
     testWidgets(
       'submitting free text shows it as pending and then adds the parsed item to its category',
@@ -622,29 +724,31 @@ void main() {
         final firstHeader = groups[0].category.label(translations);
         final secondHeader = groups[1].category.label(translations);
         final scrollView = find.byType(CustomScrollView);
-        final scrollViewTop = tester.getTopLeft(scrollView).dy;
+        final pinnedTop =
+            tester.getTopLeft(scrollView).dy +
+            tester.getSize(find.byType(ShoppingListEntryField)).height;
         double cardTopOf(int groupIndex) =>
             tester.getTopLeft(rowOf(groups[groupIndex].items.first.name)).dy;
 
         await tester.drag(
           scrollView,
-          Offset(0, -(cardTopOf(0) - scrollViewTop + 24)),
+          Offset(0, -(cardTopOf(0) - pinnedTop + 24)),
         );
         await tester.pumpAndSettle();
 
-        expect(cardTopOf(0), lessThan(scrollViewTop));
-        expect(topOf(tester, firstHeader), scrollViewTop);
+        expect(cardTopOf(0), lessThan(pinnedTop));
+        expect(topOf(tester, firstHeader), moreOrLessEquals(pinnedTop));
 
         await tester.drag(
           scrollView,
-          Offset(0, -(cardTopOf(1) - scrollViewTop + 24)),
+          Offset(0, -(cardTopOf(1) - pinnedTop + 24)),
         );
         await tester.pumpAndSettle();
 
-        expect(topOf(tester, secondHeader), scrollViewTop);
+        expect(topOf(tester, secondHeader), moreOrLessEquals(pinnedTop));
         expect(
           find.text(firstHeader).evaluate().isEmpty ||
-              tester.getBottomLeft(find.text(firstHeader)).dy <= scrollViewTop,
+              tester.getBottomLeft(find.text(firstHeader)).dy <= pinnedTop,
           isTrue,
         );
       },
@@ -803,10 +907,7 @@ void main() {
       await tester.scrollUntilVisible(
         find.text('Sauerrahm'),
         100,
-        scrollable: find.descendant(
-          of: find.byType(CustomScrollView),
-          matching: find.byType(Scrollable),
-        ),
+        scrollable: listScrollable,
       );
       await Scrollable.ensureVisible(
         tester.element(find.text('Sauerrahm')),
