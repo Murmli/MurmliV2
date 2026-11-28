@@ -181,6 +181,8 @@
     },
     "menu": {
       "tooltip": "List options",
+      "sectionCleanup": "Clean up",
+      "sectionList": "List",
       "sortCategories": "Sort categories",
       "deleteChecked": "Remove checked items",
       "deleteAll": "Clear list",

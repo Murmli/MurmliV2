@@ -181,6 +181,8 @@
     },
     "menu": {
       "tooltip": "Optionen der Liste",
+      "sectionCleanup": "Aufräumen",
+      "sectionList": "Liste",
       "sortCategories": "Kategorien sortieren",
       "deleteChecked": "Abgehakte entfernen",
       "deleteAll": "Liste leeren",

@@ -11,6 +11,7 @@ import '../providers/shopping_list_repository.dart';
 import '../quantity_label.dart';
 import 'market_category_tile.dart';
 import 'shopping_list_item_editor.dart';
+import 'shopping_list_sheet_entry.dart';
 
 Future<void> showShoppingListItemMenu(
   BuildContext context,
@@ -148,65 +149,16 @@ class _MenuEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    final textTheme = TextTheme.of(context);
-    final itemTranslations = context.t.shoppingList.item;
     final isPlaceholder = onTap == null;
-    final labelColor = isDestructive
-        ? colors.categoryRed
-        : isPlaceholder
-        ? colors.inkTertiary
-        : colors.ink;
-    return Semantics(
-      container: true,
-      button: true,
-      enabled: !isPlaceholder,
-      label: isPlaceholder
-          ? itemTranslations.comingSoonLabel(action: label)
-          : label,
+    return ShoppingListSheetEntry(
+      icon: icon,
+      label: label,
+      isDestructive: isDestructive,
       onTap: onTap,
-      excludeSemantics: true,
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          onTap: onTap,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 56),
-            child: Row(
-              spacing: 14,
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: isDestructive
-                        ? colors.categoryRedSoft
-                        : colors.surfaceSecondary,
-                    borderRadius: BorderRadius.circular(AppRadius.iconTile),
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 20,
-                    color: isDestructive
-                        ? colors.categoryRed
-                        : colors.inkSecondary,
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: textTheme.bodyMedium!.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: labelColor,
-                    ),
-                  ),
-                ),
-                if (isPlaceholder) const _ComingSoonPill(),
-              ],
-            ),
-          ),
-        ),
-      ),
+      trailing: isPlaceholder ? const _ComingSoonPill() : null,
+      semanticsLabel: isPlaceholder
+          ? context.t.shoppingList.item.comingSoonLabel(action: label)
+          : null,
     );
   }
 }

@@ -20,6 +20,7 @@ import 'package:app/app/features/shopping_list/widgets/shopping_list_group_slive
 import 'package:app/app/features/shopping_list/widgets/shopping_list_item_row.dart';
 import 'package:app/app/features/shopping_list/widgets/shopping_list_pending_entries.dart';
 import 'package:app/app/features/shopping_list/widgets/shopping_list_progress_counter.dart';
+import 'package:app/app/features/shopping_list/widgets/shopping_list_sheet_entry.dart';
 import 'package:app/i18n/strings.g.dart';
 
 import '../../../../helpers/pump_app.dart';
@@ -1427,7 +1428,7 @@ void main() {
         find.descendant(of: find.byType(Dialog), matching: finder);
 
     Finder menuEntry(String title) =>
-        inMenu(find.widgetWithText(ListTile, title));
+        inMenu(find.widgetWithText(ShoppingListSheetEntry, title));
 
     Future<void> tapMenuEntry(WidgetTester tester, String title) async {
       await tester.tap(menuEntry(title));
@@ -1539,36 +1540,71 @@ void main() {
       expect(storedItems(container), hasLength(2));
     });
 
+    testWidgets('shows the entries in sections with the affected item counts', (
+      tester,
+    ) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      await addOneOpenAndTwoCheckedItems(tester, container);
+
+      await openListMenu(tester);
+
+      final entryTops = [
+        menu.deleteChecked,
+        menu.deleteAll,
+        menu.sortCategories,
+        translations.settings.title,
+      ].map((entry) => tester.getTopLeft(menuEntry(entry)).dy).toList();
+      expect(entryTops, orderedEquals([...entryTops]..sort()));
+      expect(
+        find.descendant(
+          of: menuEntry(menu.deleteChecked),
+          matching: find.text('2'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: menuEntry(menu.deleteAll),
+          matching: find.text('3'),
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets(
-      'without checked items disables removing the checked items but not clearing the list',
+      'without checked items removing the checked items does nothing but clearing the list opens its confirmation',
       (tester) async {
         final container = await openShoppingListTab(tester, debugBuild: false);
         await addItem(tester, container, 'Milch', MarketCategory.dairy);
 
         await openListMenu(tester);
+        await tapMenuEntry(tester, menu.deleteChecked);
 
+        expect(find.byType(Dialog), findsNothing);
         expect(
-          tester.widget<ListTile>(menuEntry(menu.deleteChecked)).enabled,
-          isFalse,
+          find.descendant(
+            of: menuEntry(menu.deleteChecked),
+            matching: find.text('0'),
+          ),
+          findsNothing,
         );
-        expect(
-          tester.widget<ListTile>(menuEntry(menu.deleteAll)).enabled,
-          isTrue,
-        );
+
+        await tapMenuEntry(tester, menu.deleteAll);
+
+        expect(find.byType(Dialog), findsOneWidget);
       },
     );
 
-    testWidgets('with an empty list disables clearing the list', (
+    testWidgets('with an empty list clearing the list does nothing', (
       tester,
     ) async {
       await openShoppingListTab(tester, debugBuild: false);
 
       await openListMenu(tester);
+      await tapMenuEntry(tester, menu.deleteAll);
 
-      expect(
-        tester.widget<ListTile>(menuEntry(menu.deleteAll)).enabled,
-        isFalse,
-      );
+      expect(find.byType(Dialog), findsNothing);
+      expect(menuEntry(menu.deleteAll), findsOneWidget);
     });
 
     Future<void> clearCheckedSectionAndConfirm(WidgetTester tester) async {
