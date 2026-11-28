@@ -77,9 +77,7 @@ void main() {
       addTearDown(database.close);
       final firstStart = await startApp(debugBuild: true, database: database);
       final firstList = (await currentList(firstStart))!;
-      await firstStart
-          .read(shoppingListRepositoryProvider)
-          .deleteAllItems(firstList.id);
+      await database.delete(database.shoppingListItems).go();
       firstStart.dispose();
 
       final secondStart = await startApp(debugBuild: true, database: database);

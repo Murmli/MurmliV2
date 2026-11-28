@@ -16,6 +16,7 @@ import 'package:app/app/core/database/app_database.dart';
 import 'package:app/app/core/lifecycle/app_foreground_provider.dart';
 import 'package:app/app/core/network/network_available_provider.dart';
 import 'package:app/app/core/sync/sync_core.dart';
+import 'package:app/app/core/sync/sync_data_type.dart';
 import 'package:app/app/core/sync/sync_data_types_provider.dart';
 import 'package:app/app/core/sync/sync_random_provider.dart';
 import 'package:app/app/core/sync/sync_round_outcome.dart';
@@ -44,13 +45,13 @@ class SyncTestHarness {
   SyncTestHarness._(this.dataTypes);
 
   static Future<SyncTestHarness> start({
-    List<TestDataType> dataTypes = testDataTypes,
+    List<SyncDataType> dataTypes = testDataTypes,
     Clock? clock,
   }) async {
     final harness = SyncTestHarness._(dataTypes);
     final database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
-    await createTestTables(database, dataTypes);
+    await createTestTables(database, [...dataTypes.whereType<TestDataType>()]);
     final container = createContainer(
       await createPreferences(),
       database: database,
@@ -76,7 +77,7 @@ class SyncTestHarness {
     return harness;
   }
 
-  final List<TestDataType> dataTypes;
+  final List<SyncDataType> dataTypes;
   DateTime now = DateTime.utc(2026, 11, 26, 12);
   final random = FixedRandom(0.5);
   final server = FakeSyncServer();
@@ -222,7 +223,7 @@ class SyncTestHarness {
       for (final notice in await database.select(database.syncNotices).get())
         notice.toJson(),
     ],
-    for (final dataType in dataTypes)
+    for (final dataType in dataTypes.whereType<TestDataType>())
       dataType.name: await dataType.readRecords(database),
   };
 }
