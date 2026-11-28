@@ -71,34 +71,12 @@ public sealed class SyncLoadEnvironment : IAsyncLifetime
     // xUnit creates collection fixtures also when every test of the collection is filtered out as explicit, so nothing starts here
     public ValueTask InitializeAsync() => ValueTask.CompletedTask;
 
-    public async ValueTask DisposeAsync()
-    {
-        httpClient?.Dispose();
-        docker?.Dispose();
-        if (api is not null)
-        {
-            await api.DisposeAsync();
-        }
+    public async ValueTask DisposeAsync() => await StopAsync();
 
-        if (database is not null)
-        {
-            await database.DisposeAsync();
-        }
+    internal Task StartAsync() => startup is { IsFaulted: false, IsCanceled: false } ? startup : startup = StartCoreAsync();
 
-        if (network is not null)
-        {
-            await network.DisposeAsync();
-        }
-
-        if (publishDirectory is not null)
-        {
-            Directory.Delete(publishDirectory, recursive: true);
-        }
-    }
-
-    internal Task StartAsync() => startup ??= StartCoreAsync();
-
-    internal Task<SyncLoadAccount> GetLargestAccountAsync() => largestAccount ??= CreateLargestAccountAsync();
+    internal Task<SyncLoadAccount> GetLargestAccountAsync() =>
+        largestAccount is { IsFaulted: false, IsCanceled: false } ? largestAccount : largestAccount = CreateLargestAccountAsync();
 
     internal async Task<SyncLoadWindow> MeasureAsync(Func<Task<bool>> runUnit)
     {
@@ -187,7 +165,53 @@ public sealed class SyncLoadEnvironment : IAsyncLifetime
         hostConfiguration.MemorySwap = memoryBytes;
     }
 
+    private async Task StopAsync()
+    {
+        httpClient?.Dispose();
+        httpClient = null;
+        docker?.Dispose();
+        docker = null;
+        if (api is not null)
+        {
+            await api.DisposeAsync();
+            api = null;
+        }
+
+        if (database is not null)
+        {
+            await database.DisposeAsync();
+            database = null;
+        }
+
+        if (network is not null)
+        {
+            await network.DisposeAsync();
+            network = null;
+        }
+
+        if (publishDirectory is not null)
+        {
+            Directory.Delete(publishDirectory, recursive: true);
+            publishDirectory = null;
+        }
+
+        settings = null;
+    }
+
     private async Task StartCoreAsync()
+    {
+        try
+        {
+            await CreateEnvironmentAsync();
+        }
+        catch
+        {
+            await StopAsync();
+            throw;
+        }
+    }
+
+    private async Task CreateEnvironmentAsync()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         settings = SyncLoadSettings.FromEnvironment();
