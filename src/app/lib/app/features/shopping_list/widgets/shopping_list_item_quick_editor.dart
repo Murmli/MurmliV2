@@ -6,8 +6,10 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../../i18n/strings.g.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../models/market_category.dart';
+import '../models/recipe_share.dart';
 import '../models/shopping_list_item.dart';
 import '../providers/shopping_list_overview_provider.dart';
 import '../providers/shopping_list_repository.dart';
@@ -135,6 +137,8 @@ class _QuickEditor extends HookConsumerWidget {
                   ),
                 ],
               ),
+              if (item.recipeShares.isNotEmpty)
+                _RecipePills(recipeShares: item.recipeShares),
               Row(
                 spacing: AppSpacing.space4,
                 children: [
@@ -193,6 +197,76 @@ class _CategoryPicker extends ConsumerWidget {
         tooltip: translations.shoppingList.quickEditor.category,
         onPressed: () =>
             controller.isOpen ? controller.close() : controller.open(),
+      ),
+    );
+  }
+}
+
+class _RecipePills extends StatelessWidget {
+  const _RecipePills({required this.recipeShares});
+
+  final List<RecipeShare> recipeShares;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    label: context.t.shoppingList.quickEditor.recipes(
+      names: recipeShares.map((share) => share.recipeTitle).join(', '),
+    ),
+    excludeSemantics: true,
+    child: Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          spacing: AppSpacing.space8,
+          children: [
+            for (final share in recipeShares)
+              _RecipePill(recipeTitle: share.recipeTitle),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _RecipePill extends StatelessWidget {
+  const _RecipePill({required this.recipeTitle});
+
+  final String recipeTitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        color: colors.primarySoft,
+        shape: const StadiumBorder(),
+      ),
+      child: Padding(
+        padding: const EdgeInsetsDirectional.symmetric(
+          horizontal: AppSpacing.space8,
+          vertical: AppSpacing.space4,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 6,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: colors.primary,
+                shape: BoxShape.circle,
+              ),
+            ),
+            Text(
+              recipeTitle,
+              style: TextTheme.of(context).labelMedium
+                  ?.copyWith(color: colors.primaryText),
+            ),
+          ],
+        ),
       ),
     );
   }

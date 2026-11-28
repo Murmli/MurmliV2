@@ -1225,6 +1225,60 @@ void main() {
       expect(find.text('Milch'), findsOneWidget);
     });
 
+    testWidgets('shows the recipes of an item as pills in their stored order', (
+      tester,
+    ) async {
+      final container = await openShoppingListTab(tester, debugBuild: true);
+      final recipeTitles = storedItems(container)
+          .singleWhere((item) => item.name == 'Sauerrahm')
+          .recipeShares
+          .map((share) => share.recipeTitle)
+          .toList();
+      await tester.scrollUntilVisible(
+        find.text('Sauerrahm'),
+        100,
+        scrollable: listScrollable,
+      );
+      await Scrollable.ensureVisible(
+        tester.element(find.text('Sauerrahm')),
+        alignment: 0.5,
+      );
+      await tester.pumpAndSettle();
+
+      await openQuickEditor(tester, 'Sauerrahm');
+
+      expect(recipeTitles, unorderedEquals(['Gulasch', 'Ofenkartoffeln']));
+      for (final recipeTitle in recipeTitles) {
+        expect(
+          find.descendant(
+            of: find.byType(BottomSheet),
+            matching: find.text(recipeTitle),
+          ),
+          findsOneWidget,
+        );
+      }
+      expect(
+        find.bySemanticsLabel(
+          quickEditor.recipes(names: recipeTitles.join(', ')),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('shows no recipes for an item without recipes', (tester) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      await addItem(tester, container, 'Milch', MarketCategory.dairy);
+
+      await openQuickEditor(tester, 'Milch');
+
+      expect(
+        find.bySemanticsLabel(
+          RegExp(RegExp.escape(quickEditor.recipes(names: ''))),
+        ),
+        findsNothing,
+      );
+    });
+
     testWidgets('details opens the detailed editor', (tester) async {
       final container = await openShoppingListTab(tester, debugBuild: false);
       await addItem(tester, container, 'Milch', MarketCategory.dairy);

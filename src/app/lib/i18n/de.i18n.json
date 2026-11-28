@@ -161,7 +161,8 @@
     },
     "quickEditor": {
       "details": "Details",
-      "category": "Kategorie ändern"
+      "category": "Kategorie ändern",
+      "recipes": "Rezepte: $names"
     },
     "editor": {
       "title": "Artikel bearbeiten",
