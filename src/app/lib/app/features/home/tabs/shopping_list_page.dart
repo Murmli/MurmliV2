@@ -13,7 +13,7 @@ import '../../shopping_list/widgets/shopping_list_empty_state.dart';
 import '../../shopping_list/widgets/shopping_list_entry_field.dart';
 import '../../shopping_list/widgets/shopping_list_group_sliver.dart';
 import '../../shopping_list/widgets/shopping_list_pending_entries.dart';
-import '../../shopping_list/widgets/shopping_list_progress.dart';
+import '../../shopping_list/widgets/shopping_list_progress_counter.dart';
 import '../home_tab.dart';
 import '../widgets/home_header.dart';
 
@@ -35,32 +35,36 @@ class ShoppingListPage extends ConsumerWidget {
     }
     final pendingEntries = ref.watch(pendingShoppingListEntriesProvider);
     final background = context.colors.background;
+    final hasItems = overview.totalCount > 0;
     return CustomScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       slivers: [
         SliverFloatingHeader(
           child: Material(
             color: background,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                HomeHeader(title: title),
-                if (overview.totalCount > 0)
-                  ShoppingListProgress(
-                    checkedCount: overview.checkedCount,
-                    totalCount: overview.totalCount,
-                  ),
-              ],
+            child: HomeHeader(
+              title: title,
+              titleTrailing: hasItems
+                  ? ShoppingListProgressCounter(
+                      checkedCount: overview.checkedCount,
+                      totalCount: overview.totalCount,
+                    )
+                  : null,
             ),
           ),
         ),
         PinnedHeaderSliver(
           child: Material(
             color: background,
-            child: ShoppingListEntryField(listId: overview.listId),
+            child: ShoppingListEntryField(
+              listId: overview.listId,
+              progress: hasItems
+                  ? overview.checkedCount / overview.totalCount
+                  : null,
+            ),
           ),
         ),
-        if (overview.totalCount == 0 && pendingEntries.isEmpty)
+        if (!hasItems && pendingEntries.isEmpty)
           const SliverFillRemaining(
             hasScrollBody: false,
             child: ShoppingListEmptyState(),
@@ -70,7 +74,7 @@ class ShoppingListPage extends ConsumerWidget {
             SliverToBoxAdapter(
               child: ShoppingListPendingEntries(texts: pendingEntries),
             ),
-          if (overview.groups.isEmpty && overview.totalCount > 0)
+          if (overview.groups.isEmpty && hasItems)
             const SliverToBoxAdapter(child: ShoppingListAllCheckedBanner()),
           for (final group in overview.groups)
             ShoppingListGroupSliver(group: group),
