@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -9,6 +8,7 @@ import 'package:app/i18n/strings.g.dart';
 
 import '../../../helpers/authentication.dart';
 import '../../../helpers/http_client_adapter.dart';
+import '../../../helpers/lifecycle.dart';
 import '../../../helpers/pump_app.dart';
 
 void main() {
@@ -34,15 +34,6 @@ void main() {
     await tester.pumpAndSettle();
     await request;
   }
-
-  Future<void> changeLifecycleState(
-    WidgetTester tester,
-    AppLifecycleState state,
-  ) => tester.binding.defaultBinaryMessenger.handlePlatformMessage(
-    SystemChannels.lifecycle.name,
-    SystemChannels.lifecycle.codec.encodeMessage(state.toString()),
-    (_) {},
-  );
 
   group('ApiErrorDialogListener', () {
     testWidgets(
