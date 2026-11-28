@@ -145,7 +145,8 @@
     "entry": {
       "hint": "Artikel hinzufügen",
       "add": "Hinzufügen",
-      "processing": "„$text“ wird verarbeitet"
+      "processing": "„$text“ wird verarbeitet",
+      "sorting": "Wird eingeordnet …"
     },
     "checkItem": "$name abhaken",
     "uncheckItem": "$name wieder öffnen",

@@ -18,13 +18,9 @@ class ShoppingListGroupSliver extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final textTheme = TextTheme.of(context);
-    final titleStyle = textTheme.titleSmall!.copyWith(
-      color: colors.inkSecondary,
-    );
-    final countStyle = textTheme.labelSmall!.copyWith(
-      color: colors.inkTertiary,
-    );
+    final titleStyle = ShoppingListPinnedHeader.titleStyleOf(context);
+    final countStyle = TextTheme.of(context).labelSmall!
+        .copyWith(fontSize: 12, height: 16 / 12, color: colors.inkTertiary);
     return ShoppingListSection(
       items: group.items,
       leavingItemIds: group.leavingItemIds,
@@ -37,6 +33,8 @@ class ShoppingListGroupSliver extends StatelessWidget {
           horizontal: AppSpacing.space4,
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
           children: [
             Expanded(
               child: Semantics(
@@ -50,7 +48,7 @@ class ShoppingListGroupSliver extends StatelessWidget {
       ),
       body: Container(
         padding: const EdgeInsetsDirectional.only(
-          start: 4,
+          start: 6,
           end: AppSpacing.space16,
         ),
         decoration: BoxDecoration(

@@ -861,13 +861,14 @@ void main() {
       expect(find.text('3 / 16'), findsOneWidget);
     });
     testWidgets(
-      'submitting free text shows it as pending and then adds the parsed item to its category',
+      'submitting free text shows it as pending with the sorting hint and then adds the parsed item to its category',
       (tester) async {
         await openShoppingListTab(tester, debugBuild: false);
 
         await enterAndSubmit(tester, '2 Liter Milch');
 
         expect(inPendingEntries('2 Liter Milch'), findsOneWidget);
+        expect(inPendingEntries(shoppingList.entry.sorting), findsOneWidget);
         expect(
           tester.widget<TextField>(find.byType(TextField)).controller!.text,
           isEmpty,

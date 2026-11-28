@@ -23,6 +23,13 @@ import '../widgets/home_header.dart';
 class ShoppingListPage extends ConsumerWidget {
   const ShoppingListPage({super.key});
 
+  static const _headerPadding = EdgeInsetsDirectional.fromSTEB(
+    AppSpacing.screenMargin,
+    28,
+    AppSpacing.screenMargin,
+    AppSpacing.space12,
+  );
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final title = HomeTab.shoppingList.title(context.t);
@@ -30,7 +37,7 @@ class ShoppingListPage extends ConsumerWidget {
     if (overview == null) {
       return Column(
         children: [
-          HomeHeader(title: title),
+          HomeHeader(title: title, padding: _headerPadding),
           const Expanded(child: Center(child: CircularProgressIndicator())),
         ],
       );
@@ -46,9 +53,8 @@ class ShoppingListPage extends ConsumerWidget {
             color: colors.background,
             child: HomeHeader(
               title: title,
-              trailing: IconButton(
-                tooltip: context.t.shoppingList.menu.tooltip,
-                icon: Icon(Icons.more_horiz, color: colors.inkSecondary),
+              padding: _headerPadding,
+              trailing: _ListOptionsButton(
                 onPressed: () => unawaited(showShoppingListMenu(context, ref)),
               ),
             ),
@@ -94,6 +100,32 @@ class ShoppingListPage extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ListOptionsButton extends StatelessWidget {
+  const _ListOptionsButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        shape: const CircleBorder(),
+        color: colors.surface,
+        shadows: colors.cardShadow,
+      ),
+      child: IconButton(
+        tooltip: context.t.shoppingList.menu.tooltip,
+        constraints: BoxConstraints.tight(const Size.square(48)),
+        iconSize: 22,
+        color: colors.ink,
+        icon: const Icon(Icons.more_horiz),
+        onPressed: onPressed,
+      ),
     );
   }
 }

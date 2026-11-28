@@ -81,7 +81,8 @@ void main() {
                   ),
                 )
                 .dx,
-            screenWidth - AppSpacing.space8,
+            screenWidth -
+                (isShoppingList ? AppSpacing.screenMargin : AppSpacing.space8),
             reason: tab.name,
           );
           if (isShoppingList) {

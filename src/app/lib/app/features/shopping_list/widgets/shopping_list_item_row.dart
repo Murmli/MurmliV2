@@ -125,7 +125,7 @@ class ShoppingListItemRow extends HookConsumerWidget {
                 child: IntrinsicHeight(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    spacing: 8,
+                    spacing: 6,
                     children: [
                       Semantics(
                         container: true,
@@ -144,12 +144,20 @@ class ShoppingListItemRow extends HookConsumerWidget {
                             child: InkWell(
                               customBorder: const CircleBorder(),
                               onTap: toggleChecked,
-                              child: Center(
-                                child: item.checked
-                                    ? const _CheckedTile()
-                                    : MarketCategoryTile(
-                                        category: item.category,
-                                      ),
+                              // The design centers the tile in a 44 wide slot;
+                              // the tap area keeps 48 and extends past it.
+                              child: Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: Padding(
+                                  padding: const EdgeInsetsDirectional.only(
+                                    start: 4,
+                                  ),
+                                  child: item.checked
+                                      ? const _CheckedTile()
+                                      : MarketCategoryTile(
+                                          category: item.category,
+                                        ),
+                                ),
                               ),
                             ),
                           ),
@@ -182,12 +190,14 @@ class ShoppingListItemRow extends HookConsumerWidget {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         mainAxisSize: MainAxisSize.min,
+                                        spacing: 1,
                                         children: [
                                           Text(
                                             item.name,
                                             style: textTheme.bodyMedium
                                                 ?.copyWith(
                                                   fontWeight: FontWeight.w600,
+                                                  height: 20 / 15,
                                                   color: item.checked
                                                       ? colors.inkTertiary
                                                       : null,
@@ -270,7 +280,7 @@ class _CheckedTile extends StatelessWidget {
     alignment: Alignment.center,
     decoration: BoxDecoration(
       color: context.colors.onTarget,
-      borderRadius: BorderRadius.circular(_size * 0.32),
+      borderRadius: BorderRadius.circular((_size * 0.32).roundToDouble()),
     ),
     child: Icon(Icons.check_rounded, size: 20, color: context.colors.surface),
   );
@@ -297,8 +307,11 @@ class _RecipeLine extends StatelessWidget {
                 : context.t.shoppingList.recipeCount(
                     count: recipeShares.length,
                   ),
-            style: TextTheme.of(context).labelSmall
-                ?.copyWith(color: context.colors.primaryText),
+            style: TextTheme.of(context).labelSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              height: 14 / 11,
+              color: context.colors.primaryText,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

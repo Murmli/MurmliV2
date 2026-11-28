@@ -88,6 +88,12 @@ abstract final class AppTheme {
           side: BorderSide(color: colors.line),
         ),
       ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: colors.primaryText,
+          textStyle: AppTypography.label.copyWith(fontWeight: FontWeight.w700),
+        ),
+      ),
       dividerTheme: DividerThemeData(
         color: colors.line,
         thickness: 1,
@@ -153,6 +159,8 @@ abstract final class AppTheme {
         surfaceTintColor: Colors.transparent,
         showDragHandle: true,
         dragHandleColor: colors.line,
+        dragHandleSize: const Size(36, 4),
+        modalBarrierColor: _scrim,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
             top: Radius.circular(AppRadius.featureCard),

@@ -32,17 +32,17 @@ class ShoppingListCheckedSectionSliver extends ConsumerWidget {
     final colors = context.colors;
     final isExpanded = ref.watch(checkedSectionExpandedProvider);
     final translations = context.t.shoppingList;
-    final textTheme = TextTheme.of(context);
-    final titleStyle = textTheme.titleSmall!.copyWith(
-      color: colors.inkSecondary,
-    );
+    final titleStyle = ShoppingListPinnedHeader.titleStyleOf(context);
     return ShoppingListSection(
       items: items,
       leavingItemIds: leavingItemIds,
       headerContentHeight: [
         kMinInteractiveDimension,
         ShoppingListPinnedHeader.lineHeightOf(context, titleStyle),
-        ShoppingListPinnedHeader.lineHeightOf(context, textTheme.labelLarge!),
+        ShoppingListPinnedHeader.lineHeightOf(
+          context,
+          TextTheme.of(context).labelLarge!,
+        ),
       ].reduce(math.max),
       header: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -90,7 +90,7 @@ class ShoppingListCheckedSectionSliver extends ConsumerWidget {
       body: isExpanded
           ? Container(
               padding: const EdgeInsetsDirectional.only(
-                start: 4,
+                start: 6,
                 end: AppSpacing.space16,
               ),
               decoration: BoxDecoration(

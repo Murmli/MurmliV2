@@ -145,7 +145,8 @@
     "entry": {
       "hint": "Add item",
       "add": "Add",
-      "processing": "Processing “$text”"
+      "processing": "Processing “$text”",
+      "sorting": "Sorting …"
     },
     "checkItem": "Check off $name",
     "uncheckItem": "Reopen $name",
