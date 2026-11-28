@@ -22,6 +22,7 @@ class ShoppingListItems extends Table {
   TextColumn get language => text()();
   IntColumn get createdAt => integer().nullable()();
   IntColumn get changedAt => integer().nullable()();
+  TextColumn get changedBy => text().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};

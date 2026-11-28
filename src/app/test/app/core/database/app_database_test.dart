@@ -31,6 +31,22 @@ void main() {
     expect(foreignKeys.read<int>('foreign_keys'), 1);
   });
 
+  test('an upgrade from version 2 discards the sync token and increases the '
+      'generation', () async {
+    final schema = await verifier.schemaAt(2);
+    schema.rawDatabase.execute(
+      'INSERT INTO sync_states (id, token, local_state_generation) '
+      "VALUES (1, 'token', 3)",
+    );
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+
+    await verifier.migrateAndValidate(database, database.schemaVersion);
+
+    final state = await database.select(database.syncStates).getSingle();
+    expect((state.token, state.localStateGeneration), (null, 4));
+  });
+
   test('a downgrade recreates all tables empty', () async {
     final schema = await verifier.schemaAt(GeneratedHelper.versions.last);
     schema.rawDatabase

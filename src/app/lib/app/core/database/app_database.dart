@@ -23,7 +23,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -52,6 +52,12 @@ class AppDatabase extends _$AppDatabase {
           await migrator.createTable(schema.syncMembers);
           await migrator.createTable(schema.syncNotices);
         }),
+        from2To3: (migrator, schema) => transaction(
+          () => migrator.addColumn(
+            schema.shoppingListItems,
+            schema.shoppingListItems.changedBy,
+          ),
+        ),
       ),
     );
     final foreignKeyViolations = await customSelect('PRAGMA foreign_key_check')
