@@ -8,6 +8,12 @@ internal static class AppHostEnvironment
     // --clear-cache keeps the model from reading local deployment state
     public static readonly string[] PublishModeArguments = ["--operation", "publish", "--clear-cache", "true"];
 
+    public static Task<IDistributedApplicationTestingBuilder> CreatePublishModeAppHostAsync(string[] args) =>
+        DistributedApplicationTestingBuilder.CreateAsync<Projects.Murmli_Backend_Aspire>(
+            [.. PublishModeArguments, .. args],
+            TestContext.Current.CancellationToken
+        );
+
     public static async Task<Dictionary<string, string>> GetAsync(string resourceName, string[] args)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
