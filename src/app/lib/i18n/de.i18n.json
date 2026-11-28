@@ -153,6 +153,21 @@
     "allChecked": {
       "title": "Alles erledigt",
       "hint": "Du hast alle Artikel abgehakt."
+    },
+    "item": {
+      "openMenu": "Aktionen anzeigen",
+      "edit": "Bearbeiten",
+      "delete": "Löschen"
+    },
+    "editor": {
+      "title": "Artikel bearbeiten",
+      "name": "Name",
+      "quantity": "Menge",
+      "unit": "Einheit",
+      "noUnit": "Keine Einheit",
+      "category": "Kategorie",
+      "save": "Speichern",
+      "invalidQuantity": "Gib eine Zahl größer als 0 ein."
     }
   },
   "settings": {

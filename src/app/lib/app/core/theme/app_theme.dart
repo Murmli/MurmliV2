@@ -135,6 +135,17 @@ abstract final class AppTheme {
         ),
         avatarBoxConstraints: BoxConstraints.tight(const Size.square(18)),
       ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colors.surface,
+        surfaceTintColor: Colors.transparent,
+        showDragHandle: true,
+        dragHandleColor: colors.line,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.featureCard),
+          ),
+        ),
+      ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: colors.inkTertiary,
         strokeWidth: 2,
