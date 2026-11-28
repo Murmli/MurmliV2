@@ -254,7 +254,49 @@ public class UserTelemetryMiddlewareTests(PostgresFixture postgres) : IClassFixt
 
         var unavailableLog = Assert.Single(GetLogRecords(traceId), logRecord => logRecord.EventId.Name == "DatabaseUnavailable");
         Assert.IsType<RetryLimitExceededException>(unavailableLog.Exception);
+        Assert.Equal(userId, TestTelemetry.FindUserId(unavailableLog));
         Assert.Equal(3, CountLastRequestUpdates(traceId));
+    }
+
+    [Theory]
+    [InlineData("accountLookup", PostgresErrorCodes.UndefinedColumn, false)]
+    [InlineData("lastRequestUpdate", PostgresErrorCodes.RaiseException, true)]
+    public async Task InvokeAsync_StatementFailsNonTransiently_ReturnsInternalServerError(
+        string failingStatement,
+        string expectedSqlState,
+        bool loggedWithUserId
+    )
+    {
+        var traceId = ActivityTraceId.CreateRandom();
+        Guid userId;
+        await using (var api = await StartApiAsync())
+        {
+            userId = await api.GetMeAsync(AuthUserId);
+            api.TimeProvider.Advance(TimeSpan.FromDays(1));
+            var administration = new DatabaseAdministration(connectionString);
+            if (failingStatement == "accountLookup")
+            {
+                await administration.DropLastRequestColumnAsync();
+            }
+            else
+            {
+                await administration.FailLastRequestUpdatesAsync();
+            }
+
+            using var response = await SendAsync(api, HttpMethod.Get, ProductSearchPath, TestTokens.Create(AuthUserId), traceId);
+
+            Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+            Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+            var problem = await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+            Assert.Equal(500, problem.GetProperty("status").GetInt32());
+        }
+
+        var failureLog = Assert.Single(GetLogRecords(traceId), logRecord => logRecord.EventId.Name == "AccountResolutionFailed");
+        Assert.Equal(LogLevel.Error, failureLog.LogLevel);
+        Assert.Equal(expectedSqlState, Assert.IsType<PostgresException>(failureLog.Exception).SqlState);
+        Assert.Equal(loggedWithUserId ? userId : null, TestTelemetry.FindUserId(failureLog));
+        Assert.Equal(loggedWithUserId ? userId.ToString() : null, GetRequestActivity(traceId).GetTagItem(TestTelemetry.UserIdProperty));
+        Assert.DoesNotContain(GetLogRecords(traceId), logRecord => logRecord.EventId.Name == "DatabaseUnavailable");
     }
 
     private Task<ApiHost> StartApiAsync(IReadOnlyDictionary<string, string?>? additionalConfiguration = null, bool mapFailingEndpoint = false) =>

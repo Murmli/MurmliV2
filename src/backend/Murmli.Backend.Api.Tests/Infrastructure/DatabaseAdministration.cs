@@ -74,6 +74,33 @@ internal sealed class DatabaseAdministration(string connectionString)
     public Task ClearLastRequestAsync(Guid userId) =>
         UpdateSingleRowAsync("UPDATE identity.users SET last_request_on = NULL WHERE id = @target", ("target", userId));
 
+    public async Task FailLastRequestUpdatesAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionStringBuilder.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await ExecuteAsync(
+            connection,
+            """
+            CREATE FUNCTION identity.fail_last_request_update() RETURNS trigger LANGUAGE plpgsql
+            AS $$ BEGIN RAISE EXCEPTION 'The last request update failed on purpose'; END $$
+            """
+        );
+        await ExecuteAsync(
+            connection,
+            """
+            CREATE TRIGGER fail_last_request_update BEFORE UPDATE OF last_request_on ON identity.users
+            FOR EACH ROW EXECUTE FUNCTION identity.fail_last_request_update()
+            """
+        );
+    }
+
+    public async Task DropLastRequestColumnAsync()
+    {
+        await using var connection = new NpgsqlConnection(connectionStringBuilder.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await ExecuteAsync(connection, "ALTER TABLE identity.users DROP COLUMN last_request_on");
+    }
+
     public async Task<Guid> InsertMemberEntryAsync(
         Guid scopeId,
         Guid accountId,

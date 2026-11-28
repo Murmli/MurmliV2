@@ -12,4 +12,12 @@ internal sealed partial class UserTelemetryMiddleware
         Message = "The database is unavailable, the request is answered with 503"
     )]
     private partial void LogDatabaseUnavailable(Exception exception);
+
+    [LoggerMessage(
+        EventId = LogEvents.AccountResolutionFailed,
+        EventName = nameof(LogEvents.AccountResolutionFailed),
+        Level = LogLevel.Error,
+        Message = "Resolving the account of the request failed, the request is answered with 500"
+    )]
+    private partial void LogAccountResolutionFailed(Exception exception);
 }

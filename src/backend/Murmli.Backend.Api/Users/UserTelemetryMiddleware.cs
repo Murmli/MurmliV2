@@ -10,27 +10,35 @@ using Murmli.Backend.Api.Extensions;
 using Murmli.Backend.Api.Problems;
 using Murmli.Backend.Data;
 using Murmli.Backend.Data.Extensions;
+using Murmli.Backend.Data.Identity;
 
 namespace Murmli.Backend.Api.Users;
 
 internal sealed partial class UserTelemetryMiddleware(
     RequestDelegate next,
     IOptions<DatabaseOptions> databaseOptions,
+    IProblemDetailsService problemDetailsService,
     TimeProvider timeProvider,
     ILogger<UserTelemetryMiddleware> logger
 )
 {
     public async Task InvokeAsync(HttpContext context)
     {
-        AccountFeature? account;
+        if (context.User.FindAuthUserId() is not { } authUserId)
+        {
+            await next(context);
+            return;
+        }
+
+        var users = context.RequestServices.GetRequiredService<MurmliDbContext>().Users;
+        StoredAccount? account;
         try
         {
-            account = await ResolveAccountAsync(context);
+            account = await FindAccountAsync(users, authUserId);
         }
-        catch (Exception exception) when (exception.IsDatabaseDisturbance())
+        catch (Exception exception)
         {
-            LogDatabaseUnavailable(exception);
-            await new ServiceUnavailableProblem(databaseOptions.Value.UnavailableRetryAfter).ExecuteAsync(context);
+            await AnswerFailureAsync(context, exception);
             return;
         }
 
@@ -40,37 +48,34 @@ internal sealed partial class UserTelemetryMiddleware(
             return;
         }
 
-        context.Features.Set(account);
-        context.Features.Get<IHttpActivityFeature>()?.Activity.SetTag(LogProperties.UserId, account.AccountId.ToString());
-        using (logger.BeginScope(new Dictionary<string, object> { [LogProperties.UserId] = account.AccountId }))
+        context.Features.Get<IHttpActivityFeature>()?.Activity.SetTag(LogProperties.UserId, account.Id.ToString());
+        using (logger.BeginScope(new Dictionary<string, object> { [LogProperties.UserId] = account.Id }))
         {
+            try
+            {
+                await RecordLastRequestAsync(users, account);
+            }
+            catch (Exception exception)
+            {
+                await AnswerFailureAsync(context, exception);
+                return;
+            }
+
+            context.Features.Set(new AccountFeature(account.Id, account.DeletionStartedAt is not null));
             await next(context);
         }
     }
 
     // A client disconnecting during the lookup must not drop a started account deletion
-    private async Task<AccountFeature?> ResolveAccountAsync(HttpContext context)
-    {
-        if (context.User.FindAuthUserId() is not { } authUserId)
-        {
-            return null;
-        }
-
-        var users = context.RequestServices.GetRequiredService<MurmliDbContext>().Users;
-        var account = await users
+    private static Task<StoredAccount?> FindAccountAsync(DbSet<User> users, string authUserId) =>
+        users
             .Where(user => user.AuthUserId == authUserId)
-            .Select(user => new
-            {
-                user.Id,
-                user.DeletionStartedAt,
-                user.LastRequestOn,
-            })
+            .Select(user => new StoredAccount(user.Id, user.DeletionStartedAt, user.LastRequestOn))
             .SingleOrDefaultAsync(CancellationToken.None);
-        if (account is null)
-        {
-            return null;
-        }
 
+    // A client disconnecting during the lookup must not drop a started account deletion
+    private async Task RecordLastRequestAsync(DbSet<User> users, StoredAccount account)
+    {
         var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
         if (account.LastRequestOn is null || account.LastRequestOn < today)
         {
@@ -79,7 +84,29 @@ internal sealed partial class UserTelemetryMiddleware(
                 .Where(user => user.Id == account.Id && (user.LastRequestOn == null || user.LastRequestOn < today))
                 .ExecuteUpdateAsync(setters => setters.SetProperty(user => user.LastRequestOn, today), CancellationToken.None);
         }
-
-        return new AccountFeature(account.Id, account.DeletionStartedAt is not null);
     }
+
+    private async Task AnswerFailureAsync(HttpContext context, Exception exception)
+    {
+        if (exception.IsDatabaseDisturbance())
+        {
+            LogDatabaseUnavailable(exception);
+            await new ServiceUnavailableProblem(databaseOptions.Value.UnavailableRetryAfter).ExecuteAsync(context);
+            return;
+        }
+
+        LogAccountResolutionFailed(exception);
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        // The answer of UseExceptionHandler, which runs only after this middleware
+        await problemDetailsService.TryWriteAsync(
+            new ProblemDetailsContext
+            {
+                HttpContext = context,
+                ProblemDetails = { Status = StatusCodes.Status500InternalServerError },
+                Exception = exception,
+            }
+        );
+    }
+
+    private sealed record StoredAccount(Guid Id, DateTimeOffset? DeletionStartedAt, DateOnly? LastRequestOn);
 }

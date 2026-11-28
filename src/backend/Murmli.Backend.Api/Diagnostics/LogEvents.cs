@@ -11,4 +11,6 @@ internal static class LogEvents
     public const int DatabaseUnavailable = 2003;
 
     public const int StaleAccountDeletionCompleted = 2004;
+
+    public const int AccountResolutionFailed = 2005;
 }
