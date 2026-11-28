@@ -16,6 +16,7 @@ import 'package:app/app/features/shopping_list/providers/shopping_list_repositor
 import 'package:app/app/features/shopping_list/widgets/shopping_list_checked_section.dart';
 import 'package:app/app/features/shopping_list/widgets/shopping_list_group_card.dart';
 import 'package:app/app/features/shopping_list/widgets/shopping_list_item_row.dart';
+import 'package:app/app/features/shopping_list/widgets/shopping_list_pending_entries.dart';
 import 'package:app/i18n/strings.g.dart';
 
 import '../../../../helpers/pump_app.dart';
@@ -114,6 +115,25 @@ void main() {
   Finder inCheckedSection(String itemName) => find.descendant(
     of: find.byType(ShoppingListCheckedSection),
     matching: find.text(itemName),
+  );
+
+  List<ShoppingListItem> storedItems(ProviderContainer container) =>
+      container.read(currentShoppingListProvider).requireValue!.items;
+
+  Future<void> enterAndSubmit(WidgetTester tester, String text) async {
+    await tester.enterText(find.byType(TextField), text);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+  }
+
+  Future<void> finishParsing(WidgetTester tester) async {
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+  }
+
+  Finder inPendingEntries(String text) => find.descendant(
+    of: find.byType(ShoppingListPendingEntries),
+    matching: find.text(text),
   );
 
   ShoppingListItem storedItem(ProviderContainer container, String itemId) =>
@@ -434,6 +454,117 @@ void main() {
       );
 
       expect(find.text(progress(checked: 3, total: 16)), findsOneWidget);
+    });
+    testWidgets(
+      'submitting free text shows it as pending and then adds the parsed item to its category',
+      (tester) async {
+        await openShoppingListTab(tester, debugBuild: false);
+
+        await enterAndSubmit(tester, '2 Liter Milch');
+
+        expect(inPendingEntries('2 Liter Milch'), findsOneWidget);
+        expect(
+          tester.widget<TextField>(find.byType(TextField)).controller!.text,
+          isEmpty,
+        );
+        expect(find.text(shoppingList.empty.title), findsNothing);
+
+        await finishParsing(tester);
+
+        expect(
+          find.descendant(of: rowOf('Milch'), matching: find.text('2 l')),
+          findsOneWidget,
+        );
+        expect(find.text(categories.dairy), findsOneWidget);
+        expect(find.byType(ShoppingListPendingEntries), findsNothing);
+      },
+    );
+
+    testWidgets('free text with several items adds each to its category', (
+      tester,
+    ) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+
+      await enterAndSubmit(tester, 'Bananen, Brot und Tomaten');
+      await finishParsing(tester);
+
+      expect(find.text(categories.fruits), findsOneWidget);
+      expect(find.text(categories.bakery), findsOneWidget);
+      expect(find.text(categories.vegetables), findsOneWidget);
+      expect(
+        storedItems(container).map((item) => item.name),
+        unorderedEquals(['Bananen', 'Brot', 'Tomaten']),
+      );
+    });
+
+    testWidgets(
+      'unknown free text adds one item named after the text under miscellaneous',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+
+        await enterAndSubmit(tester, 'Käse und Wurst');
+        await finishParsing(tester);
+
+        expect(storedItems(container).map((item) => item.name), [
+          'Käse und Wurst',
+        ]);
+        expect(find.text(categories.miscellaneous), findsOneWidget);
+      },
+    );
+
+    testWidgets('submitting only spaces adds nothing', (tester) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+
+      await enterAndSubmit(tester, '   ');
+
+      expect(find.byType(ShoppingListPendingEntries), findsNothing);
+      await finishParsing(tester);
+      expect(storedItems(container), isEmpty);
+      expect(find.text(shoppingList.empty.title), findsOneWidget);
+    });
+
+    testWidgets(
+      'a second submission before the first is parsed keeps both pending and adds both',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+
+        await enterAndSubmit(tester, '2 Liter Milch');
+        await tester.pump(const Duration(milliseconds: 300));
+        await enterAndSubmit(tester, '500g Hackfleisch');
+
+        expect(inPendingEntries('2 Liter Milch'), findsOneWidget);
+        expect(inPendingEntries('500g Hackfleisch'), findsOneWidget);
+
+        await finishParsing(tester);
+
+        expect(
+          storedItems(container).map((item) => item.name),
+          unorderedEquals(['Milch', 'Hackfleisch']),
+        );
+      },
+    );
+
+    testWidgets('keeps the keyboard open after submitting', (tester) async {
+      await openShoppingListTab(tester, debugBuild: false);
+
+      await tester.tap(find.byType(TextField));
+      await enterAndSubmit(tester, '2 Liter Milch');
+      await finishParsing(tester);
+
+      expect(tester.testTextInput.isVisible, isTrue);
+    });
+
+    testWidgets('tapping the add button adds the entered item', (tester) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      final addButton = find.byTooltip(shoppingList.entry.add);
+      expect(addButton, findsNothing);
+
+      await tester.enterText(find.byType(TextField), '500g Hackfleisch');
+      await tester.pump();
+      await tester.tap(addButton);
+      await finishParsing(tester);
+
+      expect(storedItems(container).map((item) => item.name), ['Hackfleisch']);
     });
   });
 }

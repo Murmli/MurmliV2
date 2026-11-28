@@ -13,7 +13,7 @@ class ShoppingListEmptyState extends StatelessWidget {
     final colors = context.colors;
     final textTheme = TextTheme.of(context);
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.screenMargin),
         child: Column(
           mainAxisSize: MainAxisSize.min,
