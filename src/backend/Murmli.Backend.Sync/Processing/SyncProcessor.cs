@@ -22,7 +22,7 @@ public sealed partial class SyncProcessor
     private const string BootstrapPhase = "bootstrap";
 
     // An unsigned token can name any number of unknown scopes, an honest one at most 85
-    private const int MaxLoggedRemovedScopes = 100;
+    private const int MaximumLoggedRemovedScopes = 100;
 
     private readonly SyncDataTypeRegistry registry;
 
@@ -234,7 +234,7 @@ public sealed partial class SyncProcessor
     private void RecordResponse(Guid deviceId, int processedCommandCount, SyncWrittenResponse written)
     {
         telemetry.RecordResponse(processedCommandCount, written);
-        foreach (var removedScope in written.RemovedScopes.Take(MaxLoggedRemovedScopes))
+        foreach (var removedScope in written.RemovedScopes.Take(MaximumLoggedRemovedScopes))
         {
             LogScopeRemoved(deviceId, removedScope.ScopeId, removedScope.RemovedByOwnAccount);
         }
