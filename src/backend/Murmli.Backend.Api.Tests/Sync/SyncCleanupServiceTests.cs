@@ -20,6 +20,8 @@ public class SyncCleanupServiceTests(PostgresFixture postgres) : IClassFixture<P
 
     private const string FailedEvent = "SyncCleanupFailed";
 
+    private const string StoppedEvent = "SyncCleanupStopped";
+
     private static readonly TimeSpan Retention = TimeSpan.FromDays(45);
 
     private static readonly TimeSpan SafetyMargin = TimeSpan.FromDays(1);
@@ -490,6 +492,32 @@ public class SyncCleanupServiceTests(PostgresFixture postgres) : IClassFixture<P
     }
 
     [Fact]
+    public async Task RunAsync_ContributorReachesTimeLimit_RemovesExpiredEntriesAndLogsStopped()
+    {
+        var logRecords = new List<LogRecord>();
+        await using var api = await ApiHost.StartAsync(
+            postgres.CreateDatabaseConnectionString(),
+            // The smallest lease; the run reaches its time limit after one minute of real time
+            new Dictionary<string, string?> { ["Sync:Cleanup:LeaseDuration"] = "00:02:00" },
+            logRecords: logRecords,
+            testDataTypes: true,
+            waitingCleanupContributor: true
+        );
+        var device = await SyncTestDevice.SignInAsync(api);
+        await CreateAndDeleteNoteAsync(api, device);
+        api.TimeProvider.Advance(Retention + SafetyMargin + TimeSpan.FromMinutes(1));
+
+        await RunCleanupAsync(api);
+
+        Assert.Empty(await ReadTombstonesAsync(api));
+        await AssertLeaseReleasedAsync(api);
+        Assert.Equal([StoppedEvent], logRecords.Select(logRecord => logRecord.EventId.Name).Where(IsCleanupEvent));
+        var stopped = Assert.Single(logRecords, logRecord => logRecord.EventId.Name == StoppedEvent);
+        Assert.Equal(LogLevel.Warning, stopped.LogLevel);
+        Assert.Equal(1, stopped.Attributes!.ToDictionary()["RemovedTombstoneCount"]);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_InitialDelayAndIntervalElapse_RunsCleanupOnSchedule()
     {
         await using var api = await ApiHost.StartAsync(
@@ -510,7 +538,7 @@ public class SyncCleanupServiceTests(PostgresFixture postgres) : IClassFixture<P
         Assert.Equal([laterDeleted.NoteId], tombstonesBeforeInterval.Select(tombstone => tombstone.RecordId));
     }
 
-    private static bool IsCleanupEvent(string? eventName) => eventName is CompletedEvent or SkippedEvent or FailedEvent;
+    private static bool IsCleanupEvent(string? eventName) => eventName is CompletedEvent or SkippedEvent or FailedEvent or StoppedEvent;
 
     private static Guid[] ApplyBlock(IEnumerable<Guid> localIds, SyncScopeBlock block) =>
         block.FullState

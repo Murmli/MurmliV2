@@ -60,7 +60,7 @@ public sealed partial class SyncCleanupRunner(
         catch (OperationCanceledException) when (timeLimit.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
             // The run ends before its lease can expire, the next run removes the rest
-            LogCompleted(start, removed);
+            LogStopped(start, removed);
         }
         catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested)
         {
@@ -275,6 +275,14 @@ public sealed partial class SyncCleanupRunner(
             LogCleanupFailed(exception);
         }
     }
+
+    private void LogStopped(long start, RemovedCounts removed) =>
+        LogCleanupStopped(
+            (long)Stopwatch.GetElapsedTime(start).TotalMilliseconds,
+            removed.Tombstones,
+            removed.ProcessedCommands,
+            removed.Records
+        );
 
     private void LogCompleted(long start, RemovedCounts removed) =>
         LogCleanupCompleted(

@@ -27,6 +27,27 @@ public sealed partial class SyncCleanupRunner
     );
 
     [LoggerMessage(
+        EventId = LogEvents.SyncCleanupStopped,
+        EventName = nameof(LogEvents.SyncCleanupStopped),
+        Level = LogLevel.Warning,
+        Message = "The sync cleanup run stopped at its time limit after removing {"
+            + LogProperties.RemovedTombstoneCount
+            + "} tombstones, {"
+            + LogProperties.RemovedProcessedCommandCount
+            + "} processed commands and {"
+            + LogProperties.RemovedRecordCount
+            + "} records in {"
+            + LogProperties.DurationMilliseconds
+            + "} ms"
+    )]
+    private partial void LogCleanupStopped(
+        long durationMilliseconds,
+        int removedTombstoneCount,
+        int removedProcessedCommandCount,
+        int removedRecordCount
+    );
+
+    [LoggerMessage(
         EventId = LogEvents.SyncCleanupSkipped,
         EventName = nameof(LogEvents.SyncCleanupSkipped),
         Level = LogLevel.Information,

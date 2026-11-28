@@ -62,6 +62,7 @@ internal sealed class ApiHost : IAsyncDisposable
         bool mapExplicitlyAuthorizedEndpoint = false,
         bool testDataTypes = false,
         FakeTimeProvider? timeProvider = null,
+        bool waitingCleanupContributor = false,
         bool testCleanupContributors = false,
         ICollection<SyncCleanupContext>? cleanupContexts = null
     )
@@ -93,6 +94,11 @@ internal sealed class ApiHost : IAsyncDisposable
                 options.ReplaceService<IModelCustomizer, SyncTestModelCustomizer>()
             );
             builder.Services.AddSyncDataType<TestNoteType>().AddSyncDataType<TestBoardType>().AddSyncDataType<TestCardType>();
+        }
+
+        if (waitingCleanupContributor)
+        {
+            builder.Services.AddSyncCleanupContributor<WaitingCleanupContributor>();
         }
 
         if (testCleanupContributors)

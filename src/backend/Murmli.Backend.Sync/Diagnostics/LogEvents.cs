@@ -11,4 +11,6 @@ internal static class LogEvents
     public const int SyncCleanupSkipped = 3006;
 
     public const int SyncCleanupFailed = 3007;
+
+    public const int SyncCleanupStopped = 3008;
 }
