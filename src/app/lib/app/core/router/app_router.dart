@@ -27,5 +27,6 @@ class AppRouter extends RootStackRouter {
       ],
     ),
     AutoRoute(page: SettingsRoute.page, guards: [signInGuard]),
+    AutoRoute(page: CategoryOrderRoute.page, guards: [signInGuard]),
   ];
 }

@@ -173,6 +173,21 @@
       "category": "Category",
       "save": "Save",
       "invalidQuantity": "Enter a number greater than 0."
+    },
+    "menu": {
+      "tooltip": "List options",
+      "sortCategories": "Sort categories"
+    },
+    "categoryOrder": {
+      "moveUp": "Move $name up",
+      "moveDown": "Move $name down",
+      "reset": "Reset",
+      "resetDialog": {
+        "title": "Restore the default order?",
+        "message": "Your own order will be lost.",
+        "cancel": "Cancel",
+        "confirm": "Reset"
+      }
     }
   },
   "settings": {

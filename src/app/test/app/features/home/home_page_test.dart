@@ -52,36 +52,51 @@ void main() {
       },
     );
 
-    testWidgets('every tab shows the settings button at the far right', (
-      tester,
-    ) async {
-      final semantics = tester.ensureSemantics();
-      (await pumpApp(
-        tester,
-        signedInAccount: const Account(id: 'account'),
-      )).read(firstShoppingListProvider);
-      final appTranslations = AppLocale.de.buildSync();
-      final screenWidth = tester.getSize(find.byType(HomePage)).width;
+    testWidgets(
+      'every tab shows the settings button at the far right except the shopping list, which shows its options button there',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        (await pumpApp(
+          tester,
+          signedInAccount: const Account(id: 'account'),
+        )).read(firstShoppingListProvider);
+        final appTranslations = AppLocale.de.buildSync();
+        final screenWidth = tester.getSize(find.byType(HomePage)).width;
 
-      for (final tab in HomeTab.values) {
-        await tester.tap(find.bySemanticsLabel(tab.label(appTranslations)));
-        await tester.pumpAndSettle();
+        for (final tab in HomeTab.values) {
+          await tester.tap(find.bySemanticsLabel(tab.label(appTranslations)));
+          await tester.pumpAndSettle();
+          final isShoppingList = tab == HomeTab.shoppingList;
 
-        expect(
-          tester
-              .getTopRight(
-                find.ancestor(
-                  of: find.byTooltip(home.settingsTooltip),
-                  matching: find.byType(IconButton),
-                ),
-              )
-              .dx,
-          screenWidth - AppSpacing.space8,
-          reason: tab.name,
-        );
-      }
-      semantics.dispose();
-    });
+          expect(
+            tester
+                .getTopRight(
+                  find.ancestor(
+                    of: find.byTooltip(
+                      isShoppingList
+                          ? appTranslations.shoppingList.menu.tooltip
+                          : home.settingsTooltip,
+                    ),
+                    matching: find.byType(IconButton),
+                  ),
+                )
+                .dx,
+            screenWidth - AppSpacing.space8,
+            reason: tab.name,
+          );
+          if (isShoppingList) {
+            expect(
+              find.descendant(
+                of: find.byType(ShoppingListPage),
+                matching: find.byTooltip(home.settingsTooltip),
+              ),
+              findsNothing,
+            );
+          }
+        }
+        semantics.dispose();
+      },
+    );
 
     testWidgets(
       'activating a navigation bar tab through the screen reader shows that tab',

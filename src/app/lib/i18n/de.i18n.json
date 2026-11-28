@@ -173,6 +173,21 @@
       "category": "Kategorie",
       "save": "Speichern",
       "invalidQuantity": "Gib eine Zahl größer als 0 ein."
+    },
+    "menu": {
+      "tooltip": "Optionen der Liste",
+      "sortCategories": "Kategorien sortieren"
+    },
+    "categoryOrder": {
+      "moveUp": "$name nach oben",
+      "moveDown": "$name nach unten",
+      "reset": "Zurücksetzen",
+      "resetDialog": {
+        "title": "Standardreihenfolge wiederherstellen?",
+        "message": "Deine eigene Reihenfolge geht dabei verloren.",
+        "cancel": "Abbrechen",
+        "confirm": "Zurücksetzen"
+      }
     }
   },
   "settings": {
