@@ -128,11 +128,7 @@ class SyncResponseApplier {
           .insertOnConflictUpdate(
             SyncScopesCompanion.insert(scopeId: scopeId, kind: block.kind),
           );
-      if (block.fullState) {
-        for (final dataType in local.dataTypes) {
-          await dataType.deleteScopeRecords(_database, scopeId);
-        }
-      }
+      final writtenRecordIds = <SyncDataType, Set<String>>{};
       for (final record in block.records) {
         final dataType = local.dataTypeNamed(record.dataType);
         if (dataType == null) {
@@ -145,12 +141,22 @@ class SyncResponseApplier {
               recordId: record.id,
               fields: fields,
             )) {
+          writtenRecordIds.putIfAbsent(dataType, () => {}).add(record.id);
           continue;
         }
         talker.warning(
           'Skipped the sync record ${record.id} of ${record.dataType}',
         );
         problems.add('Skipped a sync record of ${record.dataType}');
+      }
+      if (block.fullState) {
+        for (final dataType in local.dataTypes) {
+          await dataType.deleteScopeRecords(
+            _database,
+            scopeId,
+            keptRecordIds: writtenRecordIds[dataType] ?? const {},
+          );
+        }
       }
       for (final deletedRecord in block.deletedRecords) {
         await local

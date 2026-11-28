@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import 'package:app/app/core/database/app_database.dart';
@@ -82,6 +84,7 @@ class TestDataType implements SyncDataType {
     required String scopeId,
     required String recordId,
     required Map<String, Object?> fields,
+    required int time,
   }) => database.customInsert(
     'INSERT OR IGNORE INTO $table (id, scope_id, value) VALUES (?, ?, ?)',
     variables: [
@@ -97,6 +100,7 @@ class TestDataType implements SyncDataType {
     required String scopeId,
     required String recordId,
     required Map<String, Object?> fields,
+    required int time,
   }) async {
     if (fields[field] case final String value) {
       await database.customUpdate(
@@ -117,11 +121,18 @@ class TestDataType implements SyncDataType {
   );
 
   @override
-  Future<void> deleteScopeRecords(AppDatabase database, String scopeId) =>
-      database.customUpdate(
-        'DELETE FROM $table WHERE scope_id = ?',
-        variables: [Variable(scopeId)],
-      );
+  Future<void> deleteScopeRecords(
+    AppDatabase database,
+    String scopeId, {
+    Set<String> keptRecordIds = const {},
+  }) => database.customUpdate(
+    'DELETE FROM $table WHERE scope_id = ? AND id NOT IN '
+    '(SELECT value FROM json_each(?))',
+    variables: [
+      Variable(scopeId),
+      Variable(jsonEncode([...keptRecordIds])),
+    ],
+  );
 
   @override
   Future<void> deleteAllRecords(AppDatabase database) =>
