@@ -1,6 +1,13 @@
 using System.Net;
 using System.Net.Http.Headers;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+using Murmli.Backend.Api.Extensions;
 using Murmli.Backend.Api.Tests.Infrastructure;
+using Murmli.Backend.Data;
 
 namespace Murmli.Backend.Api.Tests.Extensions;
 
@@ -28,6 +35,28 @@ public class HostApplicationBuilderExtensionsTests(PostgresFixture postgres) : I
         using var response = await SendAsync(api, path, TestTokens.CreateWithoutSubject());
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("Database:MaxRetryCount", "11", "MaxRetryCount")]
+    [InlineData("Database:MaxRetryDelay", "00:00:31", "MaxRetryDelay")]
+    public async Task AddApi_DatabaseRetryOptionInvalid_FailsOptionsValidationWhenResolvingContext(string key, string value, string expectedError)
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Production });
+        builder.Configuration.AddInMemoryCollection(
+            new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:murmli"] = "Host=localhost;Database=murmli;Username=postgres;Password=postgres",
+                [key] = value,
+            }
+        );
+        builder.AddApi();
+        await using var application = builder.Build();
+        await using var scope = application.Services.CreateAsyncScope();
+
+        var exception = Assert.Throws<OptionsValidationException>(() => scope.ServiceProvider.GetRequiredService<MurmliDbContext>());
+
+        Assert.Contains(expectedError, exception.Message);
     }
 
     private static async Task<HttpResponseMessage> SendAsync(ApiHost api, string path, string token)

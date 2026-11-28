@@ -1,6 +1,5 @@
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -17,10 +16,12 @@ public static class HostApplicationBuilderExtensions
 {
     public static void AddApi(this IHostApplicationBuilder builder)
     {
-        var databaseOptions = builder.Configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? new DatabaseOptions();
         builder.AddMurmliDbContext(
-            configureNpgsql: npgsql =>
-                npgsql.EnableRetryOnFailure(databaseOptions.MaxRetryCount, databaseOptions.MaxRetryDelay, errorCodesToAdd: null)
+            configureNpgsql: (services, npgsql) =>
+            {
+                var databaseOptions = services.GetRequiredService<IOptions<DatabaseOptions>>().Value;
+                npgsql.EnableRetryOnFailure(databaseOptions.MaxRetryCount, databaseOptions.MaxRetryDelay, errorCodesToAdd: null);
+            }
         );
         builder
             .Services.AddOptions<DatabaseOptions>()
