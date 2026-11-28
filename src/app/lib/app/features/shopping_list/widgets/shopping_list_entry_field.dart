@@ -73,25 +73,24 @@ class ShoppingListEntryField extends HookConsumerWidget {
                 onEditingComplete: submit,
               ),
             ),
+            if (totalCount > 0)
+              _CollapsingProgressCounter(
+                visible: !hasText,
+                checkedCount: checkedCount,
+                totalCount: totalCount,
+              ),
             AnimatedSwitcher(
               duration: AppMotion.short(context),
-              child: totalCount > 0 && !hasText
-                  ? Padding(
-                      padding: const EdgeInsetsDirectional.symmetric(
-                        horizontal: AppSpacing.space8,
-                      ),
-                      child: ShoppingListProgressCounter(
-                        checkedCount: checkedCount,
-                        totalCount: totalCount,
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
-            AnimatedSwitcher(
-              duration: AppMotion.short(context),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              transitionBuilder: (child, animation) => _ButtonIconTransition(
+                incoming: child.key == ValueKey(hasText),
+                animation: animation,
+                child: child,
+              ),
               child: hasText
-                  ? _AddButton(onTap: submit)
-                  : const _MicrophoneIcon(),
+                  ? _AddButton(key: const ValueKey(true), onTap: submit)
+                  : const _MicrophoneIcon(key: ValueKey(false)),
             ),
           ],
         ),
@@ -100,8 +99,109 @@ class ShoppingListEntryField extends HookConsumerWidget {
   }
 }
 
+class _CollapsingProgressCounter extends HookWidget {
+  const _CollapsingProgressCounter({
+    required this.visible,
+    required this.checkedCount,
+    required this.totalCount,
+  });
+
+  final bool visible;
+  final int checkedCount;
+  final int totalCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final textDirection = Directionality.of(context);
+    final visibility = useAnimationController(
+      duration: AppMotion.short(context),
+      initialValue: visible ? 1 : 0,
+    );
+    final curvedVisibility = useMemoized(
+      () => CurvedAnimation(
+        parent: visibility,
+        curve: Curves.easeOut,
+        reverseCurve: Curves.easeIn,
+      ),
+      [visibility],
+    );
+    useEffect(() => curvedVisibility.dispose, [curvedVisibility]);
+    useEffect(() {
+      unawaited(visible ? visibility.forward() : visibility.reverse());
+      return null;
+    }, [visible]);
+    return ExcludeSemantics(
+      excluding: !visible,
+      child: IgnorePointer(
+        ignoring: !visible,
+        child: SizeTransition(
+          axis: Axis.horizontal,
+          alignment: AlignmentDirectional.centerEnd,
+          sizeFactor: curvedVisibility,
+          child: Padding(
+            padding: const EdgeInsetsDirectional.symmetric(
+              horizontal: AppSpacing.space8,
+            ),
+            child: SlideTransition(
+              position: Tween(
+                begin: const Offset(0.5, 0),
+                end: Offset.zero,
+              ).animate(curvedVisibility),
+              textDirection: textDirection,
+              child: ScaleTransition(
+                scale: curvedVisibility,
+                alignment: AlignmentDirectional.centerEnd.resolve(
+                  textDirection,
+                ),
+                child: FadeTransition(
+                  opacity: curvedVisibility,
+                  child: ShoppingListProgressCounter(
+                    checkedCount: checkedCount,
+                    totalCount: totalCount,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ButtonIconTransition extends StatelessWidget {
+  const _ButtonIconTransition({
+    required this.incoming,
+    required this.animation,
+    required this.child,
+  });
+
+  static const _turnsAway = 0.125;
+
+  final bool incoming;
+  final Animation<double> animation;
+  final Widget child;
+
+  // The outgoing icon runs the animation in reverse, so its turn starts
+  // opposite to the incoming one and both icons rotate in the same direction.
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+    opacity: animation,
+    child: ScaleTransition(
+      scale: Tween(begin: 0.6, end: 1.0).animate(animation),
+      child: RotationTransition(
+        turns: Tween(
+          begin: incoming ? -_turnsAway : _turnsAway,
+          end: 0.0,
+        ).animate(animation),
+        child: child,
+      ),
+    ),
+  );
+}
+
 class _MicrophoneIcon extends StatelessWidget {
-  const _MicrophoneIcon();
+  const _MicrophoneIcon({super.key});
 
   @override
   Widget build(BuildContext context) => const ExcludeSemantics(
@@ -110,7 +210,7 @@ class _MicrophoneIcon extends StatelessWidget {
 }
 
 class _AddButton extends StatelessWidget {
-  const _AddButton({required this.onTap});
+  const _AddButton({required this.onTap, super.key});
 
   final VoidCallback onTap;
 

@@ -690,15 +690,20 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Milch');
         await tester.pumpAndSettle();
 
-        expect(find.byType(ShoppingListProgressCounter), findsNothing);
+        expect(
+          find.semantics.byLabel(shoppingList.progress(checked: 2, total: 16)),
+          findsNothing,
+        );
+        expect(find.text('2 / 16').hitTestable(), findsNothing);
 
         await tester.testTextInput.receiveAction(TextInputAction.done);
         await finishParsing(tester);
 
         expect(
-          inEntryField(find.byType(ShoppingListProgressCounter)),
-          findsOneWidget,
+          find.semantics.byLabel(shoppingList.progress(checked: 2, total: 17)),
+          findsOne,
         );
+        expect(inEntryField(find.text('2 / 17')).hitTestable(), findsOneWidget);
       },
     );
 
