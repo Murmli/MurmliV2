@@ -9,20 +9,26 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 
 class HomeHeader extends StatelessWidget {
-  const HomeHeader({required this.title, this.trailing, super.key});
+  const HomeHeader({
+    required this.title,
+    this.trailing,
+    this.padding = const EdgeInsetsDirectional.fromSTEB(
+      AppSpacing.screenMargin,
+      AppSpacing.space8,
+      AppSpacing.space8,
+      AppSpacing.space8,
+    ),
+    super.key,
+  });
 
   final String title;
   final Widget? trailing;
+  final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsetsDirectional.fromSTEB(
-        AppSpacing.screenMargin,
-        AppSpacing.space8,
-        AppSpacing.space8,
-        AppSpacing.space8,
-      ),
+      padding: padding,
       child: Row(
         children: [
           Expanded(

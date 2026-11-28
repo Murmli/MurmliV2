@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../../../i18n/strings.g.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/round_icon_button.dart';
 import '../../shopping_list/providers/pending_shopping_list_entries_provider.dart';
 import '../../shopping_list/providers/shopping_list_overview_provider.dart';
 import '../../shopping_list/widgets/shopping_list_all_checked_banner.dart';
@@ -23,6 +24,13 @@ import '../widgets/home_header.dart';
 class ShoppingListPage extends ConsumerWidget {
   const ShoppingListPage({super.key});
 
+  static const _headerPadding = EdgeInsetsDirectional.fromSTEB(
+    AppSpacing.screenMargin,
+    28,
+    AppSpacing.screenMargin,
+    AppSpacing.space12,
+  );
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final title = HomeTab.shoppingList.title(context.t);
@@ -30,7 +38,7 @@ class ShoppingListPage extends ConsumerWidget {
     if (overview == null) {
       return Column(
         children: [
-          HomeHeader(title: title),
+          HomeHeader(title: title, padding: _headerPadding),
           const Expanded(child: Center(child: CircularProgressIndicator())),
         ],
       );
@@ -46,9 +54,11 @@ class ShoppingListPage extends ConsumerWidget {
             color: colors.background,
             child: HomeHeader(
               title: title,
-              trailing: IconButton(
+              padding: _headerPadding,
+              trailing: RoundIconButton(
+                icon: Icons.more_horiz,
                 tooltip: context.t.shoppingList.menu.tooltip,
-                icon: Icon(Icons.more_horiz, color: colors.inkSecondary),
+                iconSize: 22,
                 onPressed: () => unawaited(showShoppingListMenu(context, ref)),
               ),
             ),

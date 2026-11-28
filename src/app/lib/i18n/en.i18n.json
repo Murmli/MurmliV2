@@ -145,7 +145,9 @@
     "entry": {
       "hint": "Add item",
       "add": "Add",
-      "processing": "Processing “$text”"
+      "attach": "Attach photo or voice note",
+      "processing": "Processing “$text”",
+      "sorting": "Sorting …"
     },
     "checkItem": "Check off $name",
     "uncheckItem": "Reopen $name",
@@ -156,27 +158,32 @@
       "hint": "You have checked off every item."
     },
     "item": {
-      "quickEdit": "Quick edit",
+      "openMenu": "Show actions",
       "openDetails": "Edit all details",
-      "delete": "Delete"
-    },
-    "quickEditor": {
-      "details": "Details",
-      "category": "Change category",
-      "recipes": "Recipes: $names"
+      "edit": "Edit",
+      "alternative": "Find alternative",
+      "showRecipe": "Show recipe",
+      "showRecipes": "Show recipes",
+      "delete": "Delete",
+      "comingSoon": "Soon",
+      "comingSoonLabel": "$action, coming soon"
     },
     "editor": {
       "title": "Edit item",
       "name": "Name",
       "quantity": "Quantity",
       "unit": "Unit",
-      "noUnit": "No unit",
       "category": "Category",
+      "hint": "Quantity and unit may stay empty.",
+      "moreUnits": "More",
       "save": "Save",
+      "cancel": "Cancel",
       "invalidQuantity": "Enter a number greater than 0."
     },
     "menu": {
       "tooltip": "List options",
+      "sectionCleanup": "Clean up",
+      "sectionList": "List",
       "sortCategories": "Sort categories",
       "deleteChecked": "Remove checked items",
       "deleteAll": "Clear list",
@@ -184,29 +191,42 @@
         "one": "$n item",
         "other": "$n items"
       },
+      "and": "and",
       "deleteCheckedDialog": {
-        "title": "Remove checked items?",
-        "message(plural)": {
-          "one": "$n checked item will be removed. Open items stay.",
-          "other": "$n checked items will be removed. Open items stay."
+        "title(plural)": {
+          "one": "Remove $n checked item?",
+          "other": "Remove $n checked items?"
         },
+        "namedMessage(plural)": {
+          "one": "$names will be removed. This can't be undone.",
+          "other": "$names will be removed. This can't be undone."
+        },
+        "countMessage": "$n checked items will be removed. This can't be undone.",
         "cancel": "Cancel",
-        "confirm": "Remove"
+        "confirm(plural)": {
+          "one": "Remove $n item",
+          "other": "Remove $n items"
+        }
       },
       "deleteAllDialog": {
         "title": "Clear list?",
-        "message(plural)": {
-          "one": "$n item will be removed, even if it is still open.",
-          "other": "All $n items will be removed, including open ones."
+        "namedMessage(plural)": {
+          "one": "$names will be removed. This can't be undone.",
+          "other": "$names will be removed, including open ones. This can't be undone."
         },
+        "countMessage": "All $n items will be removed, including open ones. This can't be undone.",
         "cancel": "Cancel",
-        "confirm": "Clear"
+        "confirm(plural)": {
+          "one": "Remove $n item",
+          "other": "Remove $n items"
+        }
       }
     },
     "categoryOrder": {
+      "intro": "Order it like your route through the store.",
       "moveUp": "Move $name up",
       "moveDown": "Move $name down",
-      "reset": "Reset",
+      "restoreDefault": "Restore default",
       "resetDialog": {
         "title": "Restore the default order?",
         "message": "Your own order will be lost.",

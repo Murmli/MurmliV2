@@ -17,6 +17,14 @@ class ShoppingListPinnedHeader extends StatelessWidget {
   final double visibleFraction;
   final Widget child;
 
+  static TextStyle titleStyleOf(BuildContext context) => TextTheme.of(context)
+      .titleSmall!
+      .copyWith(
+        fontWeight: FontWeight.w700,
+        height: 20 / 13,
+        color: context.colors.inkSecondary,
+      );
+
   static double lineHeightOf(BuildContext context, TextStyle style) =>
       MediaQuery.textScalerOf(context).scale(style.fontSize!) * style.height!;
 

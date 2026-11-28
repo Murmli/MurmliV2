@@ -15,7 +15,7 @@ class MarketCategoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final colorFamily = category.colorFamily;
-    final iconSize = size * 0.55;
+    final iconSize = (size * 0.55).roundToDouble();
     return ExcludeSemantics(
       child: Container(
         width: size,
@@ -23,7 +23,7 @@ class MarketCategoryTile extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: colorFamily.background(colors),
-          borderRadius: BorderRadius.circular(size * 0.32),
+          borderRadius: BorderRadius.circular((size * 0.32).roundToDouble()),
         ),
         child: SvgPicture.asset(
           category.iconAsset,

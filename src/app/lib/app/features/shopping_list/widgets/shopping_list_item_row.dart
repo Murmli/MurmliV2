@@ -17,8 +17,9 @@ import '../providers/recently_toggled_item_provider.dart';
 import '../providers/shopping_list_repository.dart';
 import '../quantity_label.dart';
 import 'market_category_tile.dart';
+import 'recipe_dot.dart';
 import 'shopping_list_item_editor.dart';
-import 'shopping_list_item_quick_editor.dart';
+import 'shopping_list_item_menu.dart';
 
 class ShoppingListItemRow extends HookConsumerWidget {
   ShoppingListItemRow({
@@ -125,7 +126,7 @@ class ShoppingListItemRow extends HookConsumerWidget {
                 child: IntrinsicHeight(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    spacing: 8,
+                    spacing: 6,
                     children: [
                       Semantics(
                         container: true,
@@ -144,12 +145,20 @@ class ShoppingListItemRow extends HookConsumerWidget {
                             child: InkWell(
                               customBorder: const CircleBorder(),
                               onTap: toggleChecked,
-                              child: Center(
-                                child: item.checked
-                                    ? const _CheckedTile()
-                                    : MarketCategoryTile(
-                                        category: item.category,
-                                      ),
+                              // The design centers the tile in a 44 wide slot;
+                              // the tap area keeps 48 and extends past it.
+                              child: Align(
+                                alignment: AlignmentDirectional.centerStart,
+                                child: Padding(
+                                  padding: const EdgeInsetsDirectional.only(
+                                    start: 4,
+                                  ),
+                                  child: item.checked
+                                      ? const _CheckedTile()
+                                      : MarketCategoryTile(
+                                          category: item.category,
+                                        ),
+                                ),
                               ),
                             ),
                           ),
@@ -159,17 +168,14 @@ class ShoppingListItemRow extends HookConsumerWidget {
                         child: MergeSemantics(
                           child: Semantics(
                             button: true,
-                            onTapHint: context.t.shoppingList.item.quickEdit,
+                            onTapHint: context.t.shoppingList.item.openMenu,
                             onLongPressHint:
                                 context.t.shoppingList.item.openDetails,
                             child: Material(
                               type: MaterialType.transparency,
                               child: InkWell(
                                 onTap: () => unawaited(
-                                  showShoppingListItemQuickEditor(
-                                    context,
-                                    item,
-                                  ),
+                                  showShoppingListItemMenu(context, item),
                                 ),
                                 onLongPress: () => unawaited(
                                   showShoppingListItemEditor(context, item),
@@ -182,12 +188,14 @@ class ShoppingListItemRow extends HookConsumerWidget {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         mainAxisSize: MainAxisSize.min,
+                                        spacing: 1,
                                         children: [
                                           Text(
                                             item.name,
                                             style: textTheme.bodyMedium
                                                 ?.copyWith(
                                                   fontWeight: FontWeight.w600,
+                                                  height: 20 / 15,
                                                   color: item.checked
                                                       ? colors.inkTertiary
                                                       : null,
@@ -270,7 +278,7 @@ class _CheckedTile extends StatelessWidget {
     alignment: Alignment.center,
     decoration: BoxDecoration(
       color: context.colors.onTarget,
-      borderRadius: BorderRadius.circular(_size * 0.32),
+      borderRadius: BorderRadius.circular((_size * 0.32).roundToDouble()),
     ),
     child: Icon(Icons.check_rounded, size: 20, color: context.colors.surface),
   );
@@ -288,7 +296,7 @@ class _RecipeLine extends StatelessWidget {
       spacing: 6,
       children: [
         ExcludeSemantics(
-          child: hasSingleRecipe ? const _RecipeDot() : const _RecipeDotPair(),
+          child: hasSingleRecipe ? const RecipeDot() : const _RecipeDotPair(),
         ),
         Flexible(
           child: Text(
@@ -297,8 +305,11 @@ class _RecipeLine extends StatelessWidget {
                 : context.t.shoppingList.recipeCount(
                     count: recipeShares.length,
                   ),
-            style: TextTheme.of(context).labelSmall
-                ?.copyWith(color: context.colors.primaryText),
+            style: TextTheme.of(context).labelSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              height: 14 / 11,
+              color: context.colors.primaryText,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -318,36 +329,12 @@ class _RecipeDotPair extends StatelessWidget {
     child: Stack(
       clipBehavior: Clip.none,
       children: [
-        const PositionedDirectional(start: 0, child: _RecipeDot()),
+        const PositionedDirectional(start: 0, child: RecipeDot()),
         PositionedDirectional(
           start: 4,
-          child: _RecipeDot(border: context.colors.surface),
+          child: RecipeDot(border: context.colors.surface),
         ),
       ],
-    ),
-  );
-}
-
-class _RecipeDot extends StatelessWidget {
-  const _RecipeDot({this.border});
-
-  final Color? border;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 6,
-    height: 6,
-    decoration: BoxDecoration(
-      color: context.colors.primary,
-      shape: BoxShape.circle,
-      border: switch (border) {
-        final color? => Border.all(
-          color: color,
-          width: 1.5,
-          strokeAlign: BorderSide.strokeAlignOutside,
-        ),
-        null => null,
-      },
     ),
   );
 }

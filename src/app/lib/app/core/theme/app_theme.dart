@@ -5,6 +5,8 @@ import 'app_spacing.dart';
 import 'app_typography.dart';
 
 abstract final class AppTheme {
+  static const _scrim = Color(0x7317110C);
+
   static final light = _build(AppColors.light, Brightness.light);
   static final dark = _build(AppColors.dark, Brightness.dark);
 
@@ -86,6 +88,12 @@ abstract final class AppTheme {
           side: BorderSide(color: colors.line),
         ),
       ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: colors.primaryText,
+          textStyle: AppTypography.label.copyWith(fontWeight: FontWeight.w700),
+        ),
+      ),
       dividerTheme: DividerThemeData(
         color: colors.line,
         thickness: 1,
@@ -135,11 +143,24 @@ abstract final class AppTheme {
         ),
         avatarBoxConstraints: BoxConstraints.tight(const Size.square(18)),
       ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: colors.surface,
+        surfaceTintColor: Colors.transparent,
+        barrierColor: _scrim,
+        insetPadding: const EdgeInsets.all(AppSpacing.space24),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(
+            Radius.circular(AppRadius.featureCard),
+          ),
+        ),
+      ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: colors.surface,
         surfaceTintColor: Colors.transparent,
         showDragHandle: true,
         dragHandleColor: colors.line,
+        dragHandleSize: const Size(36, 4),
+        modalBarrierColor: _scrim,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(
             top: Radius.circular(AppRadius.featureCard),

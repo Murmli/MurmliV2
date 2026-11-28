@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'package:app/app/core/authentication/account.dart';
 import 'package:app/app/features/settings/settings_page.dart';
+import 'package:app/app/features/shopping_list/category_order_page.dart';
 import 'package:app/app/features/shopping_list/models/market_category.dart';
 import 'package:app/app/features/shopping_list/providers/first_shopping_list_provider.dart';
 import 'package:app/app/features/shopping_list/providers/shopping_list_overview_provider.dart';
@@ -44,9 +45,9 @@ void main() {
     return container;
   }
 
-  Finder tileOf(String label) => find.descendant(
-    of: find.byType(ReorderableListView),
-    matching: find.widgetWithText(ListTile, label),
+  Finder tileOf(MarketCategory category) => find.descendant(
+    of: find.byType(CategoryOrderPage),
+    matching: find.byKey(ValueKey(category)),
   );
 
   double topOf(WidgetTester tester, Finder finder) =>
@@ -55,7 +56,10 @@ void main() {
   List<MarketCategory> storedOrder(ProviderContainer container) =>
       container.read(marketCategoryOrderProvider).requireValue;
 
-  Finder resetButton() => find.widgetWithText(TextButton, categoryOrder.reset);
+  Finder resetButton() => find.ancestor(
+    of: find.text(categoryOrder.restoreDefault),
+    matching: find.byWidgetPredicate((widget) => widget is TextButton),
+  );
 
   Future<void> moveFruitsUp(WidgetTester tester) async {
     await tester.tap(
@@ -71,20 +75,18 @@ void main() {
       await openCategoryOrder(tester, debugBuild: false);
 
       expect(
-        topOf(tester, tileOf(categories.vegetables)),
-        lessThan(topOf(tester, tileOf(categories.fruits))),
+        topOf(tester, tileOf(MarketCategory.vegetables)),
+        lessThan(topOf(tester, tileOf(MarketCategory.fruits))),
       );
       await tester.scrollUntilVisible(
-        tileOf(categories.miscellaneous),
+        tileOf(MarketCategory.miscellaneous),
         200,
-        scrollable: find
-            .descendant(
-              of: find.byType(ReorderableListView),
-              matching: find.byType(Scrollable),
-            )
-            .first,
+        scrollable: find.descendant(
+          of: find.byType(CategoryOrderPage),
+          matching: find.byType(Scrollable),
+        ),
       );
-      expect(tileOf(categories.miscellaneous), findsOneWidget);
+      expect(tileOf(MarketCategory.miscellaneous), findsOneWidget);
     });
 
     testWidgets('moving a category down with its button stores the new order', (
@@ -98,8 +100,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        topOf(tester, tileOf(categories.fruits)),
-        lessThan(topOf(tester, tileOf(categories.vegetables))),
+        topOf(tester, tileOf(MarketCategory.fruits)),
+        lessThan(topOf(tester, tileOf(MarketCategory.vegetables))),
       );
       expect(storedOrder(container).take(2), [
         MarketCategory.fruits,
@@ -115,8 +117,8 @@ void main() {
       final gesture = await tester.startGesture(
         tester.getCenter(
           find.descendant(
-            of: tileOf(categories.vegetables),
-            matching: find.byIcon(Icons.drag_handle),
+            of: tileOf(MarketCategory.vegetables),
+            matching: find.byIcon(Icons.drag_indicator),
           ),
         ),
       );
@@ -137,7 +139,13 @@ void main() {
       await openCategoryOrder(tester, debugBuild: true);
 
       await moveFruitsUp(tester);
-      await tester.tap(find.byType(BackButton));
+      await tester.tap(
+        find.byTooltip(
+          MaterialLocalizations.of(
+            tester.element(find.byType(CategoryOrderPage)),
+          ).backButtonTooltip,
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(
@@ -164,8 +172,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        topOf(tester, tileOf(categories.fruits)),
-        lessThan(topOf(tester, tileOf(categories.vegetables))),
+        topOf(tester, tileOf(MarketCategory.fruits)),
+        lessThan(topOf(tester, tileOf(MarketCategory.vegetables))),
       );
       expect(storedOrder(container).first, MarketCategory.fruits);
     });
@@ -179,13 +187,13 @@ void main() {
       await tester.tap(resetButton());
       await tester.pumpAndSettle();
       await tester.tap(
-        find.widgetWithText(TextButton, categoryOrder.resetDialog.confirm).last,
+        find.widgetWithText(FilledButton, categoryOrder.resetDialog.confirm),
       );
       await tester.pumpAndSettle();
 
       expect(
-        topOf(tester, tileOf(categories.vegetables)),
-        lessThan(topOf(tester, tileOf(categories.fruits))),
+        topOf(tester, tileOf(MarketCategory.vegetables)),
+        lessThan(topOf(tester, tileOf(MarketCategory.fruits))),
       );
       expect(storedOrder(container), MarketCategory.values);
     });

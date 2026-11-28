@@ -47,7 +47,7 @@ class ShoppingListEntryField extends HookConsumerWidget {
       ),
       child: Container(
         height: 52,
-        padding: const EdgeInsetsDirectional.only(start: 22, end: 5),
+        padding: const EdgeInsetsDirectional.only(start: 20, end: 5),
         decoration: ShapeDecoration(
           shape: const StadiumBorder(),
           color: colors.surface,
@@ -73,24 +73,24 @@ class ShoppingListEntryField extends HookConsumerWidget {
                 onEditingComplete: submit,
               ),
             ),
+            const SizedBox(width: AppSpacing.space4),
             if (totalCount > 0)
               _CollapsingProgressCounter(
                 visible: !hasText,
                 checkedCount: checkedCount,
                 totalCount: totalCount,
               ),
-            AnimatedSwitcher(
-              duration: AppMotion.short(context),
-              switchInCurve: Curves.easeOut,
-              switchOutCurve: Curves.easeIn,
-              transitionBuilder: (child, animation) => _ButtonIconTransition(
-                incoming: child.key == ValueKey(hasText),
-                animation: animation,
-                child: child,
-              ),
-              child: hasText
-                  ? _AddButton(key: const ValueKey(true), onTap: submit)
-                  : const _MicrophoneIcon(key: ValueKey(false)),
+            _RoundButton(
+              icon: Icons.attach_file,
+              label: context.t.shoppingList.entry.attach,
+              isActive: false,
+            ),
+            const SizedBox(width: AppSpacing.space4),
+            _RoundButton(
+              icon: Icons.arrow_upward_rounded,
+              label: context.t.shoppingList.entry.add,
+              isActive: hasText,
+              onPressed: hasText ? submit : null,
             ),
           ],
         ),
@@ -139,9 +139,7 @@ class _CollapsingProgressCounter extends HookWidget {
           alignment: AlignmentDirectional.centerEnd,
           sizeFactor: curvedVisibility,
           child: Padding(
-            padding: const EdgeInsetsDirectional.symmetric(
-              horizontal: AppSpacing.space8,
-            ),
+            padding: const EdgeInsetsDirectional.only(end: AppSpacing.space4),
             child: SlideTransition(
               position: Tween(
                 begin: const Offset(0.5, 0),
@@ -169,84 +167,61 @@ class _CollapsingProgressCounter extends HookWidget {
   }
 }
 
-class _ButtonIconTransition extends StatelessWidget {
-  const _ButtonIconTransition({
-    required this.incoming,
-    required this.animation,
-    required this.child,
+class _RoundButton extends StatelessWidget {
+  const _RoundButton({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    this.onPressed,
   });
 
-  static const _turnsAway = 0.125;
-
-  final bool incoming;
-  final Animation<double> animation;
-  final Widget child;
-
-  // The outgoing icon runs the animation in reverse, so its turn starts
-  // opposite to the incoming one and both icons rotate in the same direction.
-  @override
-  Widget build(BuildContext context) => FadeTransition(
-    opacity: animation,
-    child: ScaleTransition(
-      scale: Tween(begin: 0.6, end: 1.0).animate(animation),
-      child: RotationTransition(
-        turns: Tween(
-          begin: incoming ? -_turnsAway : _turnsAway,
-          end: 0.0,
-        ).animate(animation),
-        child: child,
-      ),
-    ),
-  );
-}
-
-class _MicrophoneIcon extends StatelessWidget {
-  const _MicrophoneIcon({super.key});
-
-  @override
-  Widget build(BuildContext context) => const ExcludeSemantics(
-    child: _ButtonCircle(child: Icon(Icons.mic_none_rounded, size: 22)),
-  );
-}
-
-class _AddButton extends StatelessWidget {
-  const _AddButton({required this.onTap, super.key});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => Tooltip(
-    message: context.t.shoppingList.entry.add,
-    child: _ButtonCircle(
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: const Center(
-            child: Icon(Icons.arrow_upward_rounded, size: 22),
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-class _ButtonCircle extends StatelessWidget {
-  const _ButtonCircle({required this.child});
-
-  final Widget child;
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(color: colors.primary, shape: BoxShape.circle),
-      child: IconTheme.merge(
-        data: IconThemeData(color: colors.onPrimary),
-        child: child,
+    return Tooltip(
+      message: label,
+      excludeFromSemantics: true,
+      child: Semantics(
+        container: true,
+        button: true,
+        enabled: onPressed != null,
+        label: label,
+        onTap: onPressed,
+        excludeSemantics: true,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: isActive ? 1 : 0),
+          duration: AppMotion.short(context),
+          curve: Curves.easeOut,
+          builder: (context, activity, _) => Material(
+            color: Color.lerp(
+              colors.surfaceSecondary,
+              colors.primary,
+              activity,
+            ),
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onPressed,
+              child: SizedBox.square(
+                dimension: 42,
+                child: Icon(
+                  icon,
+                  size: 20,
+                  color: Color.lerp(
+                    colors.inkTertiary,
+                    colors.onPrimary,
+                    activity,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

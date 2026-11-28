@@ -4,8 +4,12 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../../i18n/strings.g.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
 import '../providers/shopping_list_overview_provider.dart';
 import '../shopping_list_cleanup.dart';
+import 'count_badge.dart';
+import 'shopping_list_sheet_entry.dart';
 
 enum _ListAction { sortCategories, deleteChecked, deleteAll, settings }
 
@@ -13,6 +17,7 @@ Future<void> showShoppingListMenu(BuildContext context, WidgetRef ref) async {
   final action = await showModalBottomSheet<_ListAction>(
     context: context,
     useRootNavigator: true,
+    isScrollControlled: true,
     builder: (_) => const _ShoppingListMenu(),
   );
   if (!context.mounted) {
@@ -41,42 +46,118 @@ class _ShoppingListMenu extends ConsumerWidget {
     final menu = translations.shoppingList.menu;
     final items = ref.watch(currentShoppingListProvider).value?.items ?? [];
     final checkedCount = items.where((item) => item.checked).length;
-    return SafeArea(
+
+    void close(_ListAction action) => Navigator.of(context).pop(action);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsetsDirectional.only(
+        start: AppSpacing.screenMargin,
+        end: AppSpacing.screenMargin,
+        bottom: 34,
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListTile(
-            leading: const Icon(Icons.swap_vert),
-            title: Text(menu.sortCategories),
-            onTap: () => Navigator.of(context).pop(_ListAction.sortCategories),
+          Padding(
+            padding: const EdgeInsetsDirectional.only(
+              top: AppSpacing.space8,
+              bottom: AppSpacing.space4,
+            ),
+            child: Semantics(
+              header: true,
+              child: Text(
+                translations.home.tabs.shoppingList.title,
+                style: TextTheme.of(context).headlineSmall!.copyWith(
+                  fontSize: 22,
+                  height: 28 / 22,
+                  fontVariations: const [FontVariation.opticalSize(22)],
+                ),
+              ),
+            ),
+          ),
+          _SectionHeading(menu.sectionCleanup),
+          _CountedEntry(
+            icon: Icons.checklist_rtl,
+            label: menu.deleteChecked,
+            count: checkedCount,
+            onTap: () => close(_ListAction.deleteChecked),
+          ),
+          _CountedEntry(
+            icon: Icons.delete_sweep_outlined,
+            label: menu.deleteAll,
+            count: items.length,
+            onTap: () => close(_ListAction.deleteAll),
           ),
           const Divider(),
-          ListTile(
-            leading: const Icon(Icons.checklist_rtl),
-            title: Text(menu.deleteChecked),
-            subtitle: checkedCount > 0
-                ? Text(menu.itemCount(n: checkedCount))
-                : null,
-            enabled: checkedCount > 0,
-            onTap: () => Navigator.of(context).pop(_ListAction.deleteChecked),
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete_sweep_outlined),
-            title: Text(menu.deleteAll),
-            subtitle: items.isNotEmpty
-                ? Text(menu.itemCount(n: items.length))
-                : null,
-            enabled: items.isNotEmpty,
-            onTap: () => Navigator.of(context).pop(_ListAction.deleteAll),
+          _SectionHeading(menu.sectionList),
+          ShoppingListSheetEntry(
+            icon: Icons.swap_vert,
+            label: menu.sortCategories,
+            onTap: () => close(_ListAction.sortCategories),
           ),
           const Divider(),
-          ListTile(
-            leading: const Icon(Icons.settings_outlined),
-            title: Text(translations.settings.title),
-            onTap: () => Navigator.of(context).pop(_ListAction.settings),
+          ShoppingListSheetEntry(
+            icon: Icons.settings_outlined,
+            label: translations.settings.title,
+            onTap: () => close(_ListAction.settings),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsetsDirectional.only(
+      top: AppSpacing.space12,
+      bottom: AppSpacing.space4,
+    ),
+    child: Semantics(
+      header: true,
+      child: Text(
+        text.toUpperCase(),
+        style: TextTheme.of(context).labelSmall!.copyWith(
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.1,
+          color: context.colors.inkTertiary,
+        ),
+      ),
+    ),
+  );
+}
+
+/// Disabled while [count] is zero.
+class _CountedEntry extends StatelessWidget {
+  const _CountedEntry({
+    required this.icon,
+    required this.label,
+    required this.count,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasItems = count > 0;
+    return ShoppingListSheetEntry(
+      icon: icon,
+      label: label,
+      onTap: hasItems ? onTap : null,
+      trailing: hasItems ? CountBadge(count) : null,
+      semanticsValue: hasItems
+          ? context.t.shoppingList.menu.itemCount(n: count)
+          : null,
     );
   }
 }

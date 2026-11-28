@@ -20,7 +20,7 @@ class ShoppingListPendingEntries extends StatelessWidget {
       ),
       child: Container(
         padding: const EdgeInsetsDirectional.only(
-          start: 4,
+          start: 6,
           end: AppSpacing.space16,
         ),
         decoration: BoxDecoration(
@@ -47,35 +47,114 @@ class _PendingEntryRow extends StatelessWidget {
   final String text;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    liveRegion: true,
-    label: context.t.shoppingList.entry.processing(text: text),
-    excludeSemantics: true,
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 48),
-      child: Row(
-        spacing: 8,
-        children: [
-          const SizedBox(
-            width: 48,
-            child: Center(
-              child: SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final textTheme = TextTheme.of(context);
+    final translations = context.t.shoppingList.entry;
+    return Semantics(
+      liveRegion: true,
+      label: translations.processing(text: text),
+      excludeSemantics: true,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Row(
+          spacing: 10,
+          children: [
+            const SizedBox(width: 44, child: Center(child: _PendingTile())),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                spacing: 1,
+                children: [
+                  Text(
+                    text,
+                    style: textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      height: 20 / 15,
+                      color: colors.inkSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    translations.sorting,
+                    style: textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      height: 14 / 11,
+                      color: colors.inkTertiary,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          Expanded(
-            child: Text(
-              text,
-              style: TextTheme.of(context).bodyMedium
-                  ?.copyWith(color: context.colors.inkSecondary),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
+}
+
+class _PendingTile extends StatelessWidget {
+  const _PendingTile();
+
+  static const _size = 36.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = context.colors.inkTertiary;
+    return CustomPaint(
+      painter: _DashedRoundedSquarePainter(color: color),
+      child: SizedBox.square(
+        dimension: _size,
+        child: Icon(Icons.auto_awesome_outlined, size: 18, color: color),
+      ),
+    );
+  }
+}
+
+class _DashedRoundedSquarePainter extends CustomPainter {
+  const _DashedRoundedSquarePainter({required this.color});
+
+  static const _strokeWidth = 1.5;
+  static const _radius = 12.0;
+  static const _dashLength = 4.0;
+  static const _gapLength = 3.0;
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final outline = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          (Offset.zero & size).deflate(_strokeWidth / 2),
+          const Radius.circular(_radius - _strokeWidth / 2),
+        ),
+      );
+    final dashes = Path();
+    for (final metric in outline.computeMetrics()) {
+      for (
+        var distance = 0.0;
+        distance < metric.length;
+        distance += _dashLength + _gapLength
+      ) {
+        dashes.addPath(
+          metric.extractPath(distance, distance + _dashLength),
+          Offset.zero,
+        );
+      }
+    }
+    canvas.drawPath(
+      dashes,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = _strokeWidth,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_DashedRoundedSquarePainter oldDelegate) =>
+      color != oldDelegate.color;
 }
