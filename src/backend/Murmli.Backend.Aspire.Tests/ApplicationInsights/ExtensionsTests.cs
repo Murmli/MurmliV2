@@ -19,7 +19,7 @@ public class ExtensionsTests
     [Fact]
     public async Task AddApplicationInsights_DailyQuotaConfigured_CapsWorkspace()
     {
-        await using var appHost = await CreatePublishModeAppHostAsync(["--LogAnalytics:DailyQuotaGb=0.2"]);
+        await using var appHost = await AppHostEnvironment.CreatePublishModeAppHostAsync(["--LogAnalytics:DailyQuotaGb=0.2"]);
 
         var environment = appHost.Resources.OfType<AzureContainerAppEnvironmentResource>().Single();
         Assert.Contains("dailyQuotaGb: json('0.2')", environment.GetBicepTemplateString());
@@ -28,7 +28,7 @@ public class ExtensionsTests
     [Fact]
     public async Task AddApplicationInsights_NoDailyQuota_LeavesWorkspaceUncapped()
     {
-        await using var appHost = await CreatePublishModeAppHostAsync([]);
+        await using var appHost = await AppHostEnvironment.CreatePublishModeAppHostAsync([]);
 
         var environment = appHost.Resources.OfType<AzureContainerAppEnvironmentResource>().Single();
         Assert.DoesNotContain("dailyQuotaGb", environment.GetBicepTemplateString());
@@ -37,7 +37,7 @@ public class ExtensionsTests
     [Fact]
     public async Task AddApplicationInsights_PublishMode_UsesWorkspaceOfEnvironment()
     {
-        await using var appHost = await CreatePublishModeAppHostAsync([]);
+        await using var appHost = await AppHostEnvironment.CreatePublishModeAppHostAsync([]);
 
         var environment = appHost.Resources.OfType<AzureContainerAppEnvironmentResource>().Single();
         var applicationInsights = appHost.Resources.OfType<AzureApplicationInsightsResource>().Single();
@@ -48,10 +48,4 @@ public class ExtensionsTests
         Assert.Equal("AZURE_LOG_ANALYTICS_WORKSPACE_ID", workspaceId.Name);
         Assert.Same(environment, workspaceId.Resource);
     }
-
-    private static Task<IDistributedApplicationTestingBuilder> CreatePublishModeAppHostAsync(string[] args) =>
-        DistributedApplicationTestingBuilder.CreateAsync<Projects.Murmli_Backend_Aspire>(
-            [.. AppHostEnvironment.PublishModeArguments, .. args],
-            TestContext.Current.CancellationToken
-        );
 }

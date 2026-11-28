@@ -26,6 +26,7 @@ public static class Extensions
             .WithOpenApiDocument()
             .WithExternalHttpEndpoints()
             .WithHttpHealthCheck("/health")
+            .WithCustomDomain()
             .PublishAsAzureContainerApp(
                 (_, containerApp) =>
                 {
@@ -42,6 +43,22 @@ public static class Extensions
         if (resource.ApplicationBuilder.Configuration.GetValue<bool>("OpenApi:Enabled"))
         {
             resource.WithEnvironment("OpenApi__Enabled", "true");
+        }
+
+        return resource;
+    }
+
+    private static IResourceBuilder<ProjectResource> WithCustomDomain(this IResourceBuilder<ProjectResource> resource)
+    {
+        var builder = resource.ApplicationBuilder;
+
+        // Publish only, aspire run would otherwise ask for values it never uses
+        if (builder.ExecutionContext.IsPublishMode)
+        {
+            var customDomain = builder.AddParameter("api-custom-domain");
+            // Aspire treats an empty configured value as missing, the value overload keeps it
+            var certificateName = builder.AddParameter("api-certificate-name", builder.Configuration["Parameters:api-certificate-name"] ?? string.Empty);
+            resource.PublishAsAzureContainerApp((_, containerApp) => containerApp.ConfigureCustomDomain(customDomain, certificateName));
         }
 
         return resource;
