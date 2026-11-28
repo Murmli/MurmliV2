@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../../../i18n/strings.g.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/round_icon_button.dart';
 import '../../shopping_list/providers/pending_shopping_list_entries_provider.dart';
 import '../../shopping_list/providers/shopping_list_overview_provider.dart';
 import '../../shopping_list/widgets/shopping_list_all_checked_banner.dart';
@@ -54,7 +55,10 @@ class ShoppingListPage extends ConsumerWidget {
             child: HomeHeader(
               title: title,
               padding: _headerPadding,
-              trailing: _ListOptionsButton(
+              trailing: RoundIconButton(
+                icon: Icons.more_horiz,
+                tooltip: context.t.shoppingList.menu.tooltip,
+                iconSize: 22,
                 onPressed: () => unawaited(showShoppingListMenu(context, ref)),
               ),
             ),
@@ -100,32 +104,6 @@ class ShoppingListPage extends ConsumerWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _ListOptionsButton extends StatelessWidget {
-  const _ListOptionsButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return DecoratedBox(
-      decoration: ShapeDecoration(
-        shape: const CircleBorder(),
-        color: colors.surface,
-        shadows: colors.cardShadow,
-      ),
-      child: IconButton(
-        tooltip: context.t.shoppingList.menu.tooltip,
-        constraints: BoxConstraints.tight(const Size.square(48)),
-        iconSize: 22,
-        color: colors.ink,
-        icon: const Icon(Icons.more_horiz),
-        onPressed: onPressed,
-      ),
     );
   }
 }

@@ -10,6 +10,7 @@ import '../../../i18n/strings.g.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/confirmation_dialog.dart';
+import '../../core/widgets/round_icon_button.dart';
 import 'models/market_category.dart';
 import 'providers/shopping_list_overview_provider.dart';
 import 'providers/shopping_list_repository.dart';
@@ -69,7 +70,13 @@ class CategoryOrderPage extends HookConsumerWidget {
               child: Row(
                 spacing: AppSpacing.space12,
                 children: [
-                  const _BackButton(),
+                  RoundIconButton(
+                    icon: Icons.arrow_back,
+                    tooltip: MaterialLocalizations.of(context)
+                        .backButtonTooltip,
+                    onPressed: () =>
+                        unawaited(Navigator.of(context).maybePop()),
+                  ),
                   Expanded(
                     child: Semantics(
                       header: true,
@@ -173,29 +180,6 @@ class CategoryOrderPage extends HookConsumerWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _BackButton extends StatelessWidget {
-  const _BackButton();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    return DecoratedBox(
-      decoration: ShapeDecoration(
-        shape: const CircleBorder(),
-        color: colors.surface,
-        shadows: colors.cardShadow,
-      ),
-      child: IconButton(
-        tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-        constraints: BoxConstraints.tight(const Size.square(48)),
-        color: colors.ink,
-        icon: const Icon(Icons.arrow_back),
-        onPressed: () => unawaited(Navigator.of(context).maybePop()),
       ),
     );
   }
