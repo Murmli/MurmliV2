@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,12 +45,17 @@ public class StaleAccountDeletionContributorTests(PostgresFixture postgres) : IC
         Assert.Equal(2, logRecords.Count(logRecord => logRecord.EventId.Name == "SyncCleanupCompleted"));
     }
 
-    [Fact]
-    public async Task RunAsync_AuthDeletionFailsForFirstAccount_CompletesNextAccount()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(1000)]
+    public async Task RunAsync_AuthDeletionFailsForFirstAccount_CompletesNextAccount(int batchSize)
     {
         const string failingAuthUserId = "AuthUser0000000000000000000001";
         const string completedAuthUserId = "AuthUser0000000000000000000002";
-        await using var api = await ApiHost.StartAsync(postgres.CreateDatabaseConnectionString());
+        await using var api = await ApiHost.StartAsync(
+            postgres.CreateDatabaseConnectionString(),
+            new Dictionary<string, string?> { ["Sync:Cleanup:BatchSize"] = batchSize.ToString(CultureInfo.InvariantCulture) }
+        );
         await api.GetMeAsync(failingAuthUserId);
         await api.GetMeAsync(completedAuthUserId);
         api.AuthService.ResponseStatusCode = HttpStatusCode.ServiceUnavailable;
@@ -63,6 +69,7 @@ public class StaleAccountDeletionContributorTests(PostgresFixture postgres) : IC
         await RunCleanupAsync(api);
 
         Assert.Equal([failingAuthUserId], (await ReadUsersAsync(api)).Select(user => user.AuthUserId));
+        Assert.Equal(4, api.AuthService.Requests.Count);
     }
 
     [Fact]
@@ -91,7 +98,7 @@ public class StaleAccountDeletionContributorTests(PostgresFixture postgres) : IC
     }
 
     [Fact]
-    public async Task RunAsync_MoreStaleAccountsThanBatchSize_CompletesOldestMarkedFirst()
+    public async Task RunAsync_MoreStaleAccountsThanBatchSize_CompletesAllOldestMarkedFirst()
     {
         await using var api = await ApiHost.StartAsync(
             postgres.CreateDatabaseConnectionString(),
@@ -116,11 +123,12 @@ public class StaleAccountDeletionContributorTests(PostgresFixture postgres) : IC
 
         await RunCleanupAsync(api);
 
-        Assert.Equal([newerAuthUserId], (await ReadUsersAsync(api)).Select(user => user.AuthUserId));
-
-        await RunCleanupAsync(api);
-
         Assert.Empty(await ReadUsersAsync(api));
+        Assert.Collection(
+            api.AuthService.Requests.Skip(3),
+            first => Assert.Contains(olderAuthUserId, first.Body),
+            second => Assert.Contains(newerAuthUserId, second.Body)
+        );
     }
 
     private static Task RunCleanupAsync(ApiHost api) =>
