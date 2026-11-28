@@ -17,16 +17,18 @@ Betriebsdoku (Einrichtung, Deploy-Ablauf): [BackOffice, docs/03_Betrieb/Deployme
 
 ## Custom Domain
 
-Der AppHost hängt `api.dev.murmli.de` per `ConfigureCustomDomain` an `api`, aus den Parametern `api-custom-domain` und `api-certificate-name`. Er legt sie nur im Publish-Mode an, sonst fragt `aspire run` nach Werten. Die Werte stehen in `appsettings.azure-dev.json`, sie sind nicht geheim. Den Zertifikatsnamen übergibt der AppHost als festen Wert aus `Parameters:api-certificate-name` (leer, wenn er fehlt): Aspire 13.6.5 wertet einen leeren Wert unter `Parameters:<name>` als fehlend (`MissingParameterValueException`), ein Deploy ohne Interaktion scheitert dann. Ein leerer Zertifikatsname erzeugt eine deaktivierte Bindung (`bindingType` `Disabled`), ein gesetzter eine Bindung per SNI an das gleichnamige Managed Certificate der Umgebung.
+Der AppHost hängt eigene Domains per `WithCustomDomain` (`CustomDomain/Extensions.cs`, ruft `ConfigureCustomDomain`) an Container Apps: `api.dev.murmli.de` an `api`, `id.dev.murmli.de` an `auth`. Die Parameter heißen `<app>-custom-domain` und `<app>-certificate-name`. Er legt sie nur im Publish-Mode an, sonst fragt `aspire run` nach Werten. Die Werte stehen in `appsettings.azure-dev.json`, sie sind nicht geheim. Den Zertifikatsnamen übergibt der AppHost als festen Wert aus `Parameters:<app>-certificate-name` (leer, wenn er fehlt): Aspire 13.6.5 wertet einen leeren Wert unter `Parameters:<name>` als fehlend (`MissingParameterValueException`), ein Deploy ohne Interaktion scheitert dann. Ein leerer Zertifikatsname erzeugt eine deaktivierte Bindung (`bindingType` `Disabled`), ein gesetzter eine Bindung per SNI an das gleichnamige Managed Certificate der Umgebung.
 
 Ein Managed Certificate lässt sich erst anlegen, wenn der Hostname an der App hängt. Eine neue Domain braucht deshalb zwei Deploys:
 
-1. Ein Mensch legt die DNS-Einträge an: CNAME auf die Standard-Domain der App und TXT `asuid.<Hostname ohne Zone>` mit der Verification-ID der Umgebung.
+1. Ein Mensch legt die DNS-Einträge an: CNAME auf die Standard-Domain der App und TXT `asuid.<Hostname ohne Zone>` mit der Verification-ID der App (`az containerapp show -n <app> -g <Ressourcengruppe> --query properties.customDomainVerificationId -o tsv`, derzeit für `api` und `auth` gleich).
 2. Deploy mit leerem Zertifikatsnamen, der Hostname hängt ohne Zertifikat an der App.
 3. Ein Mensch legt im Portal an der App unter „Custom domains“ per „Add binding“ das Managed Certificate an.
 4. Deploy mit dessen Namen als Zertifikatsname.
 
 Bis zum Deploy aus Schritt 4 setzt jeder Deploy die Bindung aus Schritt 3 wieder auf `Disabled`. Das Managed Certificate bleibt in der Umgebung, der Deploy aus Schritt 4 bindet es wieder.
+
+Noch nicht erledigt: Schritte 3 und 4 für `id.dev.murmli.de`. Bis dahin ist die Bindung deaktiviert, die App spricht `auth` über dessen Standard-Domain an, und `BETTER_AUTH_URL` (Issuer der JWTs) ist die Adresse von `auth` aus Aspire. Entschieden, aber noch nicht gebaut: Mit Schritt 4 wechseln die Adresse in der App, `BETTER_AUTH_URL` und `ValidIssuer` der API auf `https://id.dev.murmli.de`, nicht vorher, weil die API die Signaturschlüssel über `jwks_uri` aus `BETTER_AUTH_URL` holt und ohne Zertifikat jedes Token ablehnte. Die Notiz entfällt, sobald `auth-certificate-name` in `appsettings.azure-dev.json` gesetzt ist.
 
 ## Anmeldung beim Deploy (Aspire 13.6.5)
 

@@ -364,7 +364,7 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 - Ohne Werte für `better-auth-secret` und `auth-service-key` starten `auth` und die API bei `aspire run` und in Run-Mode-Tests nicht. Lokal als User-Secrets `Parameters:better-auth-secret` und `Parameters:auth-service-key` des AppHost (etwa `openssl rand -base64 32`), in Tests als Argumente `--Parameters:better-auth-secret=...` und `--Parameters:auth-service-key=...`.
 - `aspire run` und `dotnet test` brauchen Node in der Version aus `src/auth/.nvmrc` auf dem PATH.
 - `Azure:*`-Werte nur in `src/backend/Murmli.Backend.Aspire/appsettings.azure-<name>.json`, nie in andere appsettings oder User Secrets.
-- Custom Domains der Container Apps nur im AppHost per `ConfigureCustomDomain`, nie nur im Portal (jeder Deploy entfernt sie), und erst, wenn ein Mensch ihre DNS-Einträge angelegt hat (sonst scheitert der Deploy). Die Parameter dafür nur im Publish-Mode anlegen, ihre Werte nur in `appsettings.azure-<name>.json`, den Zertifikatsnamen als Wert aus der Konfiguration, nie per `AddParameter(name)` (ein leerer Wert gälte als fehlend). Managed Certificates und ihre Bindung im Portal legt nur ein Mensch an ([docs/azure.md](docs/azure.md#custom-domain)).
+- Custom Domains der Container Apps nur per `WithCustomDomain` (`CustomDomain/Extensions.cs`) im AppHost, nie nur im Portal (jeder Deploy entfernt sie), und erst, wenn ein Mensch ihre DNS-Einträge angelegt hat (sonst scheitert der Deploy). Ihre Werte nur in `appsettings.azure-<name>.json`. Managed Certificates und ihre Bindung im Portal legt nur ein Mensch an ([docs/azure.md](docs/azure.md#custom-domain)).
 - Subscription-ID und andere Azure-IDs nie ins Repo, im GitHub-Environment `development` nur als Secrets, nie als Variablen. `deploy-backend.yml` reicht die Subscription-ID als `Azure__SubscriptionId` an den AppHost.
 - In `deploy-backend.yml` behalten: `shell: bash` am Step „Deploy“ (nur damit läuft das Skript mit `pipefail`), bis zu zwei Wiederholungen von `aspire deploy`, Anmeldung über die `az`-Session mit Token-Abruf direkt nach dem Login, Resource-Strings ohne Schrägstrich am Ende. Braucht Aspire eine weitere Audience, sie dort ergänzen (sonst AADSTS700024). `~/.aspire/deployments` nie cachen oder hochladen.
 - Die Version von `Aspire.AppHost.Sdk` nur im `Sdk`-Attribut des AppHost-csproj pflegen.
@@ -373,7 +373,7 @@ Hintergrund und Entscheidungen: [docs/azure.md](docs/azure.md)
 
 ### Ressourcen
 
-- Pro Service ein Ordner im AppHost (`src/backend/Murmli.Backend.Aspire`) mit `Extensions.cs` und `Add<Service>`-Extension, `AppHost.cs` verdrahtet nur.
+- Pro Service ein Ordner im AppHost (`src/backend/Murmli.Backend.Aspire`) mit `Extensions.cs` und `Add<Service>`-Extension, querschnittliche Konfiguration mehrerer Apps (`Telemetry`, `CustomDomain`) je ein Ordner mit `With<Thema>`-Extension, `AppHost.cs` verdrahtet nur.
 - Die Ressourcennamen `env`, `postgres`, `murmli`, `api`, `auth`, `backend-identity`, `product-import`, `app-insights`, `better-auth-secret` und `auth-service-key` und das Naming-Schema der Umgebung nie ändern.
 - Jede App mit Datenbankzugriff bekommt `backend-identity` (`WithAzureUserAssignedIdentity`).
 - Nie verwenden: Aspire-Dashboard in Azure, ACA Express, Dedicated Workload Profiles, Private Endpoints, geplante Wartungsfenster.
