@@ -11,7 +11,7 @@ internal sealed class ShoppingListType : SyncDataType<ShoppingList>
 
     protected override void Define(SyncDataTypeBuilder<ShoppingList> type)
     {
-        type.Named(DataTypeName, ScopeKindName).ScopeRoot(maxOwnedScopesPerAccount: 42).MaxRecordsPerScope(1);
+        type.Named(DataTypeName, ScopeKindName).ScopeRoot(maximumOwnedScopesPerAccount: 42).MaximumRecordsPerScope(1);
         type.Field("name", list => list.Name, list => list.NameChangedAt, SyncFieldTypes.Text(0, 100)).RequiredOnCreate();
     }
 }

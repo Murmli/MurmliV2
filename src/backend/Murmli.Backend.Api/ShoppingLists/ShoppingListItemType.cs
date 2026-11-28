@@ -10,7 +10,7 @@ internal sealed partial class ShoppingListItemType : SyncDataType<ShoppingListIt
 
     protected override void Define(SyncDataTypeBuilder<ShoppingListItem> type)
     {
-        type.Named(DataTypeName, ShoppingListType.ScopeKindName).MaxRecordsPerScope(1_000);
+        type.Named(DataTypeName, ShoppingListType.ScopeKindName).MaximumRecordsPerScope(1_000);
         type.Field("name", item => item.Name, item => item.NameChangedAt, SyncFieldTypes.Text(1, 256)).RequiredOnCreate();
         type.Group(
             "amount",
