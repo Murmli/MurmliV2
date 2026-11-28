@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:auto_route/auto_route.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -12,6 +14,7 @@ import '../../shopping_list/widgets/shopping_list_checked_section_sliver.dart';
 import '../../shopping_list/widgets/shopping_list_empty_state.dart';
 import '../../shopping_list/widgets/shopping_list_entry_field.dart';
 import '../../shopping_list/widgets/shopping_list_group_sliver.dart';
+import '../../shopping_list/widgets/shopping_list_menu.dart';
 import '../../shopping_list/widgets/shopping_list_pending_entries.dart';
 import '../home_tab.dart';
 import '../widgets/home_header.dart';
@@ -33,20 +36,27 @@ class ShoppingListPage extends ConsumerWidget {
       );
     }
     final pendingEntries = ref.watch(pendingShoppingListEntriesProvider);
-    final background = context.colors.background;
+    final colors = context.colors;
     final hasItems = overview.totalCount > 0;
     return CustomScrollView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       slivers: [
         SliverFloatingHeader(
           child: Material(
-            color: background,
-            child: HomeHeader(title: title),
+            color: colors.background,
+            child: HomeHeader(
+              title: title,
+              trailing: IconButton(
+                tooltip: context.t.shoppingList.menu.tooltip,
+                icon: Icon(Icons.more_horiz, color: colors.inkSecondary),
+                onPressed: () => unawaited(showShoppingListMenu(context)),
+              ),
+            ),
           ),
         ),
         PinnedHeaderSliver(
           child: Material(
-            color: background,
+            color: colors.background,
             child: ShoppingListEntryField(
               listId: overview.listId,
               checkedCount: overview.checkedCount,
