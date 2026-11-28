@@ -588,7 +588,7 @@ Warum nichts Gelöschtes wiederkommt:
 | `Sync:Cleanup:Enabled` | `true` | `false` schaltet den geplanten Lauf ab |
 | `Sync:Cleanup:InitialDelay` | `00:01:00` | `00:00:00` bis `1.00:00:00` |
 | `Sync:Cleanup:Interval` | `1.00:00:00` | `00:01:00` bis `7.00:00:00` |
-| `Sync:Cleanup:BatchSize` | 1000 | 1 bis 100.000; Zeilen je Anweisung, Bereiche je Abfrage der Löschmarkierungen, hängengebliebene Kontolöschungen je Lauf |
+| `Sync:Cleanup:BatchSize` | 1000 | 1 bis 100.000; Zeilen je Anweisung, Bereiche je Abfrage der Löschmarkierungen, Konten je Abfrage hängengebliebener Kontolöschungen |
 | `Sync:Cleanup:SafetyMargin` | `1.00:00:00` | `00:00:00` bis `30.00:00:00`, mindestens `Sync:ClockAheadTolerance` plus `Sync:RequestDeadline` |
 | `Sync:Cleanup:LeaseDuration` | `00:10:00` | `00:02:00` bis `1.00:00:00`; der Lauf endet eine Minute vorher |
 
