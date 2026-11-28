@@ -126,6 +126,19 @@ class _ItemEditor extends HookConsumerWidget {
               DropdownMenu<MarketCategory>(
                 initialSelection: category.value,
                 label: Text(editorTranslations.category),
+                leadingIcon: Padding(
+                  padding: const EdgeInsetsDirectional.only(
+                    start: AppSpacing.space12,
+                    end: AppSpacing.space8,
+                  ),
+                  child: Center(
+                    widthFactor: 1,
+                    child: MarketCategoryTile(
+                      category: category.value,
+                      size: 28,
+                    ),
+                  ),
+                ),
                 expandedInsets: EdgeInsets.zero,
                 requestFocusOnTap: false,
                 onSelected: (selected) {
