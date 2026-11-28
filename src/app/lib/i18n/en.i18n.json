@@ -222,9 +222,10 @@
       }
     },
     "categoryOrder": {
+      "intro": "Order it like your route through the store.",
       "moveUp": "Move $name up",
       "moveDown": "Move $name down",
-      "reset": "Reset",
+      "restoreDefault": "Restore default",
       "resetDialog": {
         "title": "Restore the default order?",
         "message": "Your own order will be lost.",

@@ -222,9 +222,10 @@
       }
     },
     "categoryOrder": {
+      "intro": "Reihenfolge wie dein Laufweg im Markt.",
       "moveUp": "$name nach oben",
       "moveDown": "$name nach unten",
-      "reset": "Zurücksetzen",
+      "restoreDefault": "Standard wiederherstellen",
       "resetDialog": {
         "title": "Standardreihenfolge wiederherstellen?",
         "message": "Deine eigene Reihenfolge geht dabei verloren.",

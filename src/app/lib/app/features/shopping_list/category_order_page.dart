@@ -7,6 +7,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../i18n/strings.g.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/confirmation_dialog.dart';
 import 'models/market_category.dart';
@@ -20,6 +21,8 @@ class CategoryOrderPage extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.colors;
+    final textTheme = TextTheme.of(context);
     final translations = context.t.shoppingList;
     final storedOrder = ref.watch(marketCategoryOrderProvider).value;
     final localOrder = useState<List<MarketCategory>?>(null);
@@ -52,39 +55,154 @@ class CategoryOrderPage extends HookConsumerWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(translations.menu.sortCategories),
-        actions: [
-          TextButton(
-            onPressed: order == null || listEquals(order, MarketCategory.values)
-                ? null
-                : () => unawaited(reset()),
-            child: Text(translations.categoryOrder.reset),
-          ),
-        ],
-      ),
-      body: order == null
-          ? const Center(child: CircularProgressIndicator())
-          : ReorderableListView.builder(
-              buildDefaultDragHandles: false,
-              itemCount: order.length,
-              onReorderItem: move,
-              itemBuilder: (context, index) => _CategoryTile(
-                key: ValueKey(order[index]),
-                category: order[index],
-                index: index,
-                onMoveUp: index == 0 ? null : () => move(index, index - 1),
-                onMoveDown: index == order.length - 1
-                    ? null
-                    : () => move(index, index + 1),
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsetsDirectional.only(
+                top: AppSpacing.space24,
+                start: AppSpacing.space16,
+                end: AppSpacing.space16,
+              ),
+              child: Row(
+                spacing: AppSpacing.space12,
+                children: [
+                  const _BackButton(),
+                  Expanded(
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        translations.menu.sortCategories,
+                        style: textTheme.headlineSmall,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
+            Expanded(
+              child: order == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : CustomScrollView(
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsetsDirectional.symmetric(
+                            horizontal: AppSpacing.screenMargin,
+                            vertical: 14,
+                          ),
+                          sliver: SliverToBoxAdapter(
+                            child: Text(
+                              translations.categoryOrder.intro,
+                              style: textTheme.bodyMedium!.copyWith(
+                                fontSize: 14,
+                                height: 20 / 14,
+                                color: colors.inkSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        SliverPadding(
+                          padding: const EdgeInsetsDirectional.only(
+                            start: AppSpacing.screenMargin,
+                            end: AppSpacing.screenMargin,
+                            bottom: AppSpacing.space24,
+                          ),
+                          sliver: DecoratedSliver(
+                            decoration: BoxDecoration(
+                              color: colors.surface,
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.card,
+                              ),
+                              boxShadow: colors.cardShadow,
+                            ),
+                            sliver: SliverPadding(
+                              padding: const EdgeInsetsDirectional.only(
+                                start: AppSpacing.space12,
+                                end: AppSpacing.space8,
+                              ),
+                              sliver: SliverReorderableList(
+                                itemCount: order.length,
+                                onReorderItem: move,
+                                proxyDecorator: (child, index, animation) =>
+                                    _DraggedCategoryRow(child: child),
+                                itemBuilder: (context, index) => _CategoryRow(
+                                  key: ValueKey(order[index]),
+                                  category: order[index],
+                                  index: index,
+                                  onMoveUp: index == 0
+                                      ? null
+                                      : () => move(index, index - 1),
+                                  onMoveDown: index == order.length - 1
+                                      ? null
+                                      : () => move(index, index + 1),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.background,
+          border: Border(top: BorderSide(color: colors.line)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsetsDirectional.symmetric(
+              horizontal: AppSpacing.screenMargin,
+              vertical: 14,
+            ),
+            child: Center(
+              heightFactor: 1,
+              child: TextButton.icon(
+                onPressed:
+                    order == null || listEquals(order, MarketCategory.values)
+                    ? null
+                    : () => unawaited(reset()),
+                icon: const Icon(Icons.restart_alt),
+                label: Text(translations.categoryOrder.restoreDefault),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
 
-class _CategoryTile extends StatelessWidget {
-  const _CategoryTile({
+class _BackButton extends StatelessWidget {
+  const _BackButton();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        shape: const CircleBorder(),
+        color: colors.surface,
+        shadows: colors.cardShadow,
+      ),
+      child: IconButton(
+        tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+        constraints: BoxConstraints.tight(const Size.square(48)),
+        color: colors.ink,
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () => unawaited(Navigator.of(context).maybePop()),
+      ),
+    );
+  }
+}
+
+class _CategoryRow extends StatelessWidget {
+  const _CategoryRow({
     required this.category,
     required this.index,
     required this.onMoveUp,
@@ -99,36 +217,84 @@ class _CategoryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final translations = context.t;
     final label = category.label(translations);
     final orderTranslations = translations.shoppingList.categoryOrder;
-    return ListTile(
-      leading: MarketCategoryTile(category: category),
-      title: Text(label),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            tooltip: orderTranslations.moveUp(name: label),
-            icon: const Icon(Icons.keyboard_arrow_up),
-            onPressed: onMoveUp,
-          ),
-          IconButton(
-            tooltip: orderTranslations.moveDown(name: label),
-            icon: const Icon(Icons.keyboard_arrow_down),
-            onPressed: onMoveDown,
-          ),
-          ReorderableDragStartListener(
-            index: index,
-            child: const ExcludeSemantics(
-              child: Padding(
-                padding: EdgeInsetsDirectional.all(AppSpacing.space8),
-                child: Icon(Icons.drag_handle),
+    final buttonConstraints = BoxConstraints.tight(const Size.square(44));
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (index > 0) const Divider(),
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 52),
+          child: Row(
+            spacing: 10,
+            children: [
+              ReorderableDragStartListener(
+                index: index,
+                child: ExcludeSemantics(
+                  child: SizedBox(
+                    width: 20,
+                    height: 52,
+                    child: Icon(
+                      Icons.drag_indicator,
+                      size: 18,
+                      color: colors.inkTertiary,
+                    ),
+                  ),
+                ),
               ),
-            ),
+              MarketCategoryTile(category: category, size: 32),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextTheme.of(context).bodyMedium!.copyWith(
+                    fontSize: 14,
+                    height: 20 / 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: orderTranslations.moveUp(name: label),
+                constraints: buttonConstraints,
+                color: colors.inkSecondary,
+                icon: const Icon(Icons.keyboard_arrow_up),
+                onPressed: onMoveUp,
+              ),
+              IconButton(
+                tooltip: orderTranslations.moveDown(name: label),
+                constraints: buttonConstraints,
+                color: colors.inkSecondary,
+                icon: const Icon(Icons.keyboard_arrow_down),
+                onPressed: onMoveDown,
+              ),
+            ],
           ),
-        ],
+        ),
+      ],
+    );
+  }
+}
+
+class _DraggedCategoryRow extends StatelessWidget {
+  const _DraggedCategoryRow({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: colors.navigationShadow,
       ),
+      child: Material(type: MaterialType.transparency, child: child),
     );
   }
 }
