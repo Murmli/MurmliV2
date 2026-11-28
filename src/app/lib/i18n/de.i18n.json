@@ -135,6 +135,12 @@
         "name": "Packung",
         "abbreviation": "Pck."
       }
+    },
+    "progress": "$checked von $total erledigt",
+    "recipeCount": "$count Rezepte",
+    "empty": {
+      "title": "Keine offenen Artikel",
+      "hint": "Hier erscheinen deine Artikel, sobald du welche hinzufügst."
     }
   },
   "settings": {

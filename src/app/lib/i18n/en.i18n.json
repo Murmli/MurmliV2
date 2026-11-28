@@ -135,6 +135,12 @@
         "name": "Package",
         "abbreviation": "pkg."
       }
+    },
+    "progress": "$checked of $total done",
+    "recipeCount": "$count recipes",
+    "empty": {
+      "title": "No open items",
+      "hint": "Your items appear here as soon as you add some."
     }
   },
   "settings": {

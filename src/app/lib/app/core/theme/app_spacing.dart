@@ -14,6 +14,7 @@ abstract final class AppRadius {
   static const double iconTile = 14;
   static const double brandMark = 15;
   static const double navigationIndicator = 15;
+  static const double listGroup = 22;
   static const double card = 24;
   static const double featureCard = 28;
   static const double navigationTab = 30;
