@@ -1,0 +1,3 @@
+drift_schemas/** text eol=lf
+test/drift/**/generated/** text eol=lf
+lib/app/core/database/app_database.steps.dart text eol=lf

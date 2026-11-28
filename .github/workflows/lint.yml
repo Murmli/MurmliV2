@@ -16,6 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-app
+      - name: Check database schema
+        run: |
+          dart run drift_dev make-migrations
+          git add --intent-to-add drift_schemas test/drift lib/app/core/database
+          git diff --exit-code -- drift_schemas test/drift lib/app/core/database
       - run: dart format --output=none --set-exit-if-changed .
       - run: flutter analyze
 

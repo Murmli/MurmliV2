@@ -7,3 +7,9 @@ targets:
           fallback_strategy: base_locale
           input_directory: lib/i18n
           output_directory: lib/i18n
+      drift_dev:
+        options:
+          databases:
+            app_database: lib/app/core/database/app_database.dart
+          schema_dir: drift_schemas/
+          test_dir: test/drift/

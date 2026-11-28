@@ -2,7 +2,7 @@
 
 Vertrag zwischen App und API für den Abgleich ([#122](https://github.com/Murmli/MurmliV2/issues/122)), Aufbau und Begriffe in [#121](https://github.com/Murmli/MurmliV2/issues/121). Ein einziger Endpunkt nimmt die wartenden Kommandos eines Geräts an und liefert in derselben Antwort, was sich seit dessen Token geändert hat; ein neuer Datentyp braucht keinen neuen Endpunkt. Der Server entscheidet: Das Gerät wendet eigene Änderungen sofort an, Konfliktregeln gibt es nur am Server. Er liefert den aktuellen Stand geänderter Datensätze statt Änderungsfolgen, ein vollständiger Stand repariert jede Abweichung. Jede Anfrage darf beliebig oft wiederholt werden, ohne dass etwas doppelt wirkt, und kein Kommando hält die Warteschlange auf Dauer auf.
 
-Entschieden, noch nicht gebaut: das Verhalten der App, das dieses Dokument beschreibt, soweit kein eigener Vermerk ein anderes Issue nennt. Entfällt, sobald der Sync-Kern der App aus [#124](https://github.com/Murmli/MurmliV2/issues/124) gebaut ist.
+Die App hat den Kern des Abgleichs aus [#124](https://github.com/Murmli/MurmliV2/issues/124) ([Kern der App](#kern-der-app)). Entschieden, noch nicht gebaut: Anstöße und Lebenszyklus der Runden ([#126](https://github.com/Murmli/MurmliV2/issues/126)), die Live-Verbindung ([#127](https://github.com/Murmli/MurmliV2/issues/127)), die Simulation ([#136](https://github.com/Murmli/MurmliV2/issues/136)), die Telemetrie der App ([#139](https://github.com/Murmli/MurmliV2/issues/139)), die Anbindung der Einkaufsliste ([#142](https://github.com/Murmli/MurmliV2/issues/142)) und die Anzeige der Hinweise ([#148](https://github.com/Murmli/MurmliV2/issues/148)). Jeder Punkt entfällt mit seinem Issue.
 
 | Begriff | Im Vertrag | Bedeutung |
 | --- | --- | --- |
@@ -65,6 +65,62 @@ Einzelne Datensätze eines Datentyps, die der Server selbst anlegt, ändert oder
 
 Was jedes neue Konto beim ersten Abgleich bekommen soll, etwa die erste Einkaufsliste, hängt ein Datentyp mit einer Klasse ein, die `ISyncAccountBootstrapContributor` (`Murmli.Backend.Sync.Accounts`) umsetzt und mit `services.AddSyncAccountBootstrapContributor<T>()` registriert ist (scoped). `CreateCommands(accountId)` liefert Kommandos des Servers mit festen IDs. Der Kern holt sie einmal, bevor er den persönlichen Bereich anlegt, und schreibt sie in derselben Transaktion wie diesen über den Server als Schreiber ([Server als Schreiber](#server-als-schreiber)). Ergebnisse liefert das Schreiben dort nicht: Ein Kommando, das der Server schon vor der Verarbeitung als ungültig erkennt, ist ein Fehler im Code und wirft eine `InvalidOperationException`. Jedes andere Ergebnis außer `applied` (etwa `invalid`, weil der Datentyp nicht zur Art des Bereichs passt, `noAccess` oder `limitExceeded`, [Konfliktregeln](#konfliktregeln)) speichert der Kern wie sonst, ohne dass der Beitrag davon erfährt; das Konto bekommt den Datensatz dann nie. Jede Exception rollt die ganze Transaktion zurück. Eine vorübergehende Störung wiederholt die Execution Strategy noch in derselben Anfrage mit denselben Kommandos; bleibt die Störung, antwortet der Abgleich wie bei jeder Störung beim Anlegen des persönlichen Bereichs mit 503. Wird das Konto gerade gelöscht, antwortet er mit 410, jede andere Exception lässt die Anfrage scheitern. Nach 503 und nach einem Fehler im Code versucht der nächste Abgleich beides wieder. Weil alles in einer Transaktion läuft, schreiben die Kommandos nur in den persönlichen Bereich und in Bereiche, die sie selbst anlegen. Entsteht der persönliche Bereich nicht, weil es ihn schon gibt (auch bei gleichzeitigen ersten Abgleichen und bei der Wiederholung nach einem unklaren Commit), schreibt der Kern sie nicht. Konten, deren persönlicher Bereich vor einem Beitrag entstanden ist, bekommen von ihm deshalb nie etwas; ein Beitrag, den auch sie brauchen, braucht einen eigenen Weg.
 
+### Kern der App
+
+Der Kern der App liegt in `src/app/lib/app/core/sync/` und kennt wie der des Servers keine Datentypen. Einstieg ist `SyncCore` über `syncCoreProvider`: `write` für Änderungen, `runRound` für eine Runde, dazu `watchFirstSyncCompleted`, `watchNotices`, `dismissNotice`, `watchMembers`, `watchHasPendingCommands`, `pendingCommandCount`, `discardToken` und der Strom `commandsQueued` nach jedem Schreiben mit Kommando. Wann Runden laufen, entscheidet erst [#126](https://github.com/Murmli/MurmliV2/issues/126); bis dahin ruft niemand `runRound` auf. `main.dart` liest `syncCoreProvider` beim Start direkt nach `restore()` der Anmeldung, damit die Bindung an das Konto ([Konto der App](#konto-der-app)) von Anfang an läuft; vorher läse er „kein Konto“ und löschte die Daten eines angemeldeten Nutzers. Solange kein Datentyp eingetragen ist ([#142](https://github.com/Murmli/MurmliV2/issues/142)), gleicht der Kern nur seine eigenen Tabellen ab, und die Einkaufsliste schreibt noch an ihm vorbei. Die Daten liegen in der lokalen Datenbank der App ([app.md](app.md#lokale-datenbank)), Zeiten kommen aus `appClockProvider`, IDs aus `newUuid()`.
+
+Anfrage und Antwort sind eigene Modelle mit dart_mappable in `src/app/lib/app/core/sync/protocol/`, ohne erzeugten API-Client. dart_mappable wandelt unpassende einfache Werte still um (etwa `"yes"` zu `false`, `42` zu `"42"`), deshalb trägt jedes Feld des Rahmens den Hook `StrictJsonType`; ein falscher Typ macht die Antwort unlesbar. `fields` eines Datensatzes bleibt untypisiert, damit nur dieser Datensatz übersprungen wird. Geschlossene Mengen (`status` samt `accepted`, `state` eines Mitglieds samt `former`) sind Enums ohne Rückfall, ein unbekannter Wert macht die Antwort unlesbar; ein unbekannter `reason` wird zu `invalid`, `role` bleibt Text. Die Vorgaben liest `SyncServerSettings` von Hand, jede für sich.
+
+#### Lokale Tabellen
+
+| Tabelle (`tables/sync_tables.dart`) | Inhalt |
+| --- | --- |
+| `sync_commands` | Warteschlange in der Reihenfolge der Entstehung (`sequence`), je Kommando Felder als JSON, `time` und die Fehlversuche (`failedAttempts`, `firstFailedAt`) |
+| `sync_states` | genau eine Zeile (`id = 1`): Konto, Geräte-ID, Token, Zeitpunkt des letzten Kommandos, Abweichung der Uhr, Vorgaben des Servers, `localStateGeneration` und `firstSyncCompleted` |
+| `sync_scopes` | bekannte Bereiche mit ihrer Art |
+| `sync_members` | Mitgliedseinträge je Bereich |
+| `sync_notices` | Hinweise: `rejectedCommand`, `parkedCommand`, `removedScope` |
+
+`localStateGeneration` steigt mit jedem Löschen der lokalen Daten und jedem Verwerfen des Tokens; eine Antwort wendet der Kern nur an, wenn Token und Zähler noch die der Anfrage sind ([Antwort](#antwort)). Die Datensätze der Datentypen liegen in deren eigenen Tabellen. Hinweise tragen die Uhr des Geräts ([Entscheidungen](#entscheidungen)) und verschwinden nach 30 Tagen mit der nächsten angewendeten Antwort; der Hinweis zu einem entfernten Bereich trägt den Namen aus `scopeLabel` seines Wurzel-Datentyps.
+
+#### Schreiben
+
+Abgeglichene Tabellen der App ändert nur der Kern: beim Einarbeiten von Antworten und in `SyncCore.write`. Ein Repository schreibt deshalb nur über `write`, das die Änderung an den lokalen Daten und das Kommando in einer Transaktion speichert, beides oder nichts. `create`, `setFields` und `delete` der `SyncWriteTransaction` prüfen zuerst die Grenzen des Datentyps (`checkLimits`, sonst `SyncLimitExceededException` ohne Änderung), wenden das Kommando über den Datentyp lokal an (das `delete` eines Wurzel-Datensatzes entfernt den Bereich) und reihen es mit der korrigierten Uhr ein ([Zeit](#zeit)). Vor dem ersten abgeschlossenen Abgleich des angemeldeten Kontos wirft `write` eine `SyncNotReadyException`; so entsteht kein Kommando vor dem persönlichen Bereich. `watchFirstSyncCompleted` meldet, ob dieser Abgleich für das erwartete Konto abgeschlossen ist, damit die Oberfläche Daten erst danach zeigt.
+
+#### Abgleichsrunde der App
+
+Eine Runde liest Zustand und Kommandos in einer Transaktion und nimmt Kommandos der Reihe nach, solange es höchstens `maxCommandsPerRequest` sind und der UTF-8-Body höchstens `maxRequestBytes` groß ist; ohne Vorgabe des Servers gelten 500 und 1.000.000 Byte. Vorgaben aus `settings` und aus dem Problem 413 `request-too-large` übernimmt der Kern einzeln; fehlt eine, ist sie keine ganze Zahl oder unplausibel (`maxCommandsPerRequest` oder `pollIntervalSeconds` unter 1, `maxRequestBytes` unter 65.536), behält er den bisherigen Wert. Passt schon das erste Kommando allein nicht, sortiert sie es aus und plant neu. Die Antwort prüft sie auf ihren Rahmen ([Antwort](#antwort)) und arbeitet sie in einer Transaktion ein; jeden Datensatz schreibt `writeServerRecord` in einer verschachtelten Transaktion (Savepoint); wirft der Datentyp dabei eine `Exception` (nicht nur die `FormatException` eines unlesbaren Datensatzes), rollt der Kern nur diesen Savepoint zurück, überspringt den Datensatz, loggt Datentyp und ID (ohne Feldwerte) und meldet ihn an Sentry, der Rest der Antwort samt Token gilt. Scheitert das Einarbeiten dreimal nacheinander, verwirft der Kern sein Token und meldet es an Sentry. Andere Status als 200 liest der Kern selbst, nur eine 401 lässt er als `DioException` durch die Interceptors von `apiClientProvider` laufen, damit `AccessTokenInterceptor` das JWT erneuert und den Request einmal wiederholt; scheitert auch die Wiederholung, endet die Runde mit `failed`, ohne Fehlerdialog (`unreportedFailureKey`). Aufrufe von `runRound` während einer laufenden Runde teilen sich genau eine Folgerunde, Runden überlappen nie.
+
+Ergebnis ist ein `SyncRoundOutcome` für die Anstöße aus [#126](https://github.com/Murmli/MurmliV2/issues/126):
+
+| Ergebnis | Wann |
+| --- | --- |
+| `completed(runAgainImmediately)` | lesbare Antwort angewendet oder als veraltet verworfen, außerdem nach 413 `request-too-large` (dann mit `runAgainImmediately`); sonst `runAgainImmediately` nach den Regeln der [Antwort](#antwort). Auch 410 `account-gone` und 413 `request-too-large` gelten nur, wenn Token und `localStateGeneration` noch die der Anfrage sind; sonst ändern sie nichts und die Runde endet ohne `runAgainImmediately` |
+| `notSignedIn` | kein Konto, nicht das erwartete Konto oder keine Geräte-ID |
+| `retryAfter(delay)` | 429 `rate-limited` oder 503 `service-unavailable` mit `Retry-After` ab 1 Sekunde |
+| `accountGone` | 410 `account-gone`, die lokalen Daten sind schon gelöscht |
+| `appVersionUnsupported` | 403 `app-version-unsupported` |
+| `failed` | alles andere ([Fehler der ganzen Anfrage](#fehler-der-ganzen-anfrage)), auch die 401 der Anmeldung und jeder Fehler in der Runde selbst; `runRound` endet nie mit einem Fehler, ein `Error` (keine `Exception`) geht zusätzlich an Sentry |
+
+Nach 413 `request-too-large` mit mehreren Kommandos übernimmt der Kern die Grenzen aus dem Problem und sendet halb so viele Kommandos, bis wieder eine lesbare Antwort ankommt; die Halbierung hält er nur im Speicher.
+
+#### Aussortieren
+
+Ein Kommando wird aussortiert, wenn es fünfmal `failed` bekommen hat und das erste Mal mindestens eine Stunde zurückliegt oder wenn es allein zu groß ist (413 mit nur diesem Kommando oder allein über `maxRequestBytes`). In derselben Transaktion verlässt es die Warteschlange, ein Hinweis `parkedCommand` entsteht, und das Token wird verworfen; die nächste Runde holt den vollständigen Stand und nimmt die lokale Wirkung des Kommandos so zurück, auch wenn die App gleich danach endet. Nach dem Commit meldet der Kern es per `CrashReporter.reportProblem` an Sentry, nur mit Datentyp, Art und Grund.
+
+#### Konto der App
+
+`syncCoreProvider` bindet die lokalen Daten an `signedInAccountProvider`. Ein angemeldetes Konto übernimmt die Daten, die schon ihm gehören; gehören sie einem anderen Konto oder keinem, obwohl Daten des Abgleichs da sind (Token, Kommandos, Bereiche oder Hinweise), löscht der Kern sie vorher. Tabellen, die noch nicht abgeglichen werden, zählen dafür nicht: Die Einkaufsliste aus der Zeit vor dem Abgleich bleibt beim ersten Start mit dem Kern erhalten. Abmelden (auch nach abgelaufener Sitzung), der Start ohne Anmeldung, ein Wechsel des Kontos und 410 `account-gone` löschen alle lokalen Daten: jede Tabelle der lokalen Datenbank (`allTables`, auch die noch nicht abgeglichenen wie die Einkaufsliste) samt Warteschlange, Token, Hinweisen, Geräte-ID und den Datensätzen aller Datentypen (ein angemeldetes Konto bekommt eine neue Geräte-ID); einen zweiten Weg zum Löschen gibt es nicht. Von `sync_states` bleibt nur `localStateGeneration`, um eins erhöht, und die Grenzen im Speicher fallen zurück. Der Kern wartet dafür nicht auf eine laufende Runde: Deren Antwort passt danach nicht mehr zu Token und Zähler und wird verworfen. Umgekehrt wartet eine Runde vor dem Lesen von Zustand und Kommandos auf einen begonnenen Wechsel des Kontos, damit sie nie die Warteschlange des vorigen Kontos unter dem neuen sendet. Zusätzlich merkt sich der Kern beim Aufruf von `adoptAccount` das erwartete Konto im Speicher: Solange das gespeicherte Konto ein anderes ist (etwa weil das Löschen beim Wechsel gescheitert ist), endet jede Runde mit `notSignedIn` und `write` wirft `SyncNotReadyException`.
+
+#### Datentyp in der App anbinden
+
+1. Klasse, die `SyncDataType` umsetzt: Name wie am Server, `rootScopeKind` für den Wurzel-Datentyp eines geteilten Bereichs, `checkLimits` mit denselben Grenzen wie am Server und die Methoden, mit denen der Kern Datensätze schreibt und löscht. `writeServerRecord` ignoriert unbekannte Felder und Werte und wirft für einen unlesbaren Datensatz eine `FormatException`. `updateRecordIfPresent` und `deleteRecord` filtern nach Bereich und ID: Ein Eintrag in `deletedRecords` oder ein Kommando trifft nur den Datensatz mit dieser ID in seinem Bereich.
+2. In `syncDataTypesProvider` eintragen (derzeit leer, die Einkaufsliste kommt mit [#142](https://github.com/Murmli/MurmliV2/issues/142)).
+3. Tabellen in `AppDatabase` mit neuer Schema-Version und Step der Migration ([app.md](app.md#schema-versionen)).
+4. Ein Repository, das nur über `SyncCore.write` schreibt ([Schreiben](#schreiben)).
+
+Tests des Kerns laufen mit `SyncTestHarness` und `FakeSyncServer` (`src/app/test/app/core/sync/sync_test_setup.dart`) gegen eine Datenbank im Speicher und künstliche Datentypen wie am Server (`testNote`, `testBoard`, `testCard`), deren Tabellen nur der Testcode anlegt. Der Harness meldet sich wie ein Nutzer per E-Mail an (`signIn`), damit `AccessTokenInterceptor` Requests durchlässt.
+
 ### Datentyp anbinden
 
 Vorlage ist die [Einkaufsliste](#einkaufsliste).
@@ -76,7 +132,7 @@ Vorlage ist die [Einkaufsliste](#einkaufsliste).
 5. Felder, Gruppen, Regeln und Grenzen in diesem Dokument beschreiben, wie bei der [Einkaufsliste](#einkaufsliste).
 6. Fälle zu den Regeln des Datentyps in Unterordnern je Thema unter `src/sync-cases/<bereich>/` ([Fallsammlung](#fallsammlung)); einen neuen Ordner zusätzlich in `CaseAreas` von `SyncEndpointsCaseCollectionTests` aufnehmen (derzeit `core` und `shopping`).
 7. Ein Test, der jedes Feld über `/v1/sync` anlegt und zurückliest (Vorlage `ShoppingListItemTypeTests.Sync_ItemWithEveryField_RoundTripsEveryFieldExceptCreator`).
-8. Die Seite der App nach [#124](https://github.com/Murmli/MurmliV2/issues/124).
+8. Die Seite der App nach [Datentyp in der App anbinden](#datentyp-in-der-app-anbinden).
 
 Kern und Endpunkt ändern sich dafür nicht.
 
@@ -100,7 +156,7 @@ Alle IDs, die ein Gerät vergibt, sind zufällige UUIDs der Version 4 aus einer 
 
 ### Bereiche und Mitglieder
 
-Jedes Konto hat genau einen persönlichen Bereich (`kind: "personal"`) für private Daten. Der Server legt ihn beim ersten Abgleich des Kontos an, mit ihm die erste Einkaufsliste ([Einkaufsliste](#einkaufsliste)); Geräte erfahren beides nur über den Abgleich; bis zum ersten abgeschlossenen Abgleich nach der Anmeldung nimmt die App keine Kommandos an ([#124](https://github.com/Murmli/MurmliV2/issues/124)).
+Jedes Konto hat genau einen persönlichen Bereich (`kind: "personal"`) für private Daten. Der Server legt ihn beim ersten Abgleich des Kontos an, mit ihm die erste Einkaufsliste ([Einkaufsliste](#einkaufsliste)); Geräte erfahren beides nur über den Abgleich; bis zum ersten abgeschlossenen Abgleich nach der Anmeldung nimmt die App keine Kommandos an ([Schreiben](#schreiben)).
 
 Ein geteilter Bereich, bei Einkaufslisten `kind: "shoppingList"`, entsteht nur mit dem `create` seines Wurzel-Datensatzes, bei Listen der Liste selbst. Seine ID ist die des Wurzel-Datensatzes, der Absender wird sein Besitzer. Jedes andere Kommando in einen Bereich, den es nicht gibt, ist `noAccess` und legt nichts an. Den Wurzel-Datensatz löscht nur der Besitzer, danach ist der Bereich mit allen Datensätzen und Mitgliedseinträgen für alle weg. Mitgliedschaft ändert kein Kommando, sie ändert sich nur online ([#129](https://github.com/Murmli/MurmliV2/issues/129)).
 
@@ -232,15 +288,15 @@ Status 200 mit `Content-Type: application/json; charset=utf-8`, auch wenn einzel
 - Innerhalb eines Blocks steht jeder Datensatz höchstens einmal, nie zugleich als Datensatz und als Löschung.
 - Reihenfolge: erst der persönliche Bereich, dann aufsteigend nach Bereichs-ID; Datensätze nach Datentyp in einer festen Reihenfolge des Servers, dann nach ID.
 
-Das Gerät prüft zuerst den Rahmen: Ergebnisse, Token, Kennzeichen und Aufbau. Passt er nicht, ist die Antwort unlesbar und das Gerät wendet nichts an; einen einzelnen Datensatz, den es nicht lesen kann, überspringt es und meldet ihn. Dann arbeitet es die Antwort in einer einzigen lokalen Transaktion ein ([#124](https://github.com/Murmli/MurmliV2/issues/124)):
+Das Gerät prüft zuerst den Rahmen: Ergebnisse, Token, Kennzeichen und Aufbau. Passt er nicht, ist die Antwort unlesbar und das Gerät wendet nichts an; einen einzelnen Datensatz, den es nicht lesen kann, überspringt es und meldet ihn. Dann arbeitet es die Antwort in einer einzigen lokalen Transaktion ein ([Abgleichsrunde der App](#abgleichsrunde-der-app)):
 
-1. Prüfen, dass Token und Stand-Zähler (steigt mit jedem Löschen der lokalen Daten und jedem Verwerfen des Tokens) noch die der Anfrage sind, sonst die Antwort verwerfen.
+1. Prüfen, dass Token und Stand-Zähler (`localStateGeneration`, steigt mit jedem Löschen der lokalen Daten und jedem Verwerfen des Tokens) noch die der Anfrage sind, sonst die Antwort verwerfen.
 2. Bei `coversAllScopes: true` jeden lokalen Bereich entfernen, den die Antwort nicht enthält.
 3. Die Bereiche aus `removedScopes` mit ihren Datensätzen, Mitgliedern und wartenden Kommandos löschen.
 4. Bei `fullState: true` den lokalen Stand des Bereichs durch `records` ersetzen, sonst `records` übernehmen und `deletedRecords` entfernen; `members` ersetzt die Mitgliedseinträge des Bereichs.
 5. Kommandos mit Ergebnis aus der Warteschlange entfernen, außer bei `failed` und `accepted`; Kommandos ohne Ergebnis bleiben.
 6. Alle noch wartenden Kommandos in ihrer Reihenfolge erneut auf die lokalen Daten anwenden, auch solche, die während der Runde entstanden sind. So überschreibt der Stand des Servers nie eine eigene Änderung, die er noch nicht kennt.
-7. Token, Abweichung der Uhr und Vorgaben speichern.
+7. Token (nach einem Aussortieren in dieser Runde keins), Abweichung der Uhr und Vorgaben speichern, Hinweise älter als 30 Tage entfernen.
 
 Meldet die Antwort `hasMore` oder hat die Runde mindestens ein Kommando entfernt, während noch welche warten, folgt die nächste Runde sofort.
 
@@ -290,7 +346,7 @@ Der häufigste Fall, ein Abruf ohne Änderungen, wiederholt das Token der Anfrag
 | `ignored` mit `cause` | Das Kommando hat gegen einen neueren Stand verloren (`lostToNewer`), oder sein Ziel ist gelöscht oder fehlt (`targetDeleted`). | entfernen, ohne Hinweis |
 | `rejected` mit `reason` | Das Kommando war nicht erlaubt oder ungültig. | entfernen und einen Hinweis mit Ziel, Art und Grund ablegen |
 | `alreadyProcessed` mit `original` | Die Kommando-ID kennt der Server schon. `original` trägt das ursprüngliche Ergebnis (nie `failed` oder `alreadyProcessed`), damit ein Hinweis nicht verloren geht, wenn die erste Antwort nie ankam. | wie beim ursprünglichen Ergebnis |
-| `failed` | Ein Fehler, der an genau diesem Kommando liegt. Der Server speichert nichts dazu und verarbeitet die folgenden Kommandos dieser Anfrage nicht mehr. | behalten und später erneut senden; scheitert dasselbe Kommando wiederholt, sortiert das Gerät es aus ([#124](https://github.com/Murmli/MurmliV2/issues/124)) |
+| `failed` | Ein Fehler, der an genau diesem Kommando liegt. Der Server speichert nichts dazu und verarbeitet die folgenden Kommandos dieser Anfrage nicht mehr. | behalten und später erneut senden; scheitert dasselbe Kommando wiederholt, sortiert das Gerät es aus ([Aussortieren](#aussortieren)) |
 
 `accepted` ist reserviert ([Reserviert](#reserviert)). Störungen der Datenbank oder des Dienstes sind nie `failed`, sondern ein [Fehler der ganzen Anfrage](#fehler-der-ganzen-anfrage) mit Wartezeit; sonst sortierten Geräte bei einer längeren Störung gültige Kommandos aus.
 
@@ -329,7 +385,7 @@ Entschieden, noch nicht gebaut: die Anzeige der Hinweise. Entfällt, sobald die 
 - Ein unlesbares Token ist nie ein Fehler, der Server antwortet dann mit dem vollständigen Stand.
 - Ist der Stand unverändert, kommt dasselbe Token zurück. Darauf bauen die Prüfung der App auf veraltete Antworten und die Simulation ([#136](https://github.com/Murmli/MurmliV2/issues/136)).
 - Das neue Token nennt jeden sichtbaren Bereich mit der Version, bis zu der das Gerät nach dieser Antwort alle Änderungen kennt; ein Abruf verpasst so keine Änderung.
-- Das Gerät darf jederzeit ohne Token anfragen, um sich zu reparieren, seine Warteschlange behält es dabei. Es verwirft sein Token etwa nach einem Update, das neue Datentypen oder Felder kennt, und wenn es ein Kommando aussortiert ([#124](https://github.com/Murmli/MurmliV2/issues/124)).
+- Das Gerät darf jederzeit ohne Token anfragen, um sich zu reparieren, seine Warteschlange behält es dabei. Es verwirft sein Token etwa nach einem Update, das neue Datentypen oder Felder kennt, und wenn es ein Kommando aussortiert ([Aussortieren](#aussortieren)).
 - Das Token ist weder geheim noch signiert: Ein gefälschtes schadet nur dem eigenen Gerät, weil der Server Sichtbarkeit und Mitgliedschaft bei jeder Anfrage selbst prüft; es kann den Server aber bis zu 100 Logs `SyncScopeRemoved` je Antwort schreiben lassen ([telemetry.md](telemetry.md#entscheidungen)).
 
 Aufbau, nur für das Backend: base64url ohne Padding über diese Bytes.
@@ -401,7 +457,7 @@ Ein einzelnes Kommando lässt nie die ganze Anfrage scheitern. In den Fällen de
 | --- | --- | --- | --- | --- |
 | Konto gibt es nicht (mehr), es wird gerade gelöscht oder wurde während der Anfrage gelöscht | 410 | `account-gone` | – | alle lokalen Daten samt Warteschlange, Token und Geräte-ID löschen, Anmeldung zeigen |
 | App-Version wird nicht mehr unterstützt (reserviert, [#69](https://github.com/Murmli/MurmliV2/issues/69)) | 403 | `app-version-unsupported` | – | App bis zum Update sperren |
-| Body über `maxRequestBytes` oder mehr als `maxCommandsPerRequest` Kommandos ([Vorgaben](#vorgaben)), nichts verarbeitet | 413 | `request-too-large` | Felder `maxRequestBytes` und `maxCommandsPerRequest`; eventuell `Connection: close` | mit halb so vielen Kommandos wiederholen; ist schon ein einzelnes Kommando zu groß, es aussortieren ([#124](https://github.com/Murmli/MurmliV2/issues/124)) |
+| Body über `maxRequestBytes` oder mehr als `maxCommandsPerRequest` Kommandos ([Vorgaben](#vorgaben)), nichts verarbeitet | 413 | `request-too-large` | Felder `maxRequestBytes` und `maxCommandsPerRequest`; eventuell `Connection: close` | mit halb so vielen Kommandos wiederholen; ist schon ein einzelnes Kommando zu groß, es aussortieren ([Aussortieren](#aussortieren)) |
 | Rate-Limit: Anfragen je Gerät oder Konto, Kommandos je Konto | 429 | `rate-limited` | `Retry-After` in ganzen Sekunden, aufgerundet, mindestens 1 | genau so lange warten, dann wiederholen |
 | Störung der Datenbank, Überlast, Frist der Anfrage (45 s) überschritten | 503 | `service-unavailable` | `Retry-After`, eine zufällige ganze Zahl von Sekunden zwischen `Database:UnavailableRetryAfter` (10 s) und dem Doppelten | genau so lange warten, dann wiederholen |
 | `Murmli-Device-Id` fehlt oder ist keine UUID v4, Body kein JSON, Rahmen mit falschen Typen oder ohne `dataTypes` bzw. `commands` | 400 | `invalid-request` | – | später wiederholen, mit wachsendem Abstand |
@@ -414,7 +470,7 @@ Ist `token` oder ein Eintrag in `dataTypes` kein gültiger Unicode-Text (etwa ei
 
 Nach Anmeldung und Abruf des Kontos prüft der Server in dieser Reihenfolge: Konto (410), fehlender `Content-Type` (415), Geräte-ID (400), Anfragen je Gerät und Konto (429), Größe des Bodys (413), JSON und Rahmen (400), Zahl der Kommandos (413), Kommandos je Konto (429). Die ersten vier Prüfungen laufen, bevor er den Body liest. Einen vorhandenen `Content-Type`, der kein JSON ist, beantwortet schon das Routing mit 415, vor allen diesen Prüfungen.
 
-Ein Gerät entfernt ein Kommando nur wegen eines Ergebnisses in einer lesbaren Antwort oder weil es das Kommando nach den Regeln aus [#124](https://github.com/Murmli/MurmliV2/issues/124) aussortiert, nie wegen eines Statuscodes: Schon eine Zwischenstation, die mit 400 antwortet, kostete sonst Änderungen.
+Ein Gerät entfernt ein Kommando nur wegen eines Ergebnisses in einer lesbaren Antwort oder weil es das Kommando nach den Regeln aus [Aussortieren](#aussortieren) aussortiert, nie wegen eines Statuscodes: Schon eine Zwischenstation, die mit 400 antwortet, kostete sonst Änderungen.
 
 ```json
 { "type": "tag:murmli.de,2026:service-unavailable", "title": "Service Unavailable", "status": 503, "traceId": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" }
@@ -432,8 +488,8 @@ Jede Antwort trägt in `settings` Vorgaben des Servers, damit sie sich ohne neue
 | `maxCommandsPerRequest` | 500 | Höchstzahl der Kommandos je Anfrage, das Gerät darf weniger senden |
 | `maxRequestBytes` | 1000000 | Höchstgröße des UTF-8-Bodys einer Anfrage in Byte |
 
-- Jede Vorgabe ist für die App optional: Fehlt eine, nimmt das Gerät seinen eingebauten Wert, für `maxRequestBytes` 1.000.000. Innerhalb von `v1` können weitere dazukommen, etwa zur Live-Verbindung ([#125](https://github.com/Murmli/MurmliV2/issues/125)).
-- `maxRequestBytes` bindet das Gerät: Es serialisiert jede Anfrage und schickt weniger Kommandos, wenn der Body sonst größer wäre. Ein einzelnes Kommando, das allein die Grenze überschreitet, sortiert es aus wie nach „Anfrage zu groß“ ([#124](https://github.com/Murmli/MurmliV2/issues/124)). Die 413 des Servers ist nur ein Sicherheitsnetz.
+- Jede Vorgabe ist für die App optional: Fehlt eine, behält das Gerät den zuletzt erhaltenen Wert, sonst nimmt es seinen eingebauten, für `maxRequestBytes` 1.000.000. Unplausible Werte ignoriert es ebenso ([Abgleichsrunde der App](#abgleichsrunde-der-app)). Innerhalb von `v1` können weitere dazukommen, etwa zur Live-Verbindung ([#125](https://github.com/Murmli/MurmliV2/issues/125)).
+- `maxRequestBytes` bindet das Gerät: Es serialisiert jede Anfrage und schickt weniger Kommandos, wenn der Body sonst größer wäre. Ein einzelnes Kommando, das allein die Grenze überschreitet, sortiert es aus wie nach „Anfrage zu groß“ ([Aussortieren](#aussortieren)). Die 413 des Servers ist nur ein Sicherheitsnetz.
 - Am Server kommen die Werte aus `Sync:PollIntervalSeconds`, `Sync:MaxCommandsPerRequest` und `Sync:MaxRequestBytes`.
 
 ### Verträglichkeit
@@ -530,7 +586,7 @@ Im Code: die Entitäten `ShoppingList` und `ShoppingListItem` in `Murmli.Backend
 - Erste Liste: Mit dem persönlichen Bereich legt der Server beim ersten Abgleich eines Kontos genau eine Liste an, auch wenn sich zwei Geräte gleichzeitig zum ersten Mal anmelden. Ihr Name ist leer, die App zeigt dafür einen übersetzten Standardnamen. Wer sie löscht, hat danach keine Liste, der Server legt keine neue an. Angelegt wird sie von `FirstShoppingListContributor` im Namen des Kontos ([Erster Abgleich eines Kontos](#erster-abgleich-eines-kontos)). Konten, deren persönlicher Bereich vor der Einkaufsliste am Server entstand, haben keine erste Liste; vor dem ersten Live-Gang hingenommen, ein solches Konto bekommt sie nach dem Löschen und erneuten Anmelden.
 - Abgehakte Artikel entfernt der Server beim Aufräumen, sobald das Abhaken mehr als 30 Tage zurückliegt (`ShoppingLists:CheckedItemRetention`); maßgeblich ist die Ankunft des Abhakens am Server, nicht die Uhr des Geräts. Nimmt jemand den Haken vorher heraus, bleibt der Artikel. Geräte erfahren das wie jede Löschung. Die Ankunft hält die interne Spalte `checked_arrived_at`, nie an Geräte: Die Regel des Datentyps setzt sie auf die Uhr des Servers, wenn eine übernommene Gruppe `checked` den Artikel abhakt, und leert sie beim Herausnehmen des Hakens. `CheckedItemsCleanupContributor` löscht jeden Artikel, dessen Abhaken länger als `ShoppingLists:CheckedItemRetention` (`00:01:00` bis `3650.00:00:00`, sonst startet die API nicht) zurückliegt, als Server ohne Person (`SyncActor.System`) mit der Bedingung, dass er noch abgehakt ist und `checked_arrived_at` unverändert, geprüft unter der Sperre der Liste. So gewinnt ein Herausnehmen des Hakens, das während des Laufs ankommt.
 - Eine Liste hat keine Notiz (33).
-- Die Reihenfolge der Kategorien gilt je Person (123a) und ist kein Feld der Liste. Abgeglichen wird sie erst später, mit den Einstellungen zur Ansicht als Datentyp im persönlichen Bereich. Bis dahin bleibt sie auf dem Gerät ([#86](https://github.com/Murmli/MurmliV2/issues/86)) und wird mit allen lokalen Daten gelöscht: beim Abmelden, bei einer abgelaufenen Sitzung und bei „Konto existiert nicht mehr“ ([#124](https://github.com/Murmli/MurmliV2/issues/124)).
+- Die Reihenfolge der Kategorien gilt je Person (123a) und ist kein Feld der Liste. Abgeglichen wird sie erst später, mit den Einstellungen zur Ansicht als Datentyp im persönlichen Bereich. Bis dahin bleibt sie auf dem Gerät ([#86](https://github.com/Murmli/MurmliV2/issues/86)) und wird mit allen lokalen Daten gelöscht: beim Abmelden, bei einer abgelaufenen Sitzung und bei „Konto existiert nicht mehr“ ([Konto der App](#konto-der-app)).
 - Artikel tragen kein Feld für eine Markierung durch die KI. Der Bezug zu Rezepten kommt erst mit dem Übertragen von Rezeptzutaten auf die Liste (120).
 
 | Aktion | Kommando | Regel |
@@ -562,7 +618,7 @@ Entschieden, noch nicht gebaut: die Einkaufsliste in der App. Entfällt, sobald 
 | Löschungen in einem Delta | Schwelle: Summe der Höchstzahlen an Datensätzen je Bereich über die Datentypen der Art, bei Listen 1.001 | vollständiger Stand statt Löschungen |
 | Zeit für Kommandos | 20 s je Anfrage, das erste Kommando läuft immer | Ergebnisse nur für die vorderen Kommandos |
 
-- Die Werte sind Standards im Code, Umgebungen können sie überschreiben (`Sync:MaxRequestBytes`, `Sync:MaxCommandsPerRequest`, `Sync:CommandPhaseBudget`, `Sync:RateLimits:DeviceRequestsPerMinute`, `Sync:RateLimits:AccountRequestsPerMinute`, `Sync:RateLimits:AccountCommandsPerHour`, `Sync:DataTypes:<name>:MaxRecordsPerScope`, `Sync:DataTypes:<name>:MaxOwnedScopesPerAccount`); Längen von Feldern stehen nur im Code. Die App prüft dieselben Grenzen der Datentypen vor dem Einreihen, so entsteht kein Kommando, das der Server nie annimmt ([#124](https://github.com/Murmli/MurmliV2/issues/124)).
+- Die Werte sind Standards im Code, Umgebungen können sie überschreiben (`Sync:MaxRequestBytes`, `Sync:MaxCommandsPerRequest`, `Sync:CommandPhaseBudget`, `Sync:RateLimits:DeviceRequestsPerMinute`, `Sync:RateLimits:AccountRequestsPerMinute`, `Sync:RateLimits:AccountCommandsPerHour`, `Sync:DataTypes:<name>:MaxRecordsPerScope`, `Sync:DataTypes:<name>:MaxOwnedScopesPerAccount`); Längen von Feldern stehen nur im Code. Die App prüft dieselben Grenzen der Datentypen vor dem Einreihen, so entsteht kein Kommando, das der Server nie annimmt ([Schreiben](#schreiben)).
 - Die Grenze je Gerät gilt je Konto und Gerät, eine geratene Geräte-ID bremst kein anderes Konto. Erneut gesendete, schon verarbeitete Kommandos zählen mit. Die Zähler gelten je Instanz der API.
 - Anfragen je Gerät und je Konto zählen in festen Fenstern von einer Minute; `Retry-After` nennt die Zeit bis zum Ende des laufenden Fensters. Kommandos je Konto fasst ein Eimer mit `Sync:RateLimits:AccountCommandsPerHour` Plätzen, den der Server laufend um ein Sechzigstel davon je Minute auffüllt, abgerundet und mindestens um eins; `Retry-After` nennt die ganzen Minuten, bis genug nachgefüllt ist.
 - Ein Gerät, das genau `Retry-After` wartet, kann noch einmal 429 bekommen, bei jeder der drei Grenzen: Bei Anfragen je Gerät und je Konto wechselt das Fenster nur in Schritten von 100 ms, oder statt der einen der beiden Grenzen greift nun die andere; bei Kommandos je Konto kann `Retry-After` bis zu einer Minute zu kurz sein, die nächste 429 nennt dann eine Minute. Das Gerät behandelt jede weitere 429 wie die erste und verliert nichts.
@@ -862,4 +918,6 @@ Die Tests prüfen nur Folgendes, nie Schwellen für Dauer oder Verbrauch:
 | Katalog der Einkaufsliste als Datei in `src/sync-cases/shopping/` und als `ShoppingCatalog` im Code | App und Server lesen dieselben Schlüssel ohne Paket, ein Test prüft, dass der Server jeden Schlüssel der Datei annimmt. Schlüssel in camelCase sind in Daten lesbar. Verworfen: Zahlen als IDs, eine Reihenfolge im Katalog (sie gilt je Person, [#86](https://github.com/Murmli/MurmliV2/issues/86)). |
 | Abgehakte Artikel nach der Ankunft am Server entfernen, mit Bedingung unter der Sperre der Liste | Ein Gerät mit weit nachgehender Uhr ließe einen Artikel sonst sofort verschwinden ([#141](https://github.com/Murmli/MurmliV2/issues/141)). Die Bedingung lässt ein Herausnehmen des Hakens gewinnen, das zwischen Abfrage und Löschen ankommt. Verworfen: die Gerätezeit des Abhakens, Löschen per eigenem SQL (Geräte erführen es nie). |
 | Lasttests gegen die veröffentlichte API in einem Container mit den Grenzen der kleinsten Instanz | CPU und Speicher wie in Azure, gemessen von außen, ohne das Kontingent des Containers anzutasten ([#137](https://github.com/Murmli/MurmliV2/issues/137)); der Build läuft per `dotnet publish` und wird in das Image von ASP.NET Core eingebunden. Verworfen: Dockerfile oder `PublishContainer` (ein Image-Build je Lauf), Messen an `ApiHost` im Testprozess (keine Grenzen für CPU und Speicher, Testcode und API teilten sich die Maschine). |
+| Modelle des Protokolls in der App von Hand mit dart_mappable, ohne erzeugten API-Client | Der Kern braucht nur einen Endpunkt und liest Rahmen, Vorgaben und Datensätze unterschiedlich streng. `StrictJsonType` an den Feldern des Rahmens, weil dart_mappable unpassende einfache Werte still umwandelt. Verworfen: ein mit swagger_parser erzeugter Client samt `v1.json` (im Prototyp; dessen Modelle verlangten jede Vorgabe und mussten umgangen werden). |
+| Zeiten der Hinweise nach der Uhr des Geräts, ohne Korrektur | Hinweise verlassen das Gerät nie, angezeigt und nach 30 Tagen entfernt werden sie mit derselben Uhr. Verworfen: die korrigierte Uhr der Kommandos (Zeiten sprängen mit jeder neuen Abweichung). |
 | Lasttests: Anfragen ohne Pause, Verbrauch nur an den Rändern eines Messfensters, ohne geplanten Aufräum-Lauf | Vergleichbar sind die CPU-Millisekunden je Anfrage oder Kommando, unabhängig vom Takt. Dass 512 MiB reichen, belegt die Prüfung auf `OOMKilled`; einen Spitzenwert des Speichers misst der Lauf nicht. Der Aufräum-Lauf fiele zu beliebiger Zeit in ein Messfenster. Verworfen: Pausen zwischen den Anfragen (eine Stellschraube ohne Grundlage, die Dauern hingen von ihr ab), Stats von Docker während des Fensters lesen ([#137](https://github.com/Murmli/MurmliV2/issues/137) liest nur an den Rändern). |

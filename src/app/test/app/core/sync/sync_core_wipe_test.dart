@@ -1,11 +1,12 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:app/app/core/authentication/signed_in_account_provider.dart';
 import 'package:app/app/core/database/app_database.dart';
-import 'package:app/app/core/database/signed_out_data_wipe_provider.dart';
 import 'package:app/app/core/flavor/flavor.dart';
+import 'package:app/app/core/sync/sync_core.dart';
 import 'package:app/app/features/shopping_list/models/market_category.dart';
 import 'package:app/app/features/shopping_list/providers/first_shopping_list_provider.dart';
 import 'package:app/app/features/shopping_list/providers/shopping_list_repository.dart';
@@ -25,7 +26,7 @@ void main() {
       database: database,
     );
     container
-      ..read(signedOutDataWipeProvider)
+      ..read(syncCoreProvider)
       ..read(firstShoppingListProvider);
     await pumpEventQueue();
     return container;
@@ -36,12 +37,69 @@ void main() {
       table.actualTableName: (await database.select(table).get()).length,
   };
 
+  Future<void> expectAllLocalDataWiped() async {
+    final rowCounts = await rowCountsByTable()
+      ..remove(database.syncStates.actualTableName);
+    final state = await database.select(database.syncStates).getSingle();
+    expect(rowCounts.values, everyElement(0));
+    expect((state.accountId, state.deviceId, state.token), (null, null, null));
+  }
+
+  Future<void> insertSyncRows() async {
+    await database
+        .into(database.syncCommands)
+        .insert(
+          SyncCommandsCompanion.insert(
+            id: 'command',
+            kind: 'upsert',
+            scopeId: 'scope',
+            dataType: 'shoppingListItem',
+            recordId: 'record',
+            time: 1,
+          ),
+        );
+    await database
+        .into(database.syncStates)
+        .insertOnConflictUpdate(
+          SyncStatesCompanion.insert(
+            id: const Value(1),
+            token: const Value('token'),
+          ),
+        );
+    await database
+        .into(database.syncScopes)
+        .insert(
+          SyncScopesCompanion.insert(scopeId: 'scope', kind: 'shoppingList'),
+        );
+    await database
+        .into(database.syncMembers)
+        .insert(
+          SyncMembersCompanion.insert(
+            scopeId: 'scope',
+            memberId: 'member',
+            name: 'Member',
+            role: 'owner',
+            state: 'active',
+            isOwn: true,
+          ),
+        );
+    await database
+        .into(database.syncNotices)
+        .insert(
+          SyncNoticesCompanion.insert(
+            kind: 'removedScope',
+            scopeId: 'scope',
+            createdAt: 1,
+          ),
+        );
+  }
+
   setUp(() {
     database = AppDatabase(NativeDatabase.memory());
     addTearDown(database.close);
   });
 
-  group('SignedOutDataWipe', () {
+  group('SyncCore wipe', () {
     test(
       'sign-out empties all tables and the next sign-in creates a new list',
       () async {
@@ -51,14 +109,14 @@ void main() {
         final repository = container.read(shoppingListRepositoryProvider);
         final firstList = (await repository.watchList().first)!;
         await repository.setCategoryOrder([MarketCategory.frozen]);
+        await insertSyncRows();
 
         await container.read(signedInAccountProvider.notifier).signOut();
         await pumpEventQueue();
-        final rowCountsAfterSignOut = await rowCountsByTable();
+        await expectAllLocalDataWiped();
         await signIn(container);
         await pumpEventQueue();
 
-        expect(rowCountsAfterSignOut.values, everyElement(0));
         final newList = await repository.watchList().first;
         expect(newList, isNotNull);
         expect(newList?.id, isNot(firstList.id));
@@ -72,12 +130,13 @@ void main() {
       await previousSession
           .read(shoppingListRepositoryProvider)
           .setCategoryOrder([MarketCategory.frozen]);
+      await insertSyncRows();
       previousSession.dispose();
       expect((await rowCountsByTable()).values, everyElement(isPositive));
 
       await startApp();
 
-      expect((await rowCountsByTable()).values, everyElement(0));
+      await expectAllLocalDataWiped();
     });
   });
 }

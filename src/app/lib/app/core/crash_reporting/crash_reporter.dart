@@ -26,6 +26,12 @@ class CrashReporter {
     );
   }
 
+  /// Reports a problem the app handled itself as an error. [message] must not
+  /// contain user content.
+  Future<void> reportProblem(String message) async {
+    await Sentry.captureException(ReportedProblem(message));
+  }
+
   Future<void> stop() async {
     final cacheDirectory = await getApplicationCacheDirectory();
     // Closing flushes the native SDKs (iOS sends every cached report), the
@@ -43,4 +49,13 @@ class CrashReporter {
       }
     }
   }
+}
+
+class ReportedProblem implements Exception {
+  const ReportedProblem(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }

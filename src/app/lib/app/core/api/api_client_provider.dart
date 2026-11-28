@@ -10,6 +10,8 @@ import 'failed_api_request_trace_id_provider.dart';
 
 part 'api_client_provider.g.dart';
 
+const unreportedFailureKey = 'unreportedFailure';
+
 @Riverpod(keepAlive: true)
 Dio apiClient(Ref ref) {
   final api = ref.watch(appEndpointsProvider).api;
@@ -29,7 +31,9 @@ Dio apiClient(Ref ref) {
     InterceptorsWrapper(
       onError: (error, handler) {
         final traceId = error.requestOptions.apiTraceId;
-        if (traceId != null && error.type != DioExceptionType.cancel) {
+        if (traceId != null &&
+            error.type != DioExceptionType.cancel &&
+            error.requestOptions.extra[unreportedFailureKey] != true) {
           failedApiRequestTraceId.report(traceId);
         }
         handler.next(error);
