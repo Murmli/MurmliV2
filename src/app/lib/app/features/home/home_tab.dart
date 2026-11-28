@@ -8,13 +8,22 @@ enum HomeTab {
   recipes(icon: Icons.restaurant_menu, route: RecipesRoute()),
   planner(icon: Icons.calendar_today_outlined, route: PlannerRoute()),
   chat(icon: Icons.auto_awesome, route: ChatRoute()),
-  shoppingList(icon: Icons.shopping_cart_outlined, route: ShoppingListRoute()),
+  shoppingList(
+    icon: Icons.shopping_cart_outlined,
+    route: ShoppingListRoute(),
+    rendersOwnHeader: true,
+  ),
   calories(icon: Icons.local_fire_department_outlined, route: CaloriesRoute());
 
-  const HomeTab({required this.icon, required this.route});
+  const HomeTab({
+    required this.icon,
+    required this.route,
+    this.rendersOwnHeader = false,
+  });
 
   final IconData icon;
   final PageRouteInfo route;
+  final bool rendersOwnHeader;
 
   String label(Translations translations) => switch (this) {
     HomeTab.recipes => translations.home.tabs.recipes.label,
