@@ -1460,4 +1460,164 @@ void main() {
       expect(item.recipeShares, before.recipeShares);
     });
   });
+
+  group('list menu', () {
+    final menu = shoppingList.menu;
+
+    Future<void> openListMenu(WidgetTester tester) async {
+      await tester.tap(find.byTooltip(menu.tooltip));
+      await tester.pumpAndSettle();
+    }
+
+    Finder inMenu(Finder finder) =>
+        find.descendant(of: find.byType(BottomSheet), matching: finder);
+
+    Finder inDialog(Finder finder) =>
+        find.descendant(of: find.byType(AlertDialog), matching: finder);
+
+    Finder menuEntry(String title) =>
+        inMenu(find.widgetWithText(ListTile, title));
+
+    Future<void> tapMenuEntry(WidgetTester tester, String title) async {
+      await tester.tap(menuEntry(title));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> tapDialogButton(WidgetTester tester, String label) async {
+      await tester.tap(inDialog(find.widgetWithText(TextButton, label)));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> addOneOpenAndTwoCheckedItems(
+      WidgetTester tester,
+      ProviderContainer container,
+    ) async {
+      await addItem(tester, container, 'Milch', MarketCategory.dairy);
+      await check(
+        tester,
+        container,
+        await addItem(tester, container, 'Brot', MarketCategory.bakery),
+      );
+      await check(
+        tester,
+        container,
+        await addItem(tester, container, 'Kaffee', MarketCategory.beverages),
+      );
+    }
+
+    final customOrder = [
+      MarketCategory.beverages,
+      ...MarketCategory.values.where(
+        (category) => category != MarketCategory.beverages,
+      ),
+    ];
+
+    Future<void> addTwoItemsWithCustomOrder(
+      WidgetTester tester,
+      ProviderContainer container,
+    ) async {
+      await addItem(tester, container, 'Milch', MarketCategory.dairy);
+      await addItem(tester, container, 'Kaffee', MarketCategory.beverages);
+      await write(
+        tester,
+        container,
+        (repository, list) => repository.setCategoryOrder(customOrder),
+      );
+    }
+
+    testWidgets(
+      'removing the checked items after confirming keeps only the open items',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        await addOneOpenAndTwoCheckedItems(tester, container);
+
+        await openListMenu(tester);
+        await tapMenuEntry(tester, menu.deleteChecked);
+
+        expect(
+          inDialog(find.text(menu.deleteCheckedDialog.message(n: 2))),
+          findsOneWidget,
+        );
+        await tapDialogButton(tester, menu.deleteCheckedDialog.confirm);
+
+        expect(storedItems(container).map((item) => item.name), ['Milch']);
+        expect(find.byType(ShoppingListCheckedSectionSliver), findsNothing);
+      },
+    );
+
+    testWidgets('cancelling the removal of the checked items keeps all items', (
+      tester,
+    ) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      await addOneOpenAndTwoCheckedItems(tester, container);
+
+      await openListMenu(tester);
+      await tapMenuEntry(tester, menu.deleteChecked);
+      await tapDialogButton(tester, menu.deleteCheckedDialog.cancel);
+
+      expect(storedItems(container), hasLength(3));
+    });
+
+    testWidgets(
+      'clearing the list after confirming removes all items and keeps the category order',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        await addTwoItemsWithCustomOrder(tester, container);
+
+        await openListMenu(tester);
+        await tapMenuEntry(tester, menu.deleteAll);
+        await tapDialogButton(tester, menu.deleteAllDialog.confirm);
+
+        expect(storedItems(container), isEmpty);
+        expect(find.byType(ShoppingListEmptyState), findsOneWidget);
+        expect(
+          container.read(marketCategoryOrderProvider).requireValue,
+          customOrder,
+        );
+      },
+    );
+
+    testWidgets('cancelling clearing the list keeps all items', (tester) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      await addTwoItemsWithCustomOrder(tester, container);
+
+      await openListMenu(tester);
+      await tapMenuEntry(tester, menu.deleteAll);
+      await tapDialogButton(tester, menu.deleteAllDialog.cancel);
+
+      expect(storedItems(container), hasLength(2));
+    });
+
+    testWidgets(
+      'without checked items disables removing the checked items but not clearing the list',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        await addItem(tester, container, 'Milch', MarketCategory.dairy);
+
+        await openListMenu(tester);
+
+        expect(
+          tester.widget<ListTile>(menuEntry(menu.deleteChecked)).enabled,
+          isFalse,
+        );
+        expect(
+          tester.widget<ListTile>(menuEntry(menu.deleteAll)).enabled,
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets('with an empty list disables clearing the list', (
+      tester,
+    ) async {
+      await openShoppingListTab(tester, debugBuild: false);
+
+      await openListMenu(tester);
+
+      expect(
+        tester.widget<ListTile>(menuEntry(menu.deleteAll)).enabled,
+        isFalse,
+      );
+    });
+  });
 }

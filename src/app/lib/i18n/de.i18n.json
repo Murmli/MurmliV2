@@ -176,7 +176,31 @@
     },
     "menu": {
       "tooltip": "Optionen der Liste",
-      "sortCategories": "Kategorien sortieren"
+      "sortCategories": "Kategorien sortieren",
+      "deleteChecked": "Abgehakte entfernen",
+      "deleteAll": "Liste leeren",
+      "itemCount(plural)": {
+        "one": "$n Artikel",
+        "other": "$n Artikel"
+      },
+      "deleteCheckedDialog": {
+        "title": "Abgehakte Artikel entfernen?",
+        "message(plural)": {
+          "one": "$n abgehakter Artikel wird entfernt. Offene Artikel bleiben.",
+          "other": "$n abgehakte Artikel werden entfernt. Offene Artikel bleiben."
+        },
+        "cancel": "Abbrechen",
+        "confirm": "Entfernen"
+      },
+      "deleteAllDialog": {
+        "title": "Liste leeren?",
+        "message(plural)": {
+          "one": "$n Artikel wird entfernt, auch wenn er noch offen ist.",
+          "other": "Alle $n Artikel werden entfernt, auch die offenen."
+        },
+        "cancel": "Abbrechen",
+        "confirm": "Leeren"
+      }
     },
     "categoryOrder": {
       "moveUp": "$name nach oben",

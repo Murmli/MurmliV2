@@ -49,7 +49,7 @@ class ShoppingListPage extends ConsumerWidget {
               trailing: IconButton(
                 tooltip: context.t.shoppingList.menu.tooltip,
                 icon: Icon(Icons.more_horiz, color: colors.inkSecondary),
-                onPressed: () => unawaited(showShoppingListMenu(context)),
+                onPressed: () => unawaited(showShoppingListMenu(context, ref)),
               ),
             ),
           ),

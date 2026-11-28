@@ -176,7 +176,31 @@
     },
     "menu": {
       "tooltip": "List options",
-      "sortCategories": "Sort categories"
+      "sortCategories": "Sort categories",
+      "deleteChecked": "Remove checked items",
+      "deleteAll": "Clear list",
+      "itemCount(plural)": {
+        "one": "$n item",
+        "other": "$n items"
+      },
+      "deleteCheckedDialog": {
+        "title": "Remove checked items?",
+        "message(plural)": {
+          "one": "$n checked item will be removed. Open items stay.",
+          "other": "$n checked items will be removed. Open items stay."
+        },
+        "cancel": "Cancel",
+        "confirm": "Remove"
+      },
+      "deleteAllDialog": {
+        "title": "Clear list?",
+        "message(plural)": {
+          "one": "$n item will be removed, even if it is still open.",
+          "other": "All $n items will be removed, including open ones."
+        },
+        "cancel": "Cancel",
+        "confirm": "Clear"
+      }
     },
     "categoryOrder": {
       "moveUp": "Move $name up",
