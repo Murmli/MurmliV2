@@ -139,23 +139,24 @@ void main() {
     };
 
     for (final MapEntry(key: name, value: body) in unreadableBodies.entries) {
-      test(
-        'with $name changes neither data, queue nor token and fails',
-        () async {
-          await harness.completeFirstRound(
-            records: [serverRecord(testNote, 'server-note', 'original')],
-          );
-          await harness.create(testNote, 'local-note', 'local');
-          final [command] = await harness.readCommands();
-          final before = await harness.snapshot();
-          harness.server.answerRaw(body(command.id));
+      test('with $name changes neither data, queue nor token, fails and '
+          'reports it', () async {
+        await harness.completeFirstRound(
+          records: [serverRecord(testNote, 'server-note', 'original')],
+        );
+        await harness.create(testNote, 'local-note', 'local');
+        final [command] = await harness.readCommands();
+        final before = await harness.snapshot();
+        harness.server.answerRaw(body(command.id));
 
-          final outcome = await harness.core.runRound();
+        final outcome = await harness.core.runRound();
 
-          expect(outcome, const SyncRoundOutcome.failed());
-          expect(await harness.snapshot(), before);
-        },
-      );
+        expect(outcome, const SyncRoundOutcome.failed());
+        expect(await harness.snapshot(), before);
+        expect(harness.crashReporter.calls, [
+          'problem Received an unreadable sync response',
+        ]);
+      });
     }
   });
 
@@ -260,7 +261,7 @@ void main() {
     };
 
     for (final MapEntry(key: name, value: answer) in failingAnswers.entries) {
-      test('$name keeps every queued command', () async {
+      test('$name keeps every queued command and reports nothing', () async {
         await harness.completeFirstRound();
         await harness.create(testNote, 'note-a', 'a');
         await harness.create(testNote, 'note-b', 'b');
@@ -274,6 +275,7 @@ void main() {
           'note-a': 'a',
           'note-b': 'b',
         });
+        expect(harness.crashReporter.calls, isEmpty);
       });
     }
   });

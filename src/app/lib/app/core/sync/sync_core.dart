@@ -9,6 +9,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:talker/talker.dart';
 
 import '../api/api_client_provider.dart';
+import '../api/api_trace_interceptor.dart';
 import '../authentication/signed_in_account_provider.dart';
 import '../crash_reporting/crash_reporter.dart';
 import '../crash_reporting/crash_reporter_provider.dart';
@@ -18,6 +19,7 @@ import '../identifiers/new_uuid.dart';
 import '../logging/talker_provider.dart';
 import '../time/clock_provider.dart';
 import 'protocol/sync_request.dart';
+import 'protocol/sync_response.dart';
 import 'protocol/sync_server_settings.dart';
 import 'sync_command_kind.dart';
 import 'sync_data_type.dart';
@@ -235,8 +237,16 @@ class SyncCore {
 
   Future<SyncRoundOutcome> _runRound() async {
     await _accountOperations;
+    final start = _clock.now();
+    final log = _RoundLog();
+    final outcome = await _runRoundCatchingErrors(log);
+    _talker.info(log.describe(outcome, _clock.now().difference(start)));
+    return outcome;
+  }
+
+  Future<SyncRoundOutcome> _runRoundCatchingErrors(_RoundLog log) async {
     try {
-      return await _runRoundSteps();
+      return await _runRoundSteps(log);
     } on Object catch (error, stackTrace) {
       _talker.handle(error, stackTrace, 'A sync round failed');
       if (error is! Exception) {
@@ -246,7 +256,7 @@ class SyncCore {
     }
   }
 
-  Future<SyncRoundOutcome> _runRoundSteps() async {
+  Future<SyncRoundOutcome> _runRoundSteps(_RoundLog log) async {
     while (true) {
       final inputs = await _database.transaction(_readRequestInputs);
       if (!_isExpectedAccount(inputs.state) || inputs.state.deviceId == null) {
@@ -254,14 +264,15 @@ class SyncCore {
       }
       final request = _planRequest(inputs);
       if (request.sentCommands.isNotEmpty || inputs.commands.isEmpty) {
-        return _send(request);
+        return _send(request, log);
       }
       await _parkOversizedCommand(inputs.commands.first);
     }
   }
 
-  Future<SyncRoundOutcome> _send(_PlannedRequest request) async {
+  Future<SyncRoundOutcome> _send(_PlannedRequest request, _RoundLog log) async {
     final sentCommands = request.sentCommands;
+    log.sentCommandCount = sentCommands.length;
     final cancelToken = CancelToken();
     _requestCancelToken = cancelToken;
     final timeout = Timer(_requestTimeout, cancelToken.cancel);
@@ -281,7 +292,8 @@ class SyncCore {
           extra: {unreportedFailureKey: true},
         ),
       );
-    } on DioException {
+    } on DioException catch (error) {
+      log.traceId = error.requestOptions.apiTraceId;
       return const SyncRoundOutcome.failed();
     } finally {
       timeout.cancel();
@@ -289,6 +301,7 @@ class SyncCore {
         _requestCancelToken = null;
       }
     }
+    log.traceId = response.requestOptions.apiTraceId;
     final arrival = _clock.now();
     final body = response.data ?? '';
     if (response.statusCode != 200) {
@@ -298,8 +311,14 @@ class SyncCore {
       for (final command in sentCommands) command.id,
     ]);
     if (readResponse == null) {
+      await _crashReporter.reportProblem(
+        'Received an unreadable sync response',
+      );
       return const SyncRoundOutcome.failed();
     }
+    log.resultStatuses = [
+      for (final result in readResponse.response.results) result.status,
+    ];
     _commandLimitAfterTooLarge = null;
     final SyncResponseApplication application;
     try {
@@ -617,6 +636,36 @@ class _SyncWriteTransaction implements SyncWriteTransaction {
     lastCommandTime = time;
     return time;
   }
+}
+
+/// Collects what the log entry of a round tells, never contents or ids of
+/// records.
+class _RoundLog {
+  var sentCommandCount = 0;
+  String? traceId;
+  List<SyncResultStatus> resultStatuses = const [];
+
+  String describe(SyncRoundOutcome outcome, Duration duration) {
+    final resultCounts = [
+      for (final status in SyncResultStatus.values)
+        if (resultStatuses.where((resultStatus) => resultStatus == status)
+            case Iterable(:final length) when length > 0)
+          '${status.name} $length',
+    ];
+    return 'Sync round ${_outcomeName(outcome)} in '
+        '${duration.inMilliseconds} ms with $sentCommandCount sent commands, '
+        'results: ${resultCounts.isEmpty ? 'none' : resultCounts.join(', ')}, '
+        'trace id ${traceId ?? 'none'}';
+  }
+
+  String _outcomeName(SyncRoundOutcome outcome) => switch (outcome) {
+    SyncRoundCompleted() => 'completed',
+    SyncRoundNotSignedIn() => 'notSignedIn',
+    SyncRoundRetryAfter() => 'retryAfter',
+    SyncRoundFailed() => 'failed',
+    SyncRoundAccountGone() => 'accountGone',
+    SyncRoundAppVersionUnsupported() => 'appVersionUnsupported',
+  };
 }
 
 int _encodedLength(Object? json) => utf8.encode(jsonEncode(json)).length;

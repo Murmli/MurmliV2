@@ -144,7 +144,7 @@ Ablauf: [authentication.md](authentication.md#anmeldung). `signedInAccountProvid
 - Fehler aus `FlutterError.onError` melden zusätzlich Kontext und Diagnose der `FlutterErrorDetails` (`flutter_error_details`), etwa `NetworkImage("<URL>")` mit voller URL.
 - Nutzer: vor der Anmeldung die zufällige Installations-ID der nativen SDKs, danach die eigene Konto-Id, gesetzt von `CrashReporting` bei Änderungen von `signedInAccountProvider` und nach jedem Sentry-Start (`Sentry.close()` verwirft den Scope).
 - Sitzungen (Release Health) auch ohne Fehler, neu bei jedem Sentry-Start und ab 30 Sekunden im Hintergrund.
-- Probleme, die die App selbst behandelt, meldet `CrashReporter.reportProblem` als Exception `ReportedProblem` mit festem Text (beim Abgleich nur Datentyp, Kommandoart und Grund, [sync.md](sync.md#aussortieren)), nie als Nachricht oder Log.
+- Probleme, die die App selbst behandelt, meldet `CrashReporter.reportProblem` als Exception `ReportedProblem` mit festem Text (beim Abgleich nur die Fälle aus [sync.md](sync.md#telemetrie-der-app), höchstens mit Datentyp, Kommandoart und Grund), nie als Nachricht oder Log.
 - Support-Code: in Sentry `api_trace_id:<Support-Code>` suchen. Tag von `ApiTraceIdEventProcessor` für `DioException`s der eigenen API, auch in Riverpods `ProviderException`.
 
 ## Tests

@@ -84,6 +84,8 @@ Logs innerhalb einer Anfrage tragen `UserId` aus dem Scope der `UserTelemetryMid
 
 Der Aufräum-Lauf öffnet den Span `sync cleanup run` (Quelle `Murmli.Backend.Sync`), unter dem die Npgsql-Spans des Laufs hängen; scheitert der Lauf (`failed`), steht sein Status auf `Error`, an der Zeitgrenze (`stopped`) bleibt er ungesetzt. Den Alarm „kein erfolgreicher Aufräum-Lauf seit 2 Tagen“ richtet ein Mensch für Produktion über `SyncCleanupCompleted` ein, das auch auffindbar ist, wenn gerade keine Instanz läuft; Läufe, die an ihrer Zeitgrenze enden (`SyncCleanupStopped`), zählen dafür nicht; Abfragen und Alarme gehören in die Betriebsdoku im BackOffice.
 
+Was die App zum Abgleich loggt und an Sentry meldet, steht in [sync.md](sync.md#telemetrie-der-app); über die Trace-ID ihres Logeintrags bzw. den Support-Code findet sich der Request in `requests`.
+
 Eigener Code schreibt nie Feldwerte, Anzeigenamen, das Token der Anmeldung, `sub`, das Token des Abgleichs oder Bodys in Logs, Span-Attribute, Metrik-Tags oder Meldungen von Exceptions; Ids von Bereichen, Datensätzen, Kommandos und Geräten nur in Logs und Span-Attribute. Inhalte erscheinen nur unter `Telemetry:RecordSensitiveData` in den EF-Core-Command-Logs ([Sensible Daten](#sensible-daten)).
 
 ## Export
