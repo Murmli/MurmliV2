@@ -15,3 +15,12 @@ String quantityLabel(
 
 String formatQuantity(double quantity, String languageCode) =>
     NumberFormat('0.###', languageCode).format(quantity);
+
+({double? quantity, bool isValid}) parseQuantity(String text) {
+  final trimmedText = text.trim();
+  if (trimmedText.isEmpty) {
+    return (quantity: null, isValid: true);
+  }
+  final quantity = double.tryParse(trimmedText.replaceAll(',', '.'));
+  return (quantity: quantity, isValid: quantity != null && quantity > 0);
+}

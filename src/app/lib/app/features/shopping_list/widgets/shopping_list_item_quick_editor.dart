@@ -53,12 +53,9 @@ class _QuickEditor extends HookConsumerWidget {
     useListenable(quantityController);
     final category = useState(item.category);
     final name = nameController.text.trim();
-    final quantityText = quantityController.text.trim();
-    final quantity = quantityText.isEmpty
-        ? null
-        : double.tryParse(quantityText.replaceAll(',', '.'));
-    final isQuantityValid =
-        quantityText.isEmpty || (quantity != null && quantity > 0);
+    final (:quantity, isValid: isQuantityValid) = parseQuantity(
+      quantityController.text,
+    );
     final isValid = name.isNotEmpty && isQuantityValid;
 
     Future<void> save() async {

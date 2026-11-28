@@ -49,12 +49,9 @@ class _ItemEditor extends HookConsumerWidget {
     final categoryOrder =
         ref.watch(marketCategoryOrderProvider).value ?? MarketCategory.values;
     final name = nameController.text.trim();
-    final quantityText = quantityController.text.trim();
-    final quantity = quantityText.isEmpty
-        ? null
-        : double.tryParse(quantityText.replaceAll(',', '.'));
-    final isQuantityValid =
-        quantityText.isEmpty || (quantity != null && quantity > 0);
+    final (:quantity, isValid: isQuantityValid) = parseQuantity(
+      quantityController.text,
+    );
 
     Future<void> save() async {
       await ref
