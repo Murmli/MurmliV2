@@ -14,9 +14,7 @@ class AppEndpoints {
         auth: Uri(scheme: 'http', host: host, port: 5021),
       ),
       Flavor.development => AppEndpoints._(
-        api: Uri.https(
-          'api.kinddune-9cab4a57.francecentral.azurecontainerapps.io',
-        ),
+        api: Uri.https('api.dev.murmli.de'),
         auth: Uri.https(
           'auth.kinddune-9cab4a57.francecentral.azurecontainerapps.io',
         ),
