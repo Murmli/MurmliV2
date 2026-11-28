@@ -143,6 +143,11 @@ void main() {
           .items
           .singleWhere((item) => item.id == itemId);
 
+  Future<void> openMenu(WidgetTester tester, String itemName) async {
+    await tester.tap(find.text(itemName));
+    await tester.pumpAndSettle();
+  }
+
   group('ShoppingListPage', () {
     testWidgets(
       'groups the open items by category in the default order and lists checked items in the checked section',
@@ -302,6 +307,7 @@ void main() {
           findsOneWidget,
         );
         expect(storedItem(container, itemId).checked, isTrue);
+        expect(find.text(shoppingList.item.delete), findsNothing);
       },
     );
 
@@ -609,5 +615,72 @@ void main() {
         );
       },
     );
+  });
+
+  group('item menu', () {
+    testWidgets(
+      'tapping the name of an open item opens its menu without checking it',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        final itemId = await addItem(
+          tester,
+          container,
+          'Butter',
+          MarketCategory.dairy,
+        );
+
+        await openMenu(tester, 'Butter');
+
+        expect(find.text(shoppingList.item.delete), findsOneWidget);
+        expect(storedItem(container, itemId).checked, isFalse);
+      },
+    );
+
+    testWidgets('deleting through the menu removes the item right away', (
+      tester,
+    ) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      await addItem(tester, container, 'Butter', MarketCategory.dairy);
+      await addItem(tester, container, 'Brot', MarketCategory.bakery);
+
+      await openMenu(tester, 'Butter');
+      await tester.tap(find.text(shoppingList.item.delete));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Butter'), findsNothing);
+      expect(storedItems(container).map((item) => item.name), ['Brot']);
+    });
+
+    testWidgets('deleting a checked item through the menu removes it', (
+      tester,
+    ) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      await check(
+        tester,
+        container,
+        await addItem(tester, container, 'Kaffee', MarketCategory.beverages),
+      );
+
+      await openMenu(tester, 'Kaffee');
+      await tester.tap(find.text(shoppingList.item.delete));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Kaffee'), findsNothing);
+      expect(storedItems(container), isEmpty);
+    });
+
+    testWidgets('swiping a row to the start removes the item', (tester) async {
+      final container = await openShoppingListTab(tester, debugBuild: false);
+      await addItem(tester, container, 'Butter', MarketCategory.dairy);
+      await addItem(tester, container, 'Brot', MarketCategory.bakery);
+      final row = rowOf('Butter');
+
+      await tester.drag(row, Offset(-tester.getSize(row).width, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Butter'), findsNothing);
+      expect(storedItems(container).map((item) => item.name), ['Brot']);
+      expect(tester.takeException(), isNull);
+    });
   });
 }

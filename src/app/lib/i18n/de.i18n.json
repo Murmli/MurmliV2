@@ -153,6 +153,10 @@
     "allChecked": {
       "title": "Alles erledigt",
       "hint": "Du hast alle Artikel abgehakt."
+    },
+    "item": {
+      "openMenu": "Aktionen anzeigen",
+      "delete": "Löschen"
     }
   },
   "settings": {

@@ -153,6 +153,10 @@
     "allChecked": {
       "title": "All done",
       "hint": "You have checked off every item."
+    },
+    "item": {
+      "openMenu": "Show actions",
+      "delete": "Delete"
     }
   },
   "settings": {
