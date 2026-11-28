@@ -1,3 +1,3 @@
 namespace Murmli.Backend.Sync.DataTypes;
 
-internal sealed record SyncDataTypeDefinition(string Name, string ScopeKind, int MaxRecordsPerScope);
+internal sealed record SyncDataTypeDefinition(string Name, string ScopeKind, int MaximumRecordsPerScope);

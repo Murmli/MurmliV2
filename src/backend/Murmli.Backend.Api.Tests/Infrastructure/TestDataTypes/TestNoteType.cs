@@ -15,7 +15,7 @@ internal sealed class TestNoteType : SyncDataType<TestNote>
 
     protected override void Define(SyncDataTypeBuilder<TestNote> type)
     {
-        type.Named(DataTypeName, SyncScope.PersonalKind).MaxRecordsPerScope(50);
+        type.Named(DataTypeName, SyncScope.PersonalKind).MaximumRecordsPerScope(50);
         type.Field("title", note => note.Title, note => note.TitleChangedAt, SyncFieldTypes.Text(0, 100)).RequiredOnCreate();
         type.Group(
             "style",

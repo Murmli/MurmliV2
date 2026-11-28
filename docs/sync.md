@@ -42,7 +42,7 @@ Warum kein Abruf etwas verpasst: Jede Änderung erhöht die Version unter der Sp
 
 Ein Datentyp ist eine Klasse, die von `SyncDataType<TRecord>` erbt (`Murmli.Backend.Sync.DataTypes`); `TRecord` ist seine Entität und erbt von `SyncRecord` (`Id`, `ScopeId`, `Version`). In `Define` nennt er:
 
-- Namen und Art des Bereichs (`Named`) und die Höchstzahl an Datensätzen je Bereich (`MaxRecordsPerScope`, Pflicht),
+- Namen und Art des Bereichs (`Named`) und die Höchstzahl an Datensätzen je Bereich (`MaximumRecordsPerScope`, Pflicht),
 - seine Felder über Ausdrücke auf die Eigenschaften der Entität (`note => note.Title`): `Field` für ein Feld, das seine eigene Gruppe bildet, `Group` für Felder mit gemeinsamem Zeitpunkt der letzten Änderung, `ServerField` für Felder, die nur der Server setzt (mit `isSentToDevices: false` nie an Geräte),
 - mit `RequiredOnCreate()` die Pflichtfelder bei `create`,
 - die Wertart je Feld aus `SyncFieldTypes`: `Text`, `NullableKey`, `Decimal`, `Boolean`.

@@ -20,7 +20,7 @@ internal sealed class SyncDataTypeRegistry
         foreach (var dataType in All)
         {
             dataTypesByName.Add(dataType.Name, dataType);
-            var maximum = dataTypeOptions.GetValueOrDefault(dataType.Name)?.MaxRecordsPerScope ?? dataType.Definition.MaxRecordsPerScope;
+            var maximum = dataTypeOptions.GetValueOrDefault(dataType.Name)?.MaxRecordsPerScope ?? dataType.Definition.MaximumRecordsPerScope;
             maximumRecordsPerScope.Add(dataType, maximum);
             deletionThresholds[dataType.ScopeKind] = (int)Math.Min((long)deletionThresholds.GetValueOrDefault(dataType.ScopeKind) + maximum, int.MaxValue);
         }
@@ -36,7 +36,7 @@ internal sealed class SyncDataTypeRegistry
         return [.. All.Where(dataType => listedNames.Contains(dataType.Name))];
     }
 
-    public int GetMaxRecordsPerScope(SyncDataType dataType) => maximumRecordsPerScope[dataType];
+    public int GetMaximumRecordsPerScope(SyncDataType dataType) => maximumRecordsPerScope[dataType];
 
     public int GetDeletionThreshold(string scopeKind) => deletionThresholds.GetValueOrDefault(scopeKind);
 }

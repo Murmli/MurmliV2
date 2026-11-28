@@ -224,7 +224,7 @@ internal sealed class SyncCommandUnit(MurmliDbContext context, SyncDataTypeRegis
                 return (Ignored(claim, SyncIgnoreCause.TargetDeleted), false);
             }
 
-            if (await command.DataType.CountInScopeAsync(context, claim.ScopeId, cancellationToken) >= registry.GetMaxRecordsPerScope(command.DataType))
+            if (await command.DataType.CountInScopeAsync(context, claim.ScopeId, cancellationToken) >= registry.GetMaximumRecordsPerScope(command.DataType))
             {
                 return (Rejected(claim, SyncRejectionReason.LimitExceeded), false);
             }

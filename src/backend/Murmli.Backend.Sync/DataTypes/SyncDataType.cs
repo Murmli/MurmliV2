@@ -60,9 +60,9 @@ public abstract class SyncDataType<TRecord> : SyncDataType
     internal sealed override IReadOnlyList<string> Validate(IModel model)
     {
         var errors = new List<string>();
-        if (Definition.MaxRecordsPerScope < 1)
+        if (Definition.MaximumRecordsPerScope < 1)
         {
-            errors.Add($"The data type {DisplayName} must call MaxRecordsPerScope with a value of at least 1.");
+            errors.Add($"The data type {DisplayName} must call MaximumRecordsPerScope with a value of at least 1.");
         }
 
         if (Layout.Groups.Count == 0)

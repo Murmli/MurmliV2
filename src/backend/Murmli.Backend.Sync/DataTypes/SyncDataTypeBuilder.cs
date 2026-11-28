@@ -20,9 +20,9 @@ public sealed class SyncDataTypeBuilder<TRecord>
         return this;
     }
 
-    public SyncDataTypeBuilder<TRecord> MaxRecordsPerScope(int maximum)
+    public SyncDataTypeBuilder<TRecord> MaximumRecordsPerScope(int maximum)
     {
-        definition = definition with { MaxRecordsPerScope = maximum };
+        definition = definition with { MaximumRecordsPerScope = maximum };
         return this;
     }
 
