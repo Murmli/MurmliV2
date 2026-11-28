@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../providers/shopping_list_overview_provider.dart';
 import '../shopping_list_cleanup.dart';
+import '../shopping_list_name.dart';
 import 'count_badge.dart';
 import 'shopping_list_sheet_entry.dart';
 
@@ -44,7 +45,8 @@ class _ShoppingListMenu extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final translations = context.t;
     final menu = translations.shoppingList.menu;
-    final items = ref.watch(currentShoppingListProvider).value?.items ?? [];
+    final list = ref.watch(currentShoppingListProvider).value;
+    final items = list?.items ?? [];
     final checkedCount = items.where((item) => item.checked).length;
 
     void close(_ListAction action) => Navigator.of(context).pop(action);
@@ -67,7 +69,7 @@ class _ShoppingListMenu extends ConsumerWidget {
             child: Semantics(
               header: true,
               child: Text(
-                translations.home.tabs.shoppingList.title,
+                shoppingListDisplayName(list?.name ?? '', translations),
                 style: TextTheme.of(context).headlineSmall!.copyWith(
                   fontSize: 22,
                   height: 28 / 22,

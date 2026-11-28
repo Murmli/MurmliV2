@@ -5,15 +5,14 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'package:app/app/core/authentication/signed_in_account_provider.dart';
 import 'package:app/app/core/database/app_database.dart';
-import 'package:app/app/core/flavor/flavor.dart';
 import 'package:app/app/core/sync/sync_core.dart';
 import 'package:app/app/features/shopping_list/models/market_category.dart';
-import 'package:app/app/features/shopping_list/providers/first_shopping_list_provider.dart';
 import 'package:app/app/features/shopping_list/providers/shopping_list_repository.dart';
 
 import '../../../helpers/authentication.dart';
 import '../../../helpers/preferences.dart';
 import '../../../helpers/provider_container.dart';
+import '../../../helpers/shopping_list.dart';
 
 void main() {
   late AppDatabase database;
@@ -21,13 +20,9 @@ void main() {
   Future<ProviderContainer> startApp() async {
     final container = createContainer(
       await createPreferences({}),
-      flavor: Flavor.development,
-      debugBuild: true,
       database: database,
     );
-    container
-      ..read(syncCoreProvider)
-      ..read(firstShoppingListProvider);
+    container.read(syncCoreProvider);
     await pumpEventQueue();
     return container;
   }
@@ -44,6 +39,19 @@ void main() {
     expect(rowCounts.values, everyElement(0));
     expect((state.accountId, state.deviceId, state.token), (null, null, null));
   }
+
+  Future<void> storeListWithRecipeItem() => storeShoppingList(
+    database,
+    const TestShoppingList(
+      items: [
+        TestShoppingListItem(
+          'Paprika',
+          MarketCategory.vegetables,
+          recipeShares: [(goulash, 3)],
+        ),
+      ],
+    ),
+  );
 
   Future<void> insertSyncRows() async {
     await database
@@ -101,13 +109,13 @@ void main() {
 
   group('SyncCore wipe', () {
     test(
-      'sign-out empties all tables and the next sign-in creates a new list',
+      'sign-out empties all tables and the next sign-in creates no list',
       () async {
         final container = await startApp();
         await signIn(container);
         await pumpEventQueue();
+        await storeListWithRecipeItem();
         final repository = container.read(shoppingListRepositoryProvider);
-        final firstList = (await repository.watchList().first)!;
         await repository.setCategoryOrder([MarketCategory.frozen]);
         await insertSyncRows();
 
@@ -117,9 +125,7 @@ void main() {
         await signIn(container);
         await pumpEventQueue();
 
-        final newList = await repository.watchList().first;
-        expect(newList, isNotNull);
-        expect(newList?.id, isNot(firstList.id));
+        expect(await repository.watchList().first, isNull);
       },
     );
 
@@ -127,6 +133,7 @@ void main() {
       final previousSession = await startApp();
       await signIn(previousSession);
       await pumpEventQueue();
+      await storeListWithRecipeItem();
       await previousSession
           .read(shoppingListRepositoryProvider)
           .setCategoryOrder([MarketCategory.frozen]);

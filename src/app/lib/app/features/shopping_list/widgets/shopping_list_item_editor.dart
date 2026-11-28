@@ -14,6 +14,7 @@ import '../models/shopping_list_item.dart';
 import '../providers/shopping_list_overview_provider.dart';
 import '../providers/shopping_list_repository.dart';
 import '../quantity_label.dart';
+import '../shopping_list_write.dart';
 import 'market_category_tile.dart';
 
 const _fixedUnits = [
@@ -66,15 +67,18 @@ class _ItemEditor extends HookConsumerWidget {
     );
 
     Future<void> save() async {
-      await ref
-          .read(shoppingListRepositoryProvider)
-          .updateItem(
-            item.id,
-            name: name,
-            quantity: quantity,
-            unit: unit.value,
-            category: category.value,
-          );
+      await runShoppingListWrite(
+        context,
+        () => ref
+            .read(shoppingListRepositoryProvider)
+            .updateItem(
+              item.id,
+              name: name,
+              quantity: quantity,
+              unit: unit.value,
+              category: category.value,
+            ),
+      );
       if (context.mounted) {
         Navigator.of(context).pop();
       }

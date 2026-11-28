@@ -12,6 +12,7 @@ import '../models/recipe_share.dart';
 import '../models/shopping_list_item.dart';
 import '../providers/shopping_list_repository.dart';
 import '../quantity_label.dart';
+import '../shopping_list_write.dart';
 import 'count_badge.dart';
 import 'market_category_tile.dart';
 import 'recipe_dot.dart';
@@ -52,8 +53,12 @@ class _ItemMenu extends ConsumerWidget {
 
     Future<void> delete() async {
       final repository = ref.read(shoppingListRepositoryProvider);
+      final write = runShoppingListWrite(
+        context,
+        () => repository.deleteItem(item.id),
+      );
       Navigator.of(context).pop();
-      await repository.deleteItem(item.id);
+      await write;
     }
 
     return SingleChildScrollView(

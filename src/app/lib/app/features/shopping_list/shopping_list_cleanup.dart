@@ -6,6 +6,7 @@ import '../../core/widgets/confirmation_dialog.dart';
 import 'models/shopping_list_item.dart';
 import 'providers/shopping_list_overview_provider.dart';
 import 'providers/shopping_list_repository.dart';
+import 'shopping_list_write.dart';
 
 const _maximumNamedItemCount = 3;
 
@@ -38,8 +39,12 @@ Future<void> confirmAndDeleteCheckedItems(
     cancelLabel: dialog.cancel,
     confirmLabel: dialog.confirm(n: count),
   );
-  if (confirmed) {
-    await ref.read(shoppingListRepositoryProvider).deleteCheckedItems(list.id);
+  if (confirmed && context.mounted) {
+    await runShoppingListWrite(
+      context,
+      () =>
+          ref.read(shoppingListRepositoryProvider).deleteCheckedItems(list.id),
+    );
   }
 }
 
@@ -65,8 +70,11 @@ Future<void> confirmAndDeleteAllItems(
     cancelLabel: dialog.cancel,
     confirmLabel: dialog.confirm(n: count),
   );
-  if (confirmed) {
-    await ref.read(shoppingListRepositoryProvider).deleteAllItems(list.id);
+  if (confirmed && context.mounted) {
+    await runShoppingListWrite(
+      context,
+      () => ref.read(shoppingListRepositoryProvider).deleteAllItems(list.id),
+    );
   }
 }
 

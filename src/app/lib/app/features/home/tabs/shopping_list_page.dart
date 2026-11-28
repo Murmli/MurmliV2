@@ -5,11 +5,14 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../../i18n/strings.g.dart';
+import '../../../core/network/network_available_provider.dart';
+import '../../../core/sync/sync_core.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/round_icon_button.dart';
 import '../../shopping_list/providers/pending_shopping_list_entries_provider.dart';
 import '../../shopping_list/providers/shopping_list_overview_provider.dart';
+import '../../shopping_list/shopping_list_name.dart';
 import '../../shopping_list/widgets/shopping_list_all_checked_banner.dart';
 import '../../shopping_list/widgets/shopping_list_checked_section_sliver.dart';
 import '../../shopping_list/widgets/shopping_list_empty_state.dart';
@@ -33,16 +36,26 @@ class ShoppingListPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final title = HomeTab.shoppingList.title(context.t);
     final overview = ref.watch(shoppingListOverviewProvider);
-    if (overview == null) {
+    final firstSyncCompleted = ref.watch(firstSyncCompletedProvider).value;
+    if (overview == null || firstSyncCompleted != true) {
       return Column(
         children: [
-          HomeHeader(title: title, padding: _headerPadding),
-          const Expanded(child: Center(child: CircularProgressIndicator())),
+          HomeHeader(
+            title: HomeTab.shoppingList.title(context.t),
+            padding: _headerPadding,
+          ),
+          Expanded(
+            child: ShoppingListLoadingState(
+              showsOfflineHint:
+                  firstSyncCompleted != true &&
+                  !ref.watch(networkAvailableProvider),
+            ),
+          ),
         ],
       );
     }
+    final title = shoppingListDisplayName(overview.listName, context.t);
     final pendingEntries = ref.watch(pendingShoppingListEntriesProvider);
     final colors = context.colors;
     final hasItems = overview.totalCount > 0;

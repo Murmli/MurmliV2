@@ -60,6 +60,10 @@ SyncCore syncCore(Ref ref) {
   return core;
 }
 
+@riverpod
+Stream<bool> firstSyncCompleted(Ref ref) =>
+    ref.watch(syncCoreProvider).watchFirstSyncCompleted();
+
 class SyncNotReadyException implements Exception {
   const SyncNotReadyException();
 

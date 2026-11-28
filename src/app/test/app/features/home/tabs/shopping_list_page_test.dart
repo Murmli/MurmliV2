@@ -4,13 +4,15 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:app/app/core/authentication/account.dart';
+import 'package:app/app/core/database/app_database_provider.dart';
+import 'package:app/app/core/network/network_available_provider.dart';
 import 'package:app/app/core/storage/preference_keys.dart';
 import 'package:app/app/core/storage/shared_preferences_provider.dart';
+import 'package:app/app/features/home/widgets/home_header.dart';
 import 'package:app/app/features/shopping_list/models/market_category.dart';
 import 'package:app/app/features/shopping_list/models/measurement_unit.dart';
 import 'package:app/app/features/shopping_list/models/shopping_list.dart';
 import 'package:app/app/features/shopping_list/models/shopping_list_item.dart';
-import 'package:app/app/features/shopping_list/providers/first_shopping_list_provider.dart';
 import 'package:app/app/features/shopping_list/providers/shopping_list_overview_provider.dart';
 import 'package:app/app/features/shopping_list/providers/shopping_list_repository.dart';
 import 'package:app/app/features/shopping_list/widgets/shopping_list_checked_section_sliver.dart';
@@ -24,6 +26,7 @@ import 'package:app/app/features/shopping_list/widgets/shopping_list_sheet_entry
 import 'package:app/i18n/strings.g.dart';
 
 import '../../../../helpers/pump_app.dart';
+import '../../../../helpers/shopping_list.dart';
 
 void main() {
   final translations = AppLocale.de.buildSync();
@@ -31,24 +34,41 @@ void main() {
   final categories = shoppingList.categories;
   final title = translations.home.tabs.shoppingList.title;
 
-  Future<ProviderContainer> openShoppingListTab(
+  const account = Account(id: 'account');
+
+  Future<ProviderContainer> openShoppingListTabWith(
     WidgetTester tester, {
-    required bool debugBuild,
+    required TestShoppingList? shoppingList,
+    bool firstSyncCompleted = true,
     Map<String, Object> storedPreferences = const {},
     Clock? clock,
   }) async {
     final container = await pumpApp(
       tester,
-      debugBuild: debugBuild,
       storedPreferences: storedPreferences,
       clock: clock,
-      signedInAccount: const Account(id: 'account'),
+      signedInAccount: account,
+      firstSyncCompleted: firstSyncCompleted,
+      shoppingList: shoppingList,
     );
-    container.read(firstShoppingListProvider);
     await tester.tap(find.text(translations.home.tabs.shoppingList.label));
     await tester.pumpAndSettle();
     return container;
   }
+
+  Future<ProviderContainer> openShoppingListTab(
+    WidgetTester tester, {
+    required bool withSampleItems,
+    Map<String, Object> storedPreferences = const {},
+    Clock? clock,
+  }) => openShoppingListTabWith(
+    tester,
+    shoppingList: TestShoppingList(
+      items: withSampleItems ? sampleShoppingListItems : const [],
+    ),
+    storedPreferences: storedPreferences,
+    clock: clock,
+  );
 
   // Each write gets its own runAsync: drift re-runs the page's queries in the
   // fake zone, and a further write in the same runAsync would wait for them.
@@ -242,7 +262,10 @@ void main() {
     testWidgets(
       'groups the open items by category in the default order and lists checked items in the checked section',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
 
         await addMixedItems(tester, container);
 
@@ -262,7 +285,10 @@ void main() {
     testWidgets('follows a changed category order while the page is open', (
       tester,
     ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       await addMixedItems(tester, container);
 
       await write(
@@ -283,7 +309,10 @@ void main() {
     });
 
     testWidgets('shows quantity and unit of each item', (tester) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
 
       await addItem(
         tester,
@@ -322,7 +351,7 @@ void main() {
     testWidgets(
       'shows the recipe of an item with one recipe and the recipe count of an item with several',
       (tester) async {
-        await openShoppingListTab(tester, debugBuild: true);
+        await openShoppingListTab(tester, withSampleItems: true);
 
         expect(
           find.descendant(of: rowOf('Paprika'), matching: find.text('Gulasch')),
@@ -344,7 +373,7 @@ void main() {
     );
 
     testWidgets('without items shows the empty state', (tester) async {
-      await openShoppingListTab(tester, debugBuild: false);
+      await openShoppingListTab(tester, withSampleItems: false);
 
       expect(find.text(shoppingList.empty.title), findsOneWidget);
       expect(find.byType(ShoppingListGroupSliver), findsNothing);
@@ -353,7 +382,7 @@ void main() {
     testWidgets(
       'without items shows the title, the entry field and the empty state but no progress',
       (tester) async {
-        await openShoppingListTab(tester, debugBuild: false);
+        await openShoppingListTab(tester, withSampleItems: false);
 
         expect(find.byType(ShoppingListProgressCounter), findsNothing);
         expect(find.text(title), findsOneWidget);
@@ -365,7 +394,7 @@ void main() {
     testWidgets(
       'hides the header while scrolling down, keeps the entry field and shows the header again when scrolling back',
       (tester) async {
-        await openShoppingListTab(tester, debugBuild: true);
+        await openShoppingListTab(tester, withSampleItems: true);
         final scrollView = find.byType(CustomScrollView);
 
         await tester.drag(scrollView, const Offset(0, -300));
@@ -385,7 +414,7 @@ void main() {
     testWidgets('pins the category header below the entry field', (
       tester,
     ) async {
-      await openShoppingListTab(tester, debugBuild: true);
+      await openShoppingListTab(tester, withSampleItems: true);
 
       await tester.drag(find.byType(CustomScrollView), const Offset(0, -80));
       await tester.pumpAndSettle();
@@ -401,7 +430,10 @@ void main() {
     testWidgets(
       'with only checked items shows the all checked hint instead of the empty state',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
 
         await check(
           tester,
@@ -418,7 +450,10 @@ void main() {
     testWidgets(
       'tapping the tile of an open item checks it and moves it to the checked section',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         final itemId = await addItem(
           tester,
           container,
@@ -446,7 +481,10 @@ void main() {
     testWidgets(
       'tapping the tile of a checked item reopens it in its category group',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         await addItem(tester, container, 'Brot', MarketCategory.bakery);
         final itemId = await addItem(
           tester,
@@ -476,7 +514,10 @@ void main() {
     testWidgets(
       'tapping the tile of an open item stores it as checked and shows it in both sections until the old row has disappeared',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         final itemId = await addItem(
           tester,
           container,
@@ -506,7 +547,10 @@ void main() {
     testWidgets(
       'tapping the tile of a checked item stores it as open and shows it in both sections until the old row has disappeared',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         final itemId = await addItem(
           tester,
           container,
@@ -537,7 +581,10 @@ void main() {
     testWidgets(
       'checking the only item of a category collapses its group gradually and moves the groups below along',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         await addItem(tester, container, 'Milch', MarketCategory.dairy);
         await addItem(tester, container, 'Saft', MarketCategory.beverages);
         final dairyGroup = find.ancestor(
@@ -570,7 +617,10 @@ void main() {
     testWidgets(
       'reopening the only checked item collapses the checked section gradually',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         await addItem(tester, container, 'Saft', MarketCategory.beverages);
         await check(
           tester,
@@ -600,7 +650,10 @@ void main() {
     testWidgets(
       'collapsing the checked section while its only item is reopened removes the section',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         await addItem(tester, container, 'Saft', MarketCategory.beverages);
         await check(
           tester,
@@ -631,7 +684,10 @@ void main() {
     testWidgets(
       'checking the first item shows the checked section with the item',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         await addItem(tester, container, 'Milch', MarketCategory.dairy);
         await addItem(tester, container, 'Karotten', MarketCategory.vegetables);
 
@@ -651,7 +707,10 @@ void main() {
     testWidgets(
       'while the old row of a checked item disappears the counts include only the stored items',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         await addItem(tester, container, 'Butter', MarketCategory.dairy);
         await addItem(tester, container, 'Käse', MarketCategory.dairy);
 
@@ -684,7 +743,10 @@ void main() {
         addTearDown(
           tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
         );
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         final itemId = await addItem(
           tester,
           container,
@@ -707,7 +769,10 @@ void main() {
       'checking an item through the screen reader stores it as checked',
       (tester) async {
         final semantics = tester.ensureSemantics();
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         final itemId = await addItem(
           tester,
           container,
@@ -731,7 +796,7 @@ void main() {
       var now = DateTime.utc(2026, 11, 28, 10);
       final container = await openShoppingListTab(
         tester,
-        debugBuild: false,
+        withSampleItems: false,
         clock: Clock(() => now),
       );
       await addItem(tester, container, 'Butter', MarketCategory.dairy);
@@ -753,7 +818,10 @@ void main() {
     testWidgets(
       'tapping the checked section header collapses and expands the section',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         await check(
           tester,
           container,
@@ -774,7 +842,10 @@ void main() {
     testWidgets('collapsing the checked section stores the collapsed state', (
       tester,
     ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       await check(
         tester,
         container,
@@ -797,7 +868,7 @@ void main() {
       (tester) async {
         final container = await openShoppingListTab(
           tester,
-          debugBuild: false,
+          withSampleItems: false,
           storedPreferences: {
             PreferenceKeys.shoppingListCheckedExpanded: false,
           },
@@ -820,7 +891,7 @@ void main() {
     testWidgets(
       'shows the progress as a counter in the entry field and announces it in words',
       (tester) async {
-        await openShoppingListTab(tester, debugBuild: true);
+        await openShoppingListTab(tester, withSampleItems: true);
 
         expect(inEntryField(find.text('2 / 16')), findsOneWidget);
         expect(
@@ -833,7 +904,7 @@ void main() {
     testWidgets(
       'hides the progress while text is entered and shows it again after submitting',
       (tester) async {
-        await openShoppingListTab(tester, debugBuild: true);
+        await openShoppingListTab(tester, withSampleItems: true);
 
         await tester.enterText(find.byType(TextField), 'Milch');
         await tester.pumpAndSettle();
@@ -860,14 +931,17 @@ void main() {
       (tester) async {
         tester.platformDispatcher.textScaleFactorTestValue = 2;
         addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-        await openShoppingListTab(tester, debugBuild: true);
+        await openShoppingListTab(tester, withSampleItems: true);
 
         expect(inEntryField(find.text('2/16')), findsOneWidget);
       },
     );
 
     testWidgets('updates the progress when an item is checked', (tester) async {
-      final container = await openShoppingListTab(tester, debugBuild: true);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: true,
+      );
       expect(find.text('2 / 16'), findsOneWidget);
 
       final list = container.read(currentShoppingListProvider).requireValue!;
@@ -882,7 +956,7 @@ void main() {
     testWidgets(
       'submitting free text shows it as pending with the sorting hint and then adds the parsed item to its category',
       (tester) async {
-        await openShoppingListTab(tester, debugBuild: false);
+        await openShoppingListTab(tester, withSampleItems: false);
 
         await enterAndSubmit(tester, '2 Liter Milch');
 
@@ -908,7 +982,10 @@ void main() {
     testWidgets('free text with several items adds each to its category', (
       tester,
     ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
 
       await enterAndSubmit(tester, 'Bananen, Brot und Tomaten');
       await finishParsing(tester);
@@ -925,7 +1002,10 @@ void main() {
     testWidgets(
       'unknown free text adds one item named after the text under miscellaneous',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
 
         await enterAndSubmit(tester, 'Käse und Wurst');
         await finishParsing(tester);
@@ -938,7 +1018,10 @@ void main() {
     );
 
     testWidgets('submitting only spaces adds nothing', (tester) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
 
       await enterAndSubmit(tester, '   ');
 
@@ -951,7 +1034,10 @@ void main() {
     testWidgets(
       'a second submission before the first is parsed keeps both pending and adds both',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
 
         await enterAndSubmit(tester, '2 Liter Milch');
         await tester.pump(const Duration(milliseconds: 300));
@@ -970,7 +1056,7 @@ void main() {
     );
 
     testWidgets('keeps the keyboard open after submitting', (tester) async {
-      await openShoppingListTab(tester, debugBuild: false);
+      await openShoppingListTab(tester, withSampleItems: false);
 
       await tester.tap(find.byType(TextField));
       await enterAndSubmit(tester, '2 Liter Milch');
@@ -982,7 +1068,10 @@ void main() {
     testWidgets('tapping the send button adds the entered item', (
       tester,
     ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
 
       await tester.enterText(find.byType(TextField), '500g Hackfleisch');
       await tester.pump();
@@ -999,7 +1088,7 @@ void main() {
     testWidgets('disables the send button while the field holds only spaces', (
       tester,
     ) async {
-      await openShoppingListTab(tester, debugBuild: false);
+      await openShoppingListTab(tester, withSampleItems: false);
 
       await tester.enterText(find.byType(TextField), '   ');
       await tester.pump();
@@ -1011,7 +1100,10 @@ void main() {
     });
 
     testWidgets('tapping the paperclip changes nothing', (tester) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       await tester.enterText(find.byType(TextField), '2 Liter Milch');
       await tester.pump();
 
@@ -1033,7 +1125,10 @@ void main() {
     testWidgets(
       'keeps the header of a category on top while scrolling through its items until the next category pushes it away',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: true);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: true,
+        );
         final groups = container.read(shoppingListOverviewProvider)!.groups;
         final firstHeader = groups[0].category.label(translations);
         final secondHeader = groups[1].category.label(translations);
@@ -1069,7 +1164,10 @@ void main() {
     );
 
     testWidgets('swiping a row to the start removes the item', (tester) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       await addItem(tester, container, 'Butter', MarketCategory.dairy);
       await addItem(tester, container, 'Brot', MarketCategory.bakery);
       final row = rowOf('Butter');
@@ -1108,7 +1206,10 @@ void main() {
     testWidgets(
       'tapping the name of an item opens its menu with name, quantity and category and the actions without the recipe',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         final itemId = await addItem(
           tester,
           container,
@@ -1133,7 +1234,10 @@ void main() {
     testWidgets('names an item without quantity only by its name', (
       tester,
     ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       await addItem(tester, container, 'Milch', MarketCategory.dairy);
 
       await openItemMenu(tester, 'Milch');
@@ -1144,7 +1248,7 @@ void main() {
     testWidgets(
       'for an item with one recipe shows the recipe action with the recipe title',
       (tester) async {
-        await openShoppingListTab(tester, debugBuild: true);
+        await openShoppingListTab(tester, withSampleItems: true);
 
         await openSampleItemMenu(tester, 'Paprika');
 
@@ -1157,7 +1261,7 @@ void main() {
     testWidgets(
       'for an item with several recipes shows their count and toggles their titles on tap',
       (tester) async {
-        await openShoppingListTab(tester, debugBuild: true);
+        await openShoppingListTab(tester, withSampleItems: true);
 
         await openSampleItemMenu(tester, 'Sauerrahm');
 
@@ -1184,7 +1288,10 @@ void main() {
     testWidgets(
       'a listed recipe is announced as coming soon and tapping it keeps the menu open and changes nothing',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: true);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: true,
+        );
         final itemsBefore = storedItems(container);
         await openSampleItemMenu(tester, 'Sauerrahm');
         await tester.tap(inSheet(find.text(itemMenu.showRecipes)));
@@ -1206,7 +1313,10 @@ void main() {
     );
 
     testWidgets('edit closes the menu and opens the editor', (tester) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       await addItem(tester, container, 'Milch', MarketCategory.dairy);
 
       await openItemMenu(tester, 'Milch');
@@ -1220,7 +1330,10 @@ void main() {
     testWidgets('delete closes the menu and removes the item without asking', (
       tester,
     ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       await addItem(tester, container, 'Butter', MarketCategory.dairy);
       await addItem(tester, container, 'Brot', MarketCategory.bakery);
 
@@ -1237,7 +1350,10 @@ void main() {
     testWidgets(
       'the placeholders are announced as coming soon and tapping them keeps the menu open and changes nothing',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: true);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: true,
+        );
         final itemsBefore = storedItems(container);
 
         await openSampleItemMenu(tester, 'Paprika');
@@ -1265,7 +1381,10 @@ void main() {
     testWidgets('long pressing the name of an item opens the editor', (
       tester,
     ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       final itemId = await addItem(
         tester,
         container,
@@ -1282,7 +1401,10 @@ void main() {
     testWidgets(
       'editing name, quantity, unit and category stores them and moves the item to the new category',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         final itemId = await addItem(
           tester,
           container,
@@ -1328,7 +1450,10 @@ void main() {
     testWidgets(
       'every unit can be chosen through its chip or more and is then the selected chip',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         final itemId = await addItem(
           tester,
           container,
@@ -1355,7 +1480,10 @@ void main() {
     testWidgets(
       'tapping the selected unit chip and clearing the quantity stores the item without both',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         final itemId = await addItem(
           tester,
           container,
@@ -1384,7 +1512,10 @@ void main() {
     testWidgets('cancel closes the editor and discards the changes', (
       tester,
     ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       final itemId = await addItem(
         tester,
         container,
@@ -1407,7 +1538,10 @@ void main() {
     });
 
     testWidgets('a name of only spaces cannot be saved', (tester) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       final itemId = await addItem(
         tester,
         container,
@@ -1426,7 +1560,10 @@ void main() {
     testWidgets('a quantity of 0 shows an error and cannot be saved', (
       tester,
     ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       final itemId = await addItem(
         tester,
         container,
@@ -1448,7 +1585,10 @@ void main() {
     testWidgets('editing an item with recipes keeps its recipe shares', (
       tester,
     ) async {
-      final container = await openShoppingListTab(tester, debugBuild: true);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: true,
+      );
       final before = storedItems(container)
           .singleWhere((item) => item.name == 'Sauerrahm');
       await tester.scrollUntilVisible(
@@ -1540,7 +1680,10 @@ void main() {
     testWidgets(
       'removing the checked items after confirming keeps only the open items',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         await addOneOpenAndTwoCheckedItems(tester, container);
 
         await openListMenu(tester);
@@ -1567,7 +1710,10 @@ void main() {
     testWidgets(
       'the removal of more than three checked items names only their count',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         for (final name in ['Brot', 'Kaffee', 'Tee', 'Reis']) {
           await check(
             tester,
@@ -1593,7 +1739,10 @@ void main() {
     testWidgets('cancelling the removal of the checked items keeps all items', (
       tester,
     ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       await addOneOpenAndTwoCheckedItems(tester, container);
 
       await openListMenu(tester);
@@ -1606,7 +1755,10 @@ void main() {
     testWidgets(
       'clearing the list after confirming removes all items and keeps the category order',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         await addTwoItemsWithCustomOrder(tester, container);
 
         await openListMenu(tester);
@@ -1625,7 +1777,10 @@ void main() {
     testWidgets('clearing the list names up to three items in the list order', (
       tester,
     ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       await addOneOpenAndTwoCheckedItems(tester, container);
 
       await openListMenu(tester);
@@ -1645,7 +1800,10 @@ void main() {
     });
 
     testWidgets('cancelling clearing the list keeps all items', (tester) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       await addTwoItemsWithCustomOrder(tester, container);
 
       await openListMenu(tester);
@@ -1658,7 +1816,10 @@ void main() {
     testWidgets('shows the entries in sections with the affected item counts', (
       tester,
     ) async {
-      final container = await openShoppingListTab(tester, debugBuild: false);
+      final container = await openShoppingListTab(
+        tester,
+        withSampleItems: false,
+      );
       await addOneOpenAndTwoCheckedItems(tester, container);
 
       await openListMenu(tester);
@@ -1689,7 +1850,10 @@ void main() {
     testWidgets(
       'without checked items removing the checked items does nothing but clearing the list opens its confirmation',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         await addItem(tester, container, 'Milch', MarketCategory.dairy);
 
         await openListMenu(tester);
@@ -1713,7 +1877,7 @@ void main() {
     testWidgets('with an empty list clearing the list does nothing', (
       tester,
     ) async {
-      await openShoppingListTab(tester, debugBuild: false);
+      await openShoppingListTab(tester, withSampleItems: false);
 
       await openListMenu(tester);
       await tapMenuEntry(tester, menu.deleteAll);
@@ -1751,7 +1915,10 @@ void main() {
     testWidgets(
       'clearing the checked section after confirming keeps only the open items',
       (tester) async {
-        final container = await openShoppingListTab(tester, debugBuild: false);
+        final container = await openShoppingListTab(
+          tester,
+          withSampleItems: false,
+        );
         await addOneOpenAndOneCheckedItem(tester, container);
 
         await clearCheckedSectionAndConfirm(tester);
@@ -1765,7 +1932,7 @@ void main() {
       (tester) async {
         final container = await openShoppingListTab(
           tester,
-          debugBuild: false,
+          withSampleItems: false,
           storedPreferences: {
             PreferenceKeys.shoppingListCheckedExpanded: false,
           },
@@ -1777,5 +1944,205 @@ void main() {
         expect(storedItems(container).map((item) => item.name), ['Milch']);
       },
     );
+  });
+
+  group('before the first sync', () {
+    final loading = shoppingList.loading;
+
+    testWidgets(
+      'shows the loading state without the entry field and, while online, without the offline hint',
+      (tester) async {
+        await openShoppingListTabWith(
+          tester,
+          shoppingList: null,
+          firstSyncCompleted: false,
+        );
+
+        expect(find.text(loading.title), findsOneWidget);
+        expect(find.text(loading.offline), findsNothing);
+        expect(find.text(title), findsOneWidget);
+        expect(find.byType(ShoppingListEntryField), findsNothing);
+        expect(find.byType(TextField), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'without a network adds the offline hint to the loading state',
+      (tester) async {
+        final container = await openShoppingListTabWith(
+          tester,
+          shoppingList: null,
+          firstSyncCompleted: false,
+        );
+
+        container.read(networkAvailableProvider.notifier).state = false;
+        await tester.pumpAndSettle();
+
+        expect(find.text(loading.title), findsOneWidget);
+        expect(find.text(loading.offline), findsOneWidget);
+      },
+    );
+
+    testWidgets('shows the list once the first sync brings it', (tester) async {
+      final container = await openShoppingListTabWith(
+        tester,
+        shoppingList: null,
+        firstSyncCompleted: false,
+      );
+
+      await completeFirstSync(
+        tester,
+        container,
+        account,
+        shoppingList: const TestShoppingList(
+          items: [TestShoppingListItem('Milch', MarketCategory.dairy)],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(loading.title), findsNothing);
+      expect(find.byType(ShoppingListEntryField), findsOneWidget);
+      expect(inOpenGroups('Milch'), findsOneWidget);
+    });
+
+    testWidgets(
+      'after the first sync without a list creates no list and shows the loading state without the offline hint',
+      (tester) async {
+        final container = await openShoppingListTabWith(
+          tester,
+          shoppingList: null,
+        );
+        container.read(networkAvailableProvider.notifier).state = false;
+        await tester.pumpAndSettle();
+
+        final database = container.read(appDatabaseProvider);
+        expect(
+          await tester.runAsync(
+            () => database.select(database.shoppingLists).get(),
+          ),
+          isEmpty,
+        );
+        expect(find.text(loading.title), findsOneWidget);
+        expect(find.text(loading.offline), findsNothing);
+        expect(find.byType(ShoppingListEntryField), findsNothing);
+      },
+    );
+  });
+
+  group('list name', () {
+    Finder inHeader(String text) =>
+        find.descendant(of: find.byType(HomeHeader), matching: find.text(text));
+
+    Future<void> openListMenu(WidgetTester tester) async {
+      await tester.tap(find.byTooltip(shoppingList.menu.tooltip));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'a list without a name shows the default name in the header and the list menu',
+      (tester) async {
+        await openShoppingListTabWith(
+          tester,
+          shoppingList: const TestShoppingList(),
+        );
+
+        expect(inHeader(shoppingList.defaultName), findsOneWidget);
+        await openListMenu(tester);
+        expect(inSheet(find.text(shoppingList.defaultName)), findsOneWidget);
+      },
+    );
+
+    testWidgets('a named list shows its name in the header and the list menu', (
+      tester,
+    ) async {
+      await openShoppingListTabWith(
+        tester,
+        shoppingList: const TestShoppingList(name: 'Wocheneinkauf'),
+      );
+
+      expect(inHeader('Wocheneinkauf'), findsOneWidget);
+      expect(inHeader(shoppingList.defaultName), findsNothing);
+      await openListMenu(tester);
+      expect(inSheet(find.text('Wocheneinkauf')), findsOneWidget);
+    });
+  });
+
+  group('limits', () {
+    final limits = shoppingList.limits;
+
+    Future<int> queuedCommandCount(
+      WidgetTester tester,
+      ProviderContainer container,
+    ) async {
+      final database = container.read(appDatabaseProvider);
+      final commands = await tester.runAsync(
+        () => database.select(database.syncCommands).get(),
+      );
+      return commands!.length;
+    }
+
+    Future<ProviderContainer> openListWithMilk(WidgetTester tester) =>
+        openShoppingListTabWith(
+          tester,
+          shoppingList: const TestShoppingList(
+            items: [TestShoppingListItem('Milch', MarketCategory.dairy)],
+          ),
+        );
+
+    testWidgets(
+      'saving a name longer than the server accepts explains the limit and keeps the item',
+      (tester) async {
+        final container = await openListWithMilk(tester);
+        await openEditor(tester, 'Milch');
+
+        // The field counts each emoji as one character, the server as two
+        // UTF-16 units.
+        await tester.enterText(editorField(editor.name), '\u{1F600}' * 200);
+        await tapSave(tester);
+
+        expect(find.text(limits.itemName), findsOneWidget);
+        expect(storedItems(container).single.name, 'Milch');
+        expect(await queuedCommandCount(tester, container), 0);
+      },
+    );
+
+    testWidgets(
+      'saving a quantity beyond the limit explains it and keeps the item',
+      (tester) async {
+        final container = await openListWithMilk(tester);
+        await openEditor(tester, 'Milch');
+
+        await tester.enterText(editorField(editor.quantity), '1000000');
+        await tapSave(tester);
+
+        expect(find.text(limits.quantity), findsOneWidget);
+        expect(storedItems(container).single.quantity, isNull);
+        expect(await queuedCommandCount(tester, container), 0);
+      },
+    );
+
+    testWidgets('adding to a full list explains the limit and adds nothing', (
+      tester,
+    ) async {
+      final container = await openShoppingListTabWith(
+        tester,
+        shoppingList: TestShoppingList(
+          items: [
+            for (var index = 0; index < 1000; index++)
+              TestShoppingListItem(
+                'Artikel $index',
+                MarketCategory.miscellaneous,
+              ),
+          ],
+        ),
+      );
+
+      await enterAndSubmit(tester, '2 Liter Milch');
+      await finishParsing(tester);
+
+      expect(find.text(limits.itemsPerList), findsOneWidget);
+      expect(storedItems(container), hasLength(1000));
+      expect(await queuedCommandCount(tester, container), 0);
+    });
   });
 }

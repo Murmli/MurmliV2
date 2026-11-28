@@ -14,7 +14,6 @@ import 'package:app/app/core/api/api_client_provider.dart';
 import 'package:app/app/core/crash_reporting/crash_reporter_provider.dart';
 import 'package:app/app/core/database/app_database.dart';
 import 'package:app/app/core/lifecycle/app_foreground_provider.dart';
-import 'package:app/app/core/network/network_available_provider.dart';
 import 'package:app/app/core/sync/sync_core.dart';
 import 'package:app/app/core/sync/sync_data_type.dart';
 import 'package:app/app/core/sync/sync_data_types_provider.dart';
@@ -59,7 +58,6 @@ class SyncTestHarness {
       overrides: [
         syncDataTypesProvider.overrideWithValue(dataTypes),
         appForegroundProvider.overrideWithBuild((ref, notifier) => true),
-        networkAvailableProvider.overrideWithBuild((ref, notifier) => true),
         syncRandomProvider.overrideWithValue(harness.random),
       ],
     );

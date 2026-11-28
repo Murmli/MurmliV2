@@ -10,6 +10,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../providers/pending_shopping_list_entries_provider.dart';
+import '../shopping_list_write.dart';
 import 'shopping_list_progress_counter.dart';
 
 class ShoppingListEntryField extends HookConsumerWidget {
@@ -31,10 +32,14 @@ class ShoppingListEntryField extends HookConsumerWidget {
     final controller = useTextEditingController();
     final hasText = useValueListenable(controller).text.trim().isNotEmpty;
     void submit() {
+      final text = controller.text;
       unawaited(
-        ref
-            .read(pendingShoppingListEntriesProvider.notifier)
-            .submit(listId: listId, text: controller.text),
+        runShoppingListWrite(
+          context,
+          () => ref
+              .read(pendingShoppingListEntriesProvider.notifier)
+              .submit(listId: listId, text: text),
+        ),
       );
       controller.clear();
     }

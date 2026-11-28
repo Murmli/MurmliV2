@@ -1,12 +1,7 @@
-import 'package:drift/drift.dart';
-
 import '../../../i18n/strings.g.dart';
-import '../../core/database/app_database.dart';
-import '../../core/identifiers/new_uuid.dart';
 import 'models/market_category.dart';
 import 'models/measurement_unit.dart';
-
-typedef _SampleRecipe = ({String id, String germanTitle, String englishTitle});
+import 'providers/shopping_list_repository.dart';
 
 typedef _SampleItem = ({
   String germanName,
@@ -15,19 +10,7 @@ typedef _SampleItem = ({
   MeasurementUnit? unit,
   MarketCategory category,
   bool checked,
-  List<(_SampleRecipe, double)> recipeShares,
 });
-
-const _goulash = (
-  id: '6dfe8404-a585-471d-a774-cbf5f1abdaac',
-  germanTitle: 'Gulasch',
-  englishTitle: 'Goulash',
-);
-const _bakedPotatoes = (
-  id: '528b0b59-fd6b-4fc8-9123-c2d8d6d32ece',
-  germanTitle: 'Ofenkartoffeln',
-  englishTitle: 'Baked potatoes',
-);
 
 const List<_SampleItem> _sampleItems = [
   (
@@ -37,7 +20,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.piece,
     category: MarketCategory.vegetables,
     checked: false,
-    recipeShares: [(_goulash, 3)],
   ),
   (
     germanName: 'Zwiebeln',
@@ -46,7 +28,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.kilogram,
     category: MarketCategory.vegetables,
     checked: false,
-    recipeShares: [(_goulash, 1)],
   ),
   (
     germanName: 'Kartoffeln',
@@ -55,7 +36,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.kilogram,
     category: MarketCategory.vegetables,
     checked: false,
-    recipeShares: [(_bakedPotatoes, 2)],
   ),
   (
     germanName: 'Äpfel',
@@ -64,7 +44,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.piece,
     category: MarketCategory.fruits,
     checked: false,
-    recipeShares: [],
   ),
   (
     germanName: 'Bananen',
@@ -73,7 +52,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.piece,
     category: MarketCategory.fruits,
     checked: true,
-    recipeShares: [],
   ),
   (
     germanName: 'Vollkornbrot',
@@ -82,7 +60,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.piece,
     category: MarketCategory.bakery,
     checked: false,
-    recipeShares: [],
   ),
   (
     germanName: 'Eier',
@@ -91,7 +68,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.piece,
     category: MarketCategory.refrigerated,
     checked: false,
-    recipeShares: [(_goulash, 2)],
   ),
   (
     germanName: 'Sauerrahm',
@@ -100,7 +76,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.gram,
     category: MarketCategory.dairy,
     checked: false,
-    recipeShares: [(_goulash, 200), (_bakedPotatoes, 300)],
   ),
   (
     germanName: 'Milch',
@@ -109,7 +84,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.liter,
     category: MarketCategory.dairy,
     checked: true,
-    recipeShares: [],
   ),
   (
     germanName: 'Rindergulasch',
@@ -118,7 +92,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.gram,
     category: MarketCategory.meatAndFish,
     checked: false,
-    recipeShares: [(_goulash, 800)],
   ),
   (
     germanName: 'Spaghetti',
@@ -127,7 +100,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.gram,
     category: MarketCategory.grainsAndPasta,
     checked: false,
-    recipeShares: [],
   ),
   (
     germanName: 'Gehackte Tomaten',
@@ -136,7 +108,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.can,
     category: MarketCategory.cannedGoods,
     checked: false,
-    recipeShares: [],
   ),
   (
     germanName: 'Paprikapulver',
@@ -145,7 +116,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.tablespoon,
     category: MarketCategory.spices,
     checked: false,
-    recipeShares: [(_goulash, 2)],
   ),
   (
     germanName: 'Olivenöl',
@@ -154,7 +124,6 @@ const List<_SampleItem> _sampleItems = [
     unit: null,
     category: MarketCategory.vinegarAndOils,
     checked: false,
-    recipeShares: [],
   ),
   (
     germanName: 'Mineralwasser',
@@ -163,7 +132,6 @@ const List<_SampleItem> _sampleItems = [
     unit: MeasurementUnit.liter,
     category: MarketCategory.beverages,
     checked: false,
-    recipeShares: [],
   ),
   (
     germanName: 'Spülmittel',
@@ -172,48 +140,27 @@ const List<_SampleItem> _sampleItems = [
     unit: null,
     category: MarketCategory.householdGoods,
     checked: false,
-    recipeShares: [],
   ),
 ];
 
-Future<void> insertSampleShoppingListItems(
-  AppDatabase database, {
+/// Adds the sample items to the list in the language of the app, one write
+/// per item, so they reach the server like items typed by hand.
+Future<void> addSampleShoppingListItems(
+  ShoppingListRepository repository, {
   required String listId,
-  required DateTime now,
-}) {
-  final language = LocaleSettings.currentLocale.languageCode;
-  final isGerman = language == AppLocale.de.languageCode;
-  return database.batch((batch) {
-    for (final (index, sampleItem) in _sampleItems.indexed) {
-      final itemId = newUuid();
-      // Distinct creation times keep the sample order stable in the list.
-      final createdAt = now.millisecondsSinceEpoch + index;
-      batch.insert(
-        database.shoppingListItems,
-        ShoppingListItemsCompanion.insert(
-          id: itemId,
-          scopeId: listId,
-          name: isGerman ? sampleItem.germanName : sampleItem.englishName,
-          quantity: Value(sampleItem.quantity),
-          unit: Value(sampleItem.unit?.key),
-          category: sampleItem.category.key,
-          checked: Value(sampleItem.checked),
-          language: language,
-          createdAt: Value(createdAt),
-          changedAt: Value(createdAt),
-        ),
-      );
-      for (final (recipe, quantity) in sampleItem.recipeShares) {
-        batch.insert(
-          database.shoppingListItemRecipes,
-          ShoppingListItemRecipesCompanion.insert(
-            itemId: itemId,
-            recipeId: recipe.id,
-            recipeTitle: isGerman ? recipe.germanTitle : recipe.englishTitle,
-            quantity: Value(quantity),
-          ),
-        );
-      }
+}) async {
+  final isGerman =
+      LocaleSettings.currentLocale.languageCode == AppLocale.de.languageCode;
+  for (final sampleItem in _sampleItems) {
+    final itemId = await repository.addItem(
+      listId: listId,
+      name: isGerman ? sampleItem.germanName : sampleItem.englishName,
+      category: sampleItem.category,
+      quantity: sampleItem.quantity,
+      unit: sampleItem.unit,
+    );
+    if (sampleItem.checked) {
+      await repository.setChecked(itemId, checked: true);
     }
-  });
+  }
 }

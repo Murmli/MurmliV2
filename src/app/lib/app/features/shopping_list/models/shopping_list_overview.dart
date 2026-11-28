@@ -9,6 +9,7 @@ part 'shopping_list_overview.mapper.dart';
 class ShoppingListOverview with ShoppingListOverviewMappable {
   const ShoppingListOverview({
     required this.listId,
+    required this.listName,
     required this.checkedCount,
     required this.totalCount,
     required this.groups,
@@ -17,6 +18,7 @@ class ShoppingListOverview with ShoppingListOverviewMappable {
   });
 
   final String listId;
+  final String listName;
   final int checkedCount;
   final int totalCount;
   final List<ShoppingListGroup> groups;

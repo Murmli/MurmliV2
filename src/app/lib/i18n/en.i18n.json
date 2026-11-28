@@ -61,11 +61,21 @@
       "calories": {
         "label": "Calories",
         "title": "Calories",
-        "resetSampleData": "Reset the sample shopping list"
+        "addSampleItems": "Add sample items"
       }
     }
   },
   "shoppingList": {
+    "defaultName": "Shopping list",
+    "loading": {
+      "title": "Your list is loading …",
+      "offline": "Your list appears as soon as you are online."
+    },
+    "limits": {
+      "itemName": "The name is too long (at most 256 characters).",
+      "quantity": "The quantity is invalid. Enter a number greater than 0 up to 999,999.999 with at most three decimal places.",
+      "itemsPerList": "The list is full (at most 1,000 items)."
+    },
     "categories": {
       "vegetables": "Vegetables",
       "fruits": "Fruits",
