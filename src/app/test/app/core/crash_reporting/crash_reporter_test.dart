@@ -45,6 +45,26 @@ void main() {
       expect(signedOutEvent.user, isNull);
     });
 
+    test(
+      'reportProblem reports an error event whose only text is the message',
+      () async {
+        final envelopes = await startRecordingSentry();
+
+        await const CrashReporter().reportProblem('A sync round failed');
+
+        final event =
+            envelopes.single.items.single.originalObject! as SentryEvent;
+        expect(event.message, isNull);
+        expect(
+          [
+            for (final exception in event.exceptions!)
+              (exception.type, exception.value),
+          ],
+          [('ReportedProblem', 'A sync round failed')],
+        );
+      },
+    );
+
     test('stop ends reporting and deletes the reports cached by the native SDKs but no other cache', () async {
       final envelopes = await startRecordingSentry();
 
