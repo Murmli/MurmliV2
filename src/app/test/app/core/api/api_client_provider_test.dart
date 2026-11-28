@@ -292,6 +292,26 @@ void main() {
       );
     });
 
+    test(
+      'failed request to the API that opts out of reporting reports no failure',
+      () async {
+        final adapter = RecordingHttpClientAdapter(
+          respond: respondWithServerError,
+        );
+        final apiClient = await createApiClient(adapter);
+
+        await expectLater(
+          apiClient.get<void>(
+            '/v1/example',
+            options: Options(extra: {unreportedFailureKey: true}),
+          ),
+          throwsA(isA<DioException>()),
+        );
+
+        expect(container.read(failedApiRequestTraceIdProvider), isNull);
+      },
+    );
+
     test('failed request to the API sends nothing to Sentry', () async {
       final envelopes = await startRecordingSentry();
       final adapter = RecordingHttpClientAdapter(
