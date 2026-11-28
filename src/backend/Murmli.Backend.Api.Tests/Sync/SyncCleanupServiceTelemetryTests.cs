@@ -124,7 +124,7 @@ public class SyncCleanupServiceTelemetryTests(PostgresFixture postgres)
     }
 
     [Fact]
-    public async Task RunAsync_ContributorDisturbed_RecordsFailedRunWithoutLaterSteps()
+    public async Task RunAsync_ContributorDisturbed_RecordsFailedRunWithEarlierRemovals()
     {
         await using (
             var api = await ApiHost.StartAsync(
@@ -155,8 +155,8 @@ public class SyncCleanupServiceTelemetryTests(PostgresFixture postgres)
         Assert.Equal(
             new Dictionary<string, long>
             {
-                ["tombstones"] = 0,
-                ["processed_commands"] = 0,
+                ["tombstones"] = 1,
+                ["processed_commands"] = 3,
                 ["stale_account_deletions"] = 0,
                 ["checked_shopping_list_items"] = 0,
                 ["test_disturbed"] = 0,
@@ -231,13 +231,7 @@ public class SyncCleanupServiceTelemetryTests(PostgresFixture postgres)
         Assert.Equal(new Dictionary<string, long> { [""] = 1 }, TestMetrics.CountByTags(metricSnapshots, "murmli.sync.cleanup.duration"));
         Assert.InRange(TestMetrics.HistogramSumByTags(metricSnapshots, "murmli.sync.cleanup.duration")[""], 1.0, 60.0);
         Assert.Equal(
-            new Dictionary<string, long>
-            {
-                ["tombstones"] = 1,
-                ["processed_commands"] = 0,
-                ["stale_account_deletions"] = 0,
-                ["checked_shopping_list_items"] = 0,
-            },
+            new Dictionary<string, long> { ["tombstones"] = 1, ["processed_commands"] = 0 },
             TestMetrics.SumByTags(metricSnapshots, "murmli.sync.cleanup.removed", "murmli.sync.cleanup.kind")
         );
         Assert.Null(TestMetrics.GetLastGaugeValue(metricSnapshots, "murmli.sync.cleanup.last_success_time"));
