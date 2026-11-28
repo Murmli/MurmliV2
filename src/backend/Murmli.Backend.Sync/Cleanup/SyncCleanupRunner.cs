@@ -46,7 +46,6 @@ public sealed partial class SyncCleanupRunner(
                 return;
             }
 
-            await RunContributorsAsync(scope.ServiceProvider, new SyncCleanupContext(now, cleanupOptions.BatchSize), removed, timeLimit.Token);
             await RemoveTombstonesAsync(context, now - syncOptions.Retention, cleanupOptions.BatchSize, removed, timeLimit.Token);
             await RemoveProcessedCommandsAsync(
                 context,
@@ -55,6 +54,7 @@ public sealed partial class SyncCleanupRunner(
                 removed,
                 timeLimit.Token
             );
+            await RunContributorsAsync(scope.ServiceProvider, new SyncCleanupContext(now, cleanupOptions.BatchSize), removed, timeLimit.Token);
             LogCompleted(start, removed);
         }
         catch (OperationCanceledException) when (timeLimit.IsCancellationRequested && !cancellationToken.IsCancellationRequested)

@@ -383,7 +383,7 @@ public class SyncCleanupServiceTests(PostgresFixture postgres) : IClassFixture<P
     }
 
     [Fact]
-    public async Task RunAsync_ContributorThrows_StillRemovesExpiredTombstones()
+    public async Task RunAsync_ContributorThrows_RunsLaterContributorsAndCompletes()
     {
         var logRecords = new List<LogRecord>();
         await using var api = await ApiHost.StartAsync(
