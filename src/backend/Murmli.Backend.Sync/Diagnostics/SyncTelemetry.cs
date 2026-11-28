@@ -17,6 +17,8 @@ internal sealed class SyncTelemetry
 
     public const string CleanupSkipped = "skipped";
 
+    public const string CleanupStopped = "stopped";
+
     public const string TombstonesKind = "tombstones";
 
     public const string ProcessedCommandsKind = "processed_commands";

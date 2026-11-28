@@ -88,7 +88,7 @@ public sealed partial class SyncCleanupRunner
         {
             // The run ends before its lease can expire, the next run removes the rest
             LogStopped(start, removed);
-            result = SyncTelemetry.CleanupSucceeded;
+            result = SyncTelemetry.CleanupStopped;
         }
         catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested)
         {
