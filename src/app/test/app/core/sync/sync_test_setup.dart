@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:clock/clock.dart';
 import 'package:dio/dio.dart';
@@ -12,8 +13,11 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:app/app/core/api/api_client_provider.dart';
 import 'package:app/app/core/crash_reporting/crash_reporter_provider.dart';
 import 'package:app/app/core/database/app_database.dart';
+import 'package:app/app/core/lifecycle/app_foreground_provider.dart';
+import 'package:app/app/core/network/network_available_provider.dart';
 import 'package:app/app/core/sync/sync_core.dart';
 import 'package:app/app/core/sync/sync_data_types_provider.dart';
+import 'package:app/app/core/sync/sync_random_provider.dart';
 import 'package:app/app/core/sync/sync_round_outcome.dart';
 
 import '../../../helpers/authentication.dart';
@@ -34,12 +38,14 @@ typedef RequestBody = Map<String, Object?>;
 typedef ResponseJson = Map<String, Object?> Function(RequestBody requestBody);
 
 /// A sync core signed in with [accountId] on an in-memory database, a
-/// controllable clock and a scripted server.
+/// controllable clock, a scripted server and fixed randomness, in the
+/// foreground with a network.
 class SyncTestHarness {
   SyncTestHarness._(this.dataTypes);
 
   static Future<SyncTestHarness> start({
     List<TestDataType> dataTypes = testDataTypes,
+    Clock? clock,
   }) async {
     final harness = SyncTestHarness._(dataTypes);
     final database = AppDatabase(NativeDatabase.memory());
@@ -48,8 +54,13 @@ class SyncTestHarness {
     final container = createContainer(
       await createPreferences(),
       database: database,
-      clock: Clock(() => harness.now),
-      overrides: [syncDataTypesProvider.overrideWithValue(dataTypes)],
+      clock: clock ?? Clock(() => harness.now),
+      overrides: [
+        syncDataTypesProvider.overrideWithValue(dataTypes),
+        appForegroundProvider.overrideWithBuild((ref, notifier) => true),
+        networkAvailableProvider.overrideWithBuild((ref, notifier) => true),
+        syncRandomProvider.overrideWithValue(harness.random),
+      ],
     );
     addTearDown(container.dispose);
     await signIn(container);
@@ -67,6 +78,7 @@ class SyncTestHarness {
 
   final List<TestDataType> dataTypes;
   DateTime now = DateTime.utc(2026, 11, 26, 12);
+  final random = FixedRandom(0.5);
   final server = FakeSyncServer();
   late final ProviderContainer container;
   late final AppDatabase database;
@@ -81,16 +93,18 @@ class SyncTestHarness {
     bool coversAllScopes = false,
     DateTime? serverTime,
     int maxRequestBytes = 1000000,
+    int pollIntervalSeconds = 60,
+    bool hasMore = false,
   }) => {
     'results': results,
     'scopes': scopes,
     'removedScopes': removedScopes,
     'coversAllScopes': coversAllScopes,
     'token': token,
-    'hasMore': false,
+    'hasMore': hasMore,
     'serverTime': (serverTime ?? now).millisecondsSinceEpoch,
     'settings': {
-      'pollIntervalSeconds': 60,
+      'pollIntervalSeconds': pollIntervalSeconds,
       'maxCommandsPerRequest': 500,
       'maxRequestBytes': maxRequestBytes,
     },
@@ -109,22 +123,36 @@ class SyncTestHarness {
         ),
       );
 
+  /// Answers the next request as the first round with the personal scope and
+  /// [scopes].
+  void answerFirstRound({
+    List<Object?> records = const [],
+    List<Object?> scopes = const [],
+    int maxRequestBytes = 1000000,
+    int pollIntervalSeconds = 60,
+  }) => server.answer(
+    (_) => response(
+      token: firstToken,
+      coversAllScopes: true,
+      maxRequestBytes: maxRequestBytes,
+      pollIntervalSeconds: pollIntervalSeconds,
+      scopes: [
+        scopeBlock(personalScopeId, fullState: true, records: records),
+        ...scopes,
+      ],
+    ),
+  );
+
   /// Completes the first round with the personal scope and [scopes].
   Future<void> completeFirstRound({
     List<Object?> records = const [],
     List<Object?> scopes = const [],
     int maxRequestBytes = 1000000,
   }) async {
-    server.answer(
-      (_) => response(
-        token: firstToken,
-        coversAllScopes: true,
-        maxRequestBytes: maxRequestBytes,
-        scopes: [
-          scopeBlock(personalScopeId, fullState: true, records: records),
-          ...scopes,
-        ],
-      ),
+    answerFirstRound(
+      records: records,
+      scopes: scopes,
+      maxRequestBytes: maxRequestBytes,
     );
     expect(await core.runRound(), roundOutcome);
   }
@@ -260,6 +288,22 @@ class FakeSyncServer {
     int status, {
     Map<String, List<String>> headers = const {},
   }) => ResponseBody.fromString(jsonEncode(json), status, headers: headers);
+}
+
+/// Answers every draw with [value], so random waits are predictable.
+class FixedRandom implements Random {
+  FixedRandom(this.value);
+
+  final double value;
+
+  @override
+  double nextDouble() => value;
+
+  @override
+  int nextInt(int max) => (value * max).floor();
+
+  @override
+  bool nextBool() => value >= 0.5;
 }
 
 class HeldResponse {

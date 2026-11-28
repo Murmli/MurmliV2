@@ -184,6 +184,14 @@ class SyncCore {
 
   Future<int> pendingCommandCount() => _local.commandCount();
 
+  /// The poll interval the server last sent, `null` before its first
+  /// readable response.
+  Future<Duration?> pollInterval() async =>
+      switch ((await _local.readState()).pollIntervalSeconds) {
+        final seconds? => Duration(seconds: seconds),
+        null => null,
+      };
+
   Stream<List<SyncNotice>> watchNotices() =>
       (_database.select(_database.syncNotices)
             ..orderBy([(notice) => OrderingTerm.asc(notice.id)]))
