@@ -1,6 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'package:app/app/core/authentication/account.dart';
+import 'package:app/app/core/theme/app_spacing.dart';
+import 'package:app/app/features/home/home_page.dart';
+import 'package:app/app/features/home/home_tab.dart';
 import 'package:app/app/features/home/tabs/shopping_list_page.dart';
 import 'package:app/app/features/home/widgets/home_header.dart';
 import 'package:app/app/features/shopping_list/providers/first_shopping_list_provider.dart';
@@ -47,6 +51,37 @@ void main() {
         expect(find.byTooltip(home.settingsTooltip), findsOneWidget);
       },
     );
+
+    testWidgets('every tab shows the settings button at the far right', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      (await pumpApp(
+        tester,
+        signedInAccount: const Account(id: 'account'),
+      )).read(firstShoppingListProvider);
+      final appTranslations = AppLocale.de.buildSync();
+      final screenWidth = tester.getSize(find.byType(HomePage)).width;
+
+      for (final tab in HomeTab.values) {
+        await tester.tap(find.bySemanticsLabel(tab.label(appTranslations)));
+        await tester.pumpAndSettle();
+
+        expect(
+          tester
+              .getTopRight(
+                find.ancestor(
+                  of: find.byTooltip(home.settingsTooltip),
+                  matching: find.byType(IconButton),
+                ),
+              )
+              .dx,
+          screenWidth - AppSpacing.space8,
+          reason: tab.name,
+        );
+      }
+      semantics.dispose();
+    });
 
     testWidgets(
       'activating a navigation bar tab through the screen reader shows that tab',

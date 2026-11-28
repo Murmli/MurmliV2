@@ -13,6 +13,7 @@ class ShoppingListOverview with ShoppingListOverviewMappable {
     required this.totalCount,
     required this.groups,
     required this.checkedItems,
+    required this.leavingCheckedItemIds,
   });
 
   final String listId;
@@ -20,4 +21,5 @@ class ShoppingListOverview with ShoppingListOverviewMappable {
   final int totalCount;
   final List<ShoppingListGroup> groups;
   final List<ShoppingListItem> checkedItems;
+  final Set<String> leavingCheckedItemIds;
 }

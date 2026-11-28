@@ -64,12 +64,19 @@ class ShoppingListPage extends ConsumerWidget {
             SliverToBoxAdapter(
               child: ShoppingListPendingEntries(texts: pendingEntries),
             ),
-          if (overview.groups.isEmpty && hasItems)
+          if (overview.checkedCount == overview.totalCount && hasItems)
             const SliverToBoxAdapter(child: ShoppingListAllCheckedBanner()),
           for (final group in overview.groups)
-            ShoppingListGroupSliver(group: group),
+            ShoppingListGroupSliver(
+              key: ValueKey(group.category),
+              group: group,
+            ),
           if (overview.checkedItems.isNotEmpty)
-            ShoppingListCheckedSectionSliver(items: overview.checkedItems),
+            ShoppingListCheckedSectionSliver(
+              items: overview.checkedItems,
+              count: overview.checkedCount,
+              leavingItemIds: overview.leavingCheckedItemIds,
+            ),
         ],
         SliverPadding(
           padding: EdgeInsetsDirectional.only(
