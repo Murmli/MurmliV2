@@ -1,23 +1,34 @@
 import 'dart:async';
 
 import 'package:flutter/services.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../../i18n/strings.g.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../models/recipe_share.dart';
 import '../models/shopping_list_item.dart';
+import '../providers/checked_section_expanded_provider.dart';
+import '../providers/leaving_shopping_list_items_provider.dart';
+import '../providers/recently_toggled_item_provider.dart';
 import '../providers/shopping_list_repository.dart';
 import '../quantity_label.dart';
 import 'market_category_tile.dart';
 import 'shopping_list_item_menu.dart';
 
-class ShoppingListItemRow extends ConsumerWidget {
-  const ShoppingListItemRow({required this.item, super.key});
+class ShoppingListItemRow extends HookConsumerWidget {
+  ShoppingListItemRow({
+    required this.item,
+    required this.showDivider,
+    required this.isLeaving,
+  }) : super(key: ValueKey((item.id, isLeaving)));
 
   final ShoppingListItem item;
+  final bool showDivider;
+  final bool isLeaving;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -28,8 +39,52 @@ class ShoppingListItemRow extends ConsumerWidget {
       context.t,
       TranslationProvider.of(context).locale.languageCode,
     );
+    final duration = AppMotion.short(context);
+    final appears = useMemoized(
+      () => !isLeaving && ref.read(recentlyToggledItemProvider) == item.id,
+    );
+    final visibility = useAnimationController(
+      duration: duration,
+      initialValue: appears ? 0 : 1,
+    );
+    final curvedVisibility = useMemoized(
+      () => CurvedAnimation(
+        parent: visibility,
+        curve: Curves.easeOut,
+        reverseCurve: Curves.easeIn,
+      ),
+      [visibility],
+    );
+    useEffect(() => curvedVisibility.dispose, [curvedVisibility]);
+    useEffect(() {
+      if (isLeaving) {
+        final leavingItems = ref.read(
+          leavingShoppingListItemsProvider.notifier,
+        );
+        unawaited(
+          visibility.reverse().then((_) => leavingItems.remove(item.id)),
+        );
+      } else if (appears) {
+        // Providers must not change while widgets build.
+        unawaited(
+          Future.microtask(
+            ref.read(recentlyToggledItemProvider.notifier).clear,
+          ),
+        );
+        unawaited(visibility.forward());
+      }
+      return null;
+    }, const []);
+
     void toggleChecked() {
       unawaited(HapticFeedback.selectionClick());
+      if (duration > Duration.zero) {
+        ref.read(leavingShoppingListItemsProvider.notifier).add(item);
+        // A collapsed checked section would replay the appearance on expanding.
+        if (item.checked || ref.read(checkedSectionExpandedProvider)) {
+          ref.read(recentlyToggledItemProvider.notifier).mark(item.id);
+        }
+      }
       unawaited(
         ref
             .read(shoppingListRepositoryProvider)
@@ -37,107 +92,130 @@ class ShoppingListItemRow extends ConsumerWidget {
       );
     }
 
-    return Dismissible(
-      key: ValueKey('dismiss-${item.id}'),
-      direction: DismissDirection.endToStart,
-      background: const _DeleteBackground(),
-      confirmDismiss: (_) async {
-        await ref.read(shoppingListRepositoryProvider).deleteItem(item.id);
-        return true;
-      },
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 48),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: 8,
-            children: [
-              Semantics(
-                container: true,
-                button: true,
-                excludeSemantics: true,
-                label: item.checked
-                    ? context.t.shoppingList.uncheckItem(name: item.name)
-                    : context.t.shoppingList.checkItem(name: item.name),
-                onTap: toggleChecked,
-                child: SizedBox(
-                  width: 48,
-                  child: Material(
-                    type: MaterialType.transparency,
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: toggleChecked,
-                      child: Center(
-                        child: item.checked
-                            ? const _CheckedTile()
-                            : MarketCategoryTile(category: item.category),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: MergeSemantics(
-                  child: Semantics(
-                    button: true,
-                    onTapHint: context.t.shoppingList.item.openMenu,
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: InkWell(
-                        onTap: () => unawaited(
-                          showShoppingListItemMenu(context, ref, item),
-                        ),
-                        child: Row(
-                          spacing: 10,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    item.name,
-                                    style: textTheme.bodyMedium?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: item.checked
-                                          ? colors.inkTertiary
-                                          : null,
-                                      decoration: item.checked
-                                          ? TextDecoration.lineThrough
-                                          : null,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  if (!item.checked &&
-                                      item.recipeShares.isNotEmpty)
-                                    _RecipeLine(
-                                      recipeShares: item.recipeShares,
-                                    ),
-                                ],
+    final row = SizeTransition(
+      sizeFactor: curvedVisibility,
+      alignment: AlignmentDirectional.topCenter,
+      child: FadeTransition(
+        opacity: curvedVisibility,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (showDivider) const Divider(),
+            Dismissible(
+              key: ValueKey('dismiss-${item.id}'),
+              direction: DismissDirection.endToStart,
+              background: const _DeleteBackground(),
+              confirmDismiss: (_) async {
+                await ref
+                    .read(shoppingListRepositoryProvider)
+                    .deleteItem(item.id);
+                return true;
+              },
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    spacing: 8,
+                    children: [
+                      Semantics(
+                        container: true,
+                        button: true,
+                        excludeSemantics: true,
+                        label: item.checked
+                            ? context.t.shoppingList.uncheckItem(
+                                name: item.name,
+                              )
+                            : context.t.shoppingList.checkItem(name: item.name),
+                        onTap: toggleChecked,
+                        child: SizedBox(
+                          width: 48,
+                          child: Material(
+                            type: MaterialType.transparency,
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: toggleChecked,
+                              child: Center(
+                                child: item.checked
+                                    ? const _CheckedTile()
+                                    : MarketCategoryTile(
+                                        category: item.category,
+                                      ),
                               ),
                             ),
-                            if (quantity.isNotEmpty)
-                              Text(
-                                quantity,
-                                style: textTheme.labelLarge?.copyWith(
-                                  color: item.checked
-                                      ? colors.inkTertiary
-                                      : colors.inkSecondary,
-                                ),
-                              ),
-                          ],
+                          ),
                         ),
                       ),
-                    ),
+                      Expanded(
+                        child: MergeSemantics(
+                          child: Semantics(
+                            button: true,
+                            onTapHint: context.t.shoppingList.item.openMenu,
+                            child: Material(
+                              type: MaterialType.transparency,
+                              child: InkWell(
+                                onTap: () => unawaited(
+                                  showShoppingListItemMenu(context, ref, item),
+                                ),
+                                child: Row(
+                                  spacing: 10,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            item.name,
+                                            style: textTheme.bodyMedium
+                                                ?.copyWith(
+                                                  fontWeight: FontWeight.w600,
+                                                  color: item.checked
+                                                      ? colors.inkTertiary
+                                                      : null,
+                                                  decoration: item.checked
+                                                      ? TextDecoration
+                                                            .lineThrough
+                                                      : null,
+                                                ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (!item.checked &&
+                                              item.recipeShares.isNotEmpty)
+                                            _RecipeLine(
+                                              recipeShares: item.recipeShares,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (quantity.isNotEmpty)
+                                      Text(
+                                        quantity,
+                                        style: textTheme.labelLarge?.copyWith(
+                                          color: item.checked
+                                              ? colors.inkTertiary
+                                              : colors.inkSecondary,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
+    return isLeaving ? IgnorePointer(child: ExcludeSemantics(child: row)) : row;
   }
 }
 

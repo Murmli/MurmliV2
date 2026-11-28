@@ -46,7 +46,7 @@ class ShoppingListGroupSliver extends StatelessWidget {
                     ),
                   ),
                 ),
-                Text('${group.items.length}', style: countStyle),
+                Text('${group.count}', style: countStyle),
               ],
             ),
           ),
@@ -70,10 +70,12 @@ class ShoppingListGroupSliver extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  for (final (index, item) in group.items.indexed) ...[
-                    if (index > 0) const Divider(),
-                    ShoppingListItemRow(item: item, key: ValueKey(item.id)),
-                  ],
+                  for (final (index, item) in group.items.indexed)
+                    ShoppingListItemRow(
+                      item: item,
+                      showDivider: index > 0,
+                      isLeaving: group.leavingItemIds.contains(item.id),
+                    ),
                 ],
               ),
             ),

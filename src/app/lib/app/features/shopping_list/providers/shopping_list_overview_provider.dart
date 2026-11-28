@@ -5,6 +5,7 @@ import '../models/shopping_list.dart';
 import '../models/shopping_list_group.dart';
 import '../models/shopping_list_item.dart';
 import '../models/shopping_list_overview.dart';
+import 'leaving_shopping_list_items_provider.dart';
 import 'shopping_list_repository.dart';
 
 part 'shopping_list_overview_provider.g.dart';
@@ -24,20 +25,42 @@ ShoppingListOverview? shoppingListOverview(Ref ref) {
   if (list == null || categoryOrder == null) {
     return null;
   }
-  final openItems = list.items.where((item) => !item.checked).toList();
-  final checkedItems = list.items.where((item) => item.checked).toList()
-    ..sort(_lastCheckedFirst);
+  final leavingItems = ref.watch(leavingShoppingListItemsProvider);
+  final openEntries = <ShoppingListItem>[];
+  final checkedEntries = <ShoppingListItem>[];
+  final leavingOpenItemIds = <String>{};
+  final leavingCheckedItemIds = <String>{};
+  for (final item in list.items) {
+    (item.checked ? checkedEntries : openEntries).add(item);
+    // Until the stored toggle arrives, the item itself still holds its old place.
+    if (leavingItems[item.id] case final snapshot?
+        when snapshot.checked != item.checked) {
+      (snapshot.checked ? checkedEntries : openEntries).add(snapshot);
+      (snapshot.checked ? leavingCheckedItemIds : leavingOpenItemIds).add(
+        item.id,
+      );
+    }
+  }
+  checkedEntries.sort(_lastCheckedFirst);
   return ShoppingListOverview(
     listId: list.id,
-    checkedCount: checkedItems.length,
+    checkedCount: list.items.where((item) => item.checked).length,
     totalCount: list.items.length,
     groups: [
       for (final category in categoryOrder)
-        if (openItems.where((item) => item.category == category).toList()
+        if (openEntries.where((item) => item.category == category).toList()
             case final items when items.isNotEmpty)
-          ShoppingListGroup(category: category, items: items),
+          ShoppingListGroup(
+            category: category,
+            items: items,
+            leavingItemIds: {
+              for (final item in items)
+                if (leavingOpenItemIds.contains(item.id)) item.id,
+            },
+          ),
     ],
-    checkedItems: checkedItems,
+    checkedItems: checkedEntries,
+    leavingCheckedItemIds: leavingCheckedItemIds,
   );
 }
 

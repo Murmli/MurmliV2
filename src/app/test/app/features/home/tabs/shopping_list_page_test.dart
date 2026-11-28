@@ -134,6 +134,11 @@ void main() {
     matching: find.text(itemName),
   );
 
+  Finder inOpenGroups(String itemName) => find.descendant(
+    of: find.byType(ShoppingListGroupSliver),
+    matching: find.text(itemName),
+  );
+
   List<ShoppingListItem> storedItems(ProviderContainer container) =>
       container.read(currentShoppingListProvider).requireValue!.items;
 
@@ -431,6 +436,122 @@ void main() {
         );
         expect(find.byType(ShoppingListCheckedSectionSliver), findsNothing);
         expect(storedItem(container, itemId).checked, isFalse);
+      },
+    );
+
+    testWidgets(
+      'tapping the tile of an open item stores it as checked and shows it in both sections until the old row has disappeared',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        final itemId = await addItem(
+          tester,
+          container,
+          'Butter',
+          MarketCategory.dairy,
+        );
+
+        await tester.tap(
+          find.bySemanticsLabel(shoppingList.checkItem(name: 'Butter')),
+        );
+        await tester.pump();
+
+        expect(storedItem(container, itemId).checked, isTrue);
+
+        await tester.pump(const Duration(milliseconds: 50));
+
+        expect(inOpenGroups('Butter'), findsOneWidget);
+        expect(inCheckedSection('Butter'), findsOneWidget);
+
+        await tester.pumpAndSettle();
+
+        expect(inOpenGroups('Butter'), findsNothing);
+        expect(inCheckedSection('Butter'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'tapping the tile of a checked item stores it as open and shows it in both sections until the old row has disappeared',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        final itemId = await addItem(
+          tester,
+          container,
+          'Butter',
+          MarketCategory.dairy,
+        );
+        await check(tester, container, itemId);
+
+        await tester.tap(
+          find.bySemanticsLabel(shoppingList.uncheckItem(name: 'Butter')),
+        );
+        await tester.pump();
+
+        expect(storedItem(container, itemId).checked, isFalse);
+
+        await tester.pump(const Duration(milliseconds: 50));
+
+        expect(inOpenGroups('Butter'), findsOneWidget);
+        expect(inCheckedSection('Butter'), findsOneWidget);
+
+        await tester.pumpAndSettle();
+
+        expect(inOpenGroups('Butter'), findsOneWidget);
+        expect(inCheckedSection('Butter'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'while the old row of a checked item disappears the counts include only the stored items',
+      (tester) async {
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        await addItem(tester, container, 'Butter', MarketCategory.dairy);
+        await addItem(tester, container, 'Käse', MarketCategory.dairy);
+
+        await tester.tap(
+          find.bySemanticsLabel(shoppingList.checkItem(name: 'Butter')),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+
+        expect(inEntryField(find.text('1 / 2')), findsOneWidget);
+        expect(
+          find.text(shoppingList.checkedSection(count: 1)),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(ShoppingListGroupSliver),
+            matching: find.text('1'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'with reduced motion tapping the tile moves the item to the checked section at once',
+      (tester) async {
+        tester.platformDispatcher.accessibilityFeaturesTestValue =
+            const FakeAccessibilityFeatures(disableAnimations: true);
+        addTearDown(
+          tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+        );
+        final container = await openShoppingListTab(tester, debugBuild: false);
+        final itemId = await addItem(
+          tester,
+          container,
+          'Butter',
+          MarketCategory.dairy,
+        );
+
+        await tester.tap(
+          find.bySemanticsLabel(shoppingList.checkItem(name: 'Butter')),
+        );
+        await tester.pump();
+
+        expect(storedItem(container, itemId).checked, isTrue);
+        expect(inOpenGroups('Butter'), findsNothing);
+        expect(inCheckedSection('Butter'), findsOneWidget);
       },
     );
 

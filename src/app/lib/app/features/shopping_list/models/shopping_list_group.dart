@@ -7,8 +7,15 @@ part 'shopping_list_group.mapper.dart';
 
 @MappableClass()
 class ShoppingListGroup with ShoppingListGroupMappable {
-  const ShoppingListGroup({required this.category, required this.items});
+  const ShoppingListGroup({
+    required this.category,
+    required this.items,
+    required this.leavingItemIds,
+  });
 
   final MarketCategory category;
   final List<ShoppingListItem> items;
+  final Set<String> leavingItemIds;
+
+  int get count => items.length - leavingItemIds.length;
 }

@@ -14,11 +14,18 @@ import 'shopping_list_item_row.dart';
 import 'shopping_list_pinned_header.dart';
 
 class ShoppingListCheckedSectionSliver extends ConsumerWidget {
-  const ShoppingListCheckedSectionSliver({required this.items, super.key});
+  const ShoppingListCheckedSectionSliver({
+    required this.items,
+    required this.count,
+    required this.leavingItemIds,
+    super.key,
+  });
 
   static const _minimumHeaderHeight = 40.0;
 
   final List<ShoppingListItem> items;
+  final int count;
+  final Set<String> leavingItemIds;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -55,7 +62,7 @@ class ShoppingListCheckedSectionSliver extends ConsumerWidget {
                     ),
                   ),
                   Text(
-                    context.t.shoppingList.checkedSection(count: items.length),
+                    context.t.shoppingList.checkedSection(count: count),
                     style: titleStyle,
                   ),
                 ],
@@ -82,13 +89,12 @@ class ShoppingListCheckedSectionSliver extends ConsumerWidget {
                     ),
                     child: Column(
                       children: [
-                        for (final (index, item) in items.indexed) ...[
-                          if (index > 0) const Divider(),
+                        for (final (index, item) in items.indexed)
                           ShoppingListItemRow(
                             item: item,
-                            key: ValueKey(item.id),
+                            showDivider: index > 0,
+                            isLeaving: leavingItemIds.contains(item.id),
                           ),
-                        ],
                       ],
                     ),
                   ),
