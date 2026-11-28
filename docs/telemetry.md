@@ -70,7 +70,7 @@ requests
 
 | Id | Event | Level | Properties | Wann |
 | --- | --- | --- | --- | --- |
-| 3000 | `SyncCommandRejected` | Information | `DeviceId`, `CommandId`, `DataType`, `CommandKind`, `ScopeId`, `RecordId`, `Reason` | je Ergebnis `rejected` eines Kommandos eines Geräts; ein gespeichertes Kommando nicht erneut als `alreadyProcessed`, ein ungültiges ohne lesbare Pflichtfelder (nicht gespeichert, [sync.md](sync.md#ergebnisse)) bei jeder Wiederholung erneut; Ids nur, soweit lesbar, `DataType` und `CommandKind` nur, wenn der Server sie kennt |
+| 3000 | `SyncCommandRejected` | Information | `DeviceId`, `CommandId`, `DataType`, `CommandKind`, `ScopeId`, `RecordId`, `Reason` | je Ergebnis `rejected` eines Kommandos eines Geräts; ein gespeichertes Kommando nicht erneut als `alreadyProcessed`, eines, das der Server nicht speichert (ohne lesbare Pflichtfelder oder mit unbekannter Art oder unbekanntem Datentyp, [sync.md](sync.md#ergebnisse)), bei jeder Wiederholung erneut; Ids nur, soweit lesbar, `DataType` und `CommandKind` nur, wenn der Server sie kennt |
 | 3001 | `SyncScopeRemoved` | Information | `DeviceId`, `ScopeId`, `RemovedByOwnAccount` | je Bereich in `removedScopes` einer Antwort, höchstens 100 je Antwort (`murmli.sync.scopes.removed` zählt alle) |
 | 3002 | `SyncCommandFailed` | Error mit Exception | `DeviceId`, `CommandId`, `DataType`, `CommandKind` | ein einzelnes Kommando scheitert; beim Server als Schreiber ([sync.md](sync.md#server-als-schreiber)) ohne `DeviceId`; `DataType` und `CommandKind` nur, wenn der Server sie kennt |
 | 3003 | `SyncDatabaseUnavailable` | Warning mit Exception | `Phase`: `bootstrap`, `commands` oder `changes` | eine Störung der Datenbank beendet die Anfrage mit 503 |
