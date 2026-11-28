@@ -251,7 +251,7 @@ Ein Gerät behandelt einen unbekannten Grund wie `invalid` und eine unbekannte U
 
 - Der Server verarbeitet jedes Kommando für sich, in der Reihenfolge der Anfrage. Die Anfrage als Ganzes ist nicht atomar: Verarbeitete Kommandos bleiben verarbeitet, auch wenn die Anfrage danach scheitert, und kommen beim erneuten Senden als `alreadyProcessed` zurück.
 - `alreadyProcessed` trägt immer das gespeicherte Ergebnis, auch wenn der Server eine Verarbeitung nach einem unklaren Commit wiederholt oder dieselbe Anfrage zweimal gleichzeitig ankommt. Ein spät erneut gesendetes Kommando, das schon verarbeitet ist, wird so nie `tooOld`.
-- Fehlt eines der Felder `id`, `kind`, `scopeId`, `dataType`, `recordId` und `time` oder lässt es sich nicht lesen (IDs keine UUID v4, `time` keine ganze Zahl im erlaubten Wertebereich), speichert der Server das Kommando nicht; es bekommt bei jeder Wiederholung wieder `rejected` mit `invalid`.
+- Fehlt eines der Felder `id`, `kind`, `scopeId`, `dataType`, `recordId` und `time`, lässt es sich nicht lesen (IDs keine UUID v4, `time` keine ganze Zahl im erlaubten Wertebereich) oder kennt der Server Art oder Datentyp nicht, speichert er das Kommando nicht; es bekommt bei jeder Wiederholung wieder `rejected` mit `invalid`.
 - Nach `failed` verarbeitet der Server ein erneut gesendetes Kommando neu.
 - Zwei Konten können dieselbe Kommando-ID nutzen, ohne sich zu stören.
 
