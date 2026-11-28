@@ -11,16 +11,16 @@ internal sealed class SyncLoadAccount
 
     private string token;
 
-    private SyncLoadAccount(SyncLoadDevice writer, string token, int maxCommandsPerRequest)
+    private SyncLoadAccount(SyncLoadDevice writer, string token, int maximumCommandsPerRequest)
     {
         Writer = writer;
         this.token = token;
-        MaxCommandsPerRequest = maxCommandsPerRequest;
+        MaximumCommandsPerRequest = maximumCommandsPerRequest;
     }
 
     public SyncLoadDevice Writer { get; }
 
-    public int MaxCommandsPerRequest { get; }
+    public int MaximumCommandsPerRequest { get; }
 
     public IReadOnlyList<Guid> ListIds => listIds;
 
@@ -60,7 +60,7 @@ internal sealed class SyncLoadAccount
 
     public IReadOnlyList<JsonObject>? TakeItemCreates(int count, SyncLoadContent content)
     {
-        if (listIds.Count * SyncLoadSettings.MaxItemsPerList - itemIds.Sum(items => items.Count) < count)
+        if (listIds.Count * SyncLoadSettings.MaximumItemsPerList - itemIds.Sum(items => items.Count) < count)
         {
             return null;
         }
@@ -69,7 +69,7 @@ internal sealed class SyncLoadAccount
         var commands = new List<JsonObject>(count);
         for (var listIndex = 0; commands.Count < count; listIndex++)
         {
-            while (itemIds[listIndex].Count < SyncLoadSettings.MaxItemsPerList && commands.Count < count)
+            while (itemIds[listIndex].Count < SyncLoadSettings.MaximumItemsPerList && commands.Count < count)
             {
                 commands.Add(CreateItem(listIndex, content, now));
             }
@@ -94,7 +94,7 @@ internal sealed class SyncLoadAccount
         var next = 0;
         while (next < commands.Count)
         {
-            var batch = commands.Skip(next).Take(MaxCommandsPerRequest).ToList();
+            var batch = commands.Skip(next).Take(MaximumCommandsPerRequest).ToList();
             var exchange = await Writer.SyncAsync(token, batch);
             var response = exchange.ReadResponse();
             Assert.NotEmpty(response.Results);

@@ -188,8 +188,8 @@ public class SyncLoadTests(SyncLoadEnvironment environment)
     {
         await environment.StartAsync();
         var settings = environment.Settings;
-        var account = await SyncLoadAccount.CreateAsync(environment.HttpClient, SyncLoadSettings.MaxLists);
-        foreach (var commandsPerRequest in new[] { 1, 50, account.MaxCommandsPerRequest })
+        var account = await SyncLoadAccount.CreateAsync(environment.HttpClient, SyncLoadSettings.MaximumLists);
+        foreach (var commandsPerRequest in new[] { 1, 50, account.MaximumCommandsPerRequest })
         {
             var content = await SyncLoadContent.CreateAsync(settings.Seed);
             var requests = new SyncLoadRequests();
@@ -222,7 +222,7 @@ public class SyncLoadTests(SyncLoadEnvironment environment)
                     ("cpuMillisecondsPerCommand", window.CpuMilliseconds / commands),
                 ]
             );
-            account = await SyncLoadAccount.CreateAsync(environment.HttpClient, SyncLoadSettings.MaxLists);
+            account = await SyncLoadAccount.CreateAsync(environment.HttpClient, SyncLoadSettings.MaximumLists);
         }
 
         var queueContent = await SyncLoadContent.CreateAsync(settings.Seed);
