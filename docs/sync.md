@@ -2,7 +2,7 @@
 
 Vertrag zwischen App und API für den Abgleich ([#122](https://github.com/Murmli/MurmliV2/issues/122)), Aufbau und Begriffe in [#121](https://github.com/Murmli/MurmliV2/issues/121). Ein einziger Endpunkt nimmt die wartenden Kommandos eines Geräts an und liefert in derselben Antwort, was sich seit dessen Token geändert hat; ein neuer Datentyp braucht keinen neuen Endpunkt. Der Server entscheidet: Das Gerät wendet eigene Änderungen sofort an, Konfliktregeln gibt es nur am Server. Er liefert den aktuellen Stand geänderter Datensätze statt Änderungsfolgen, ein vollständiger Stand repariert jede Abweichung. Jede Anfrage darf beliebig oft wiederholt werden, ohne dass etwas doppelt wirkt, und kein Kommando hält die Warteschlange auf Dauer auf.
 
-Die App hat den Kern des Abgleichs aus [#124](https://github.com/Murmli/MurmliV2/issues/124) ([Kern der App](#kern-der-app)). Entschieden, noch nicht gebaut: Anstöße und Lebenszyklus der Runden ([#126](https://github.com/Murmli/MurmliV2/issues/126)), die Live-Verbindung ([#127](https://github.com/Murmli/MurmliV2/issues/127)), die Simulation ([#136](https://github.com/Murmli/MurmliV2/issues/136)), die Telemetrie der App ([#139](https://github.com/Murmli/MurmliV2/issues/139)), die Anbindung der Einkaufsliste ([#142](https://github.com/Murmli/MurmliV2/issues/142)) und die Anzeige der Hinweise ([#148](https://github.com/Murmli/MurmliV2/issues/148)). Jeder Punkt entfällt mit seinem Issue.
+Die App hat den Kern des Abgleichs aus [#124](https://github.com/Murmli/MurmliV2/issues/124) ([Kern der App](#kern-der-app)) und die Steuerung der Runden aus [#126](https://github.com/Murmli/MurmliV2/issues/126) ([Steuerung der Runden](#steuerung-der-runden)). Entschieden, noch nicht gebaut: die Live-Verbindung ([#127](https://github.com/Murmli/MurmliV2/issues/127)), die Simulation ([#136](https://github.com/Murmli/MurmliV2/issues/136)), die Telemetrie der App ([#139](https://github.com/Murmli/MurmliV2/issues/139)), die Anbindung der Einkaufsliste ([#142](https://github.com/Murmli/MurmliV2/issues/142)) und die Anzeige der Hinweise ([#148](https://github.com/Murmli/MurmliV2/issues/148)). Jeder Punkt entfällt mit seinem Issue.
 
 | Begriff | Im Vertrag | Bedeutung |
 | --- | --- | --- |
@@ -67,7 +67,7 @@ Was jedes neue Konto beim ersten Abgleich bekommen soll, etwa die erste Einkaufs
 
 ### Kern der App
 
-Der Kern der App liegt in `src/app/lib/app/core/sync/` und kennt wie der des Servers keine Datentypen. Einstieg ist `SyncCore` über `syncCoreProvider`: `write` für Änderungen, `runRound` für eine Runde, dazu `watchFirstSyncCompleted`, `watchNotices`, `dismissNotice`, `watchMembers`, `watchHasPendingCommands`, `pendingCommandCount`, `discardToken` und der Strom `commandsQueued` nach jedem Schreiben mit Kommando. Wann Runden laufen, entscheidet erst [#126](https://github.com/Murmli/MurmliV2/issues/126); bis dahin ruft niemand `runRound` auf. `main.dart` liest `syncCoreProvider` beim Start direkt nach `restore()` der Anmeldung, damit die Bindung an das Konto ([Konto der App](#konto-der-app)) von Anfang an läuft; vorher läse er „kein Konto“ und löschte die Daten eines angemeldeten Nutzers. Solange kein Datentyp eingetragen ist ([#142](https://github.com/Murmli/MurmliV2/issues/142)), gleicht der Kern nur seine eigenen Tabellen ab, und die Einkaufsliste schreibt noch an ihm vorbei. Die Daten liegen in der lokalen Datenbank der App ([app.md](app.md#lokale-datenbank)), Zeiten kommen aus `appClockProvider`, IDs aus `newUuid()`.
+Der Kern der App liegt in `src/app/lib/app/core/sync/` und kennt wie der des Servers keine Datentypen. Einstieg ist `SyncCore` über `syncCoreProvider`: `write` für Änderungen, `runRound` für eine Runde, dazu `watchFirstSyncCompleted`, `watchNotices`, `dismissNotice`, `watchMembers`, `watchHasPendingCommands`, `pendingCommandCount`, `pollInterval`, `discardToken` und der Strom `commandsQueued` nach jedem Schreiben mit Kommando. `runRound` ruft nur `SyncScheduler` auf ([Steuerung der Runden](#steuerung-der-runden)). `main.dart` liest `syncCoreProvider` und danach `syncSchedulerProvider` beim Start direkt nach `restore()` der Anmeldung, damit die Bindung an das Konto ([Konto der App](#konto-der-app)) und die Runden von Anfang an laufen; vorher läse der Kern „kein Konto“ und löschte die Daten eines angemeldeten Nutzers. Solange kein Datentyp eingetragen ist ([#142](https://github.com/Murmli/MurmliV2/issues/142)), gleicht der Kern nur seine eigenen Tabellen ab, und die Einkaufsliste schreibt noch an ihm vorbei. Die Daten liegen in der lokalen Datenbank der App ([app.md](app.md#lokale-datenbank)), Zeiten kommen aus `appClockProvider`, IDs aus `newUuid()`.
 
 Anfrage und Antwort sind eigene Modelle mit dart_mappable in `src/app/lib/app/core/sync/protocol/`, ohne erzeugten API-Client. dart_mappable wandelt unpassende einfache Werte still um (etwa `"yes"` zu `false`, `42` zu `"42"`), deshalb trägt jedes Feld des Rahmens den Hook `StrictJsonType`; ein falscher Typ macht die Antwort unlesbar. `fields` eines Datensatzes bleibt untypisiert, damit nur dieser Datensatz übersprungen wird. Geschlossene Mengen (`status` samt `accepted`, `state` eines Mitglieds samt `former`) sind Enums ohne Rückfall, ein unbekannter Wert macht die Antwort unlesbar; ein unbekannter `reason` wird zu `invalid`, `role` bleibt Text. Die Vorgaben liest `SyncServerSettings` von Hand, jede für sich.
 
@@ -91,7 +91,7 @@ Abgeglichene Tabellen der App ändert nur der Kern: beim Einarbeiten von Antwort
 
 Eine Runde liest Zustand und Kommandos in einer Transaktion und nimmt Kommandos der Reihe nach, solange es höchstens `maxCommandsPerRequest` sind und der UTF-8-Body höchstens `maxRequestBytes` groß ist; ohne Vorgabe des Servers gelten 500 und 1.000.000 Byte. Vorgaben aus `settings` und aus dem Problem 413 `request-too-large` übernimmt der Kern einzeln; fehlt eine, ist sie keine ganze Zahl oder unplausibel (`maxCommandsPerRequest` oder `pollIntervalSeconds` unter 1, `maxRequestBytes` unter 65.536), behält er den bisherigen Wert. Passt schon das erste Kommando allein nicht, sortiert sie es aus und plant neu. Die Antwort prüft sie auf ihren Rahmen ([Antwort](#antwort)) und arbeitet sie in einer Transaktion ein; jeden Datensatz schreibt `writeServerRecord` in einer verschachtelten Transaktion (Savepoint); wirft der Datentyp dabei eine `Exception` (nicht nur die `FormatException` eines unlesbaren Datensatzes), rollt der Kern nur diesen Savepoint zurück, überspringt den Datensatz, loggt Datentyp und ID (ohne Feldwerte) und meldet ihn an Sentry, der Rest der Antwort samt Token gilt. Scheitert das Einarbeiten dreimal nacheinander, verwirft der Kern sein Token und meldet es an Sentry. Andere Status als 200 liest der Kern selbst, nur eine 401 lässt er als `DioException` durch die Interceptors von `apiClientProvider` laufen, damit `AccessTokenInterceptor` das JWT erneuert und den Request einmal wiederholt; scheitert auch die Wiederholung, endet die Runde mit `failed`, ohne Fehlerdialog (`unreportedFailureKey`). Aufrufe von `runRound` während einer laufenden Runde teilen sich genau eine Folgerunde, Runden überlappen nie.
 
-Ergebnis ist ein `SyncRoundOutcome` für die Anstöße aus [#126](https://github.com/Murmli/MurmliV2/issues/126):
+Ergebnis ist ein `SyncRoundOutcome` für die [Steuerung der Runden](#steuerung-der-runden):
 
 | Ergebnis | Wann |
 | --- | --- |
@@ -112,6 +112,37 @@ Ein Kommando wird aussortiert, wenn es fünfmal `failed` bekommen hat und das er
 
 `syncCoreProvider` bindet die lokalen Daten an `signedInAccountProvider`. Ein angemeldetes Konto übernimmt die Daten, die schon ihm gehören; gehören sie einem anderen Konto oder keinem, obwohl Daten des Abgleichs da sind (Token, Kommandos, Bereiche oder Hinweise), löscht der Kern sie vorher. Tabellen, die noch nicht abgeglichen werden, zählen dafür nicht: Die Einkaufsliste aus der Zeit vor dem Abgleich bleibt beim ersten Start mit dem Kern erhalten. Abmelden (auch nach abgelaufener Sitzung), der Start ohne Anmeldung, ein Wechsel des Kontos und 410 `account-gone` löschen alle lokalen Daten: jede Tabelle der lokalen Datenbank (`allTables`, auch die noch nicht abgeglichenen wie die Einkaufsliste) samt Warteschlange, Token, Hinweisen, Geräte-ID und den Datensätzen aller Datentypen (ein angemeldetes Konto bekommt eine neue Geräte-ID); einen zweiten Weg zum Löschen gibt es nicht. Von `sync_states` bleibt nur `localStateGeneration`, um eins erhöht, und die Grenzen im Speicher fallen zurück. Der Kern wartet dafür nicht auf eine laufende Runde: Deren Antwort passt danach nicht mehr zu Token und Zähler und wird verworfen. Umgekehrt wartet eine Runde vor dem Lesen von Zustand und Kommandos auf einen begonnenen Wechsel des Kontos, damit sie nie die Warteschlange des vorigen Kontos unter dem neuen sendet. Zusätzlich merkt sich der Kern beim Aufruf von `adoptAccount` das erwartete Konto im Speicher: Solange das gespeicherte Konto ein anderes ist (etwa weil das Löschen beim Wechsel gescheitert ist), endet jede Runde mit `notSignedIn` und `write` wirft `SyncNotReadyException`.
 
+#### Steuerung der Runden
+
+`SyncScheduler` (`syncSchedulerProvider`, `src/app/lib/app/core/sync/sync_scheduler.dart`) ist der einzige Aufrufer von `runRound`. Eine Runde startet:
+
+| Auslöser | Wann |
+| --- | --- |
+| Anmeldung | nach der Anmeldung und beim Start der App mit bestehender Anmeldung, sobald `signedInAccountProvider` das Konto kennt. Bei einer neuen Anmeldung setzt er es erst nach dem Abruf von `/v1/users/me`, der das Konto beim ersten Mal anlegt; käme die Runde vorher, sähe die Antwort aus wie die für ein gelöschtes Konto. Die Runde wartet außerdem auf den begonnenen Wechsel des Kontos im Kern |
+| Vordergrund | beim Wechsel in den Vordergrund (`appForegroundProvider`, [app.md](app.md#lebenszyklus-und-netz)) |
+| Schreiben | 300 ms nach dem letzten Ereignis von `commandsQueued`; jedes weitere Schreiben in dieser Zeit verschiebt die Runde, damit schnelle Aktionen in eine Anfrage gehen |
+| Netz | wenn `networkAvailableProvider` von „kein Netz“ zu „Netz“ wechselt ([app.md](app.md#lebenszyklus-und-netz)) |
+| Abruf | `pollIntervalSeconds` aus den gespeicherten Vorgaben nach einer abgeschlossenen Runde, ohne Vorgabe nach 60 s, nur im Vordergrund |
+| Anforderung | `syncNow` für andere Teile der App, etwa nach einem Beitritt ([#143](https://github.com/Murmli/MurmliV2/issues/143)); der Future endet nach der angestoßenen Runde. Derzeit ruft es noch niemand auf |
+
+Ein Aktualisieren von Hand (etwa durch Herunterziehen) gibt es nicht, entschieden in 127b. Es läuft immer nur eine Folge von Runden, und höchstens ein Zeitgeber für die nächste Runde wartet. Auslöser während einer Runde ergeben genau eine Folgerunde direkt danach, ein Schreiben nur nach einer abgeschlossenen Runde und keiner während einer Wartezeit vom Server.
+
+| Ergebnis | Nächste Runde |
+| --- | --- |
+| `completed(runAgainImmediately: true)` | sofort (`hasMore` oder die Runde hat Kommandos entfernt und weitere warten, [Antwort](#antwort)) |
+| `completed(runAgainImmediately: false)` | mit dem Abruf; ein Kommando, das nur `accepted` oder `failed` bekommt, wartet so bis zum nächsten Abruf, statt Runden ohne Pause auszulösen |
+| `failed` | nach einer zufälligen Zeit zwischen null und dem Abstand aus der Folge 1, 2, 5, 10, 30, 60 s, danach bleibt es bei 60 s; eine abgeschlossene Runde und die Anmeldung setzen die Folge zurück. Ein Schreiben wartet den Abstand ab, `syncNow`, das zurückkehrende Netz und der Vordergrund starten sofort eine Runde |
+| `retryAfter(delay)` | genau nach `delay`, auch über den Hintergrund hinweg (die Steuerung merkt sich das Ende der Wartezeit); Schreiben, Netz, Vordergrund und `syncNow` warten (`syncNow` endet dann sofort ohne Runde) |
+| `notSignedIn`, `accountGone`, `appVersionUnsupported` | keine, auch nicht nach Schreiben, bis zur nächsten Anmeldung; nur `syncNow` startet eine Runde |
+
+Im Hintergrund startet die Steuerung keinen Zeitgeber, ein wartender endet. Läuft beim Wechsel in den Hintergrund keine Runde und warten noch Kommandos, startet sie eine letzte, soweit das Betriebssystem die App laufen lässt; eine Folge, die schon läuft, läuft zu Ende. Zurück im Vordergrund startet sie sofort eine Runde, während einer Wartezeit vom Server erst an deren Ende. Ohne geöffnete App gilt der Stand vom letzten Öffnen.
+
+Der gemeldete Netzstatus ist nur ein Hinweis, um schneller zu reagieren: Ohne Netz laufen Abruf und Wiederholungen weiter, maßgeblich bleibt, ob die Anfrage gelingt.
+
+Abmelden hält alle Zeitgeber an und bricht eine laufende Anfrage an `/v1/sync` ab (`SyncCore.adoptAccount(null)`), bevor der Kern die lokalen Daten löscht; eine Antwort, die trotzdem ankommt, verwirft der Kern ([Konto der App](#konto-der-app)). Ein Wechsel des Kontos ohne Abmelden bricht die Anfrage nicht ab. Jede Anfrage endet spätestens nach 60 s mit `failed` (`CancelToken` des Kerns, [app.md](app.md#entscheidungen)), eine hängende Anfrage blockiert so keine weitere Runde. Die Streuung kommt aus `syncRandomProvider`, Zeitpunkte aus `appClockProvider`.
+
+Den Zustand stellt `activity` (`ValueListenable<SyncActivity>`) für die Fehlersuche bereit; die App zeigt ihn nicht an, einen Hinweis „Offline“ oder „Änderungen warten“ gibt es nicht. Werte: `syncing`, `idle`, `backingOff` (Abstand nach Fehlschlägen), `waitingForServer`, `waitingForNetwork`, `paused` (Hintergrund) und `stopped` (ohne Anmeldung, nach `accountGone` oder `appVersionUnsupported`). Entschieden, noch nicht gebaut: die Live-Verbindung als weiterer Auslöser ([#127](https://github.com/Murmli/MurmliV2/issues/127)) und die Telemetrie der Runden ([#139](https://github.com/Murmli/MurmliV2/issues/139)); beides entfällt mit seinem Issue.
+
 #### Datentyp in der App anbinden
 
 1. Klasse, die `SyncDataType` umsetzt: Name wie am Server, `rootScopeKind` für den Wurzel-Datentyp eines geteilten Bereichs, `checkLimits` mit denselben Grenzen wie am Server und die Methoden, mit denen der Kern Datensätze schreibt und löscht. `writeServerRecord` ignoriert unbekannte Felder und Werte und wirft für einen unlesbaren Datensatz eine `FormatException`. `updateRecordIfPresent` und `deleteRecord` filtern nach Bereich und ID: Ein Eintrag in `deletedRecords` oder ein Kommando trifft nur den Datensatz mit dieser ID in seinem Bereich.
@@ -119,7 +150,7 @@ Ein Kommando wird aussortiert, wenn es fünfmal `failed` bekommen hat und das er
 3. Tabellen in `AppDatabase` mit neuer Schema-Version und Step der Migration ([app.md](app.md#schema-versionen)).
 4. Ein Repository, das nur über `SyncCore.write` schreibt ([Schreiben](#schreiben)).
 
-Tests des Kerns laufen mit `SyncTestHarness` und `FakeSyncServer` (`src/app/test/app/core/sync/sync_test_setup.dart`) gegen eine Datenbank im Speicher und künstliche Datentypen wie am Server (`testNote`, `testBoard`, `testCard`), deren Tabellen nur der Testcode anlegt. Der Harness meldet sich wie ein Nutzer per E-Mail an (`signIn`), damit `AccessTokenInterceptor` Requests durchlässt.
+Tests des Kerns laufen mit `SyncTestHarness` und `FakeSyncServer` (`src/app/test/app/core/sync/sync_test_setup.dart`) gegen eine Datenbank im Speicher und künstliche Datentypen wie am Server (`testNote`, `testBoard`, `testCard`), deren Tabellen nur der Testcode anlegt. Der Harness meldet sich wie ein Nutzer per E-Mail an (`signIn`), damit `AccessTokenInterceptor` Requests durchlässt, und ersetzt `appForegroundProvider` (Vordergrund), `networkAvailableProvider` (Netz) und `syncRandomProvider` (`FixedRandom`). Tests der Steuerung (`sync_scheduler_test.dart`) laufen in `fakeAsync` mit `SyncTestHarness.start(clock: async.getClock(…))`, damit Uhr und Zeitgeber derselben gestellten Zeit folgen.
 
 ### Datentyp anbinden
 
@@ -484,7 +515,7 @@ Jede Antwort trägt in `settings` Vorgaben des Servers, damit sie sich ohne neue
 
 | Vorgabe | Standard | Bedeutung |
 | --- | --- | --- |
-| `pollIntervalSeconds` | 60 | Abstand des regelmäßigen Abrufs in Sekunden ([#126](https://github.com/Murmli/MurmliV2/issues/126)) |
+| `pollIntervalSeconds` | 60 | Abstand des regelmäßigen Abrufs in Sekunden ([Steuerung der Runden](#steuerung-der-runden)) |
 | `maxCommandsPerRequest` | 500 | Höchstzahl der Kommandos je Anfrage, das Gerät darf weniger senden |
 | `maxRequestBytes` | 1000000 | Höchstgröße des UTF-8-Bodys einer Anfrage in Byte |
 

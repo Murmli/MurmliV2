@@ -36,6 +36,7 @@ const _builtInMaxCommandsPerRequest = 500;
 const _clockJumpTolerance = Duration(minutes: 5);
 const _applyFailuresBeforeDiscardingToken = 3;
 const _problemTypePrefix = 'tag:murmli.de,2026:';
+const _requestTimeout = Duration(seconds: 60);
 
 @Riverpod(keepAlive: true)
 SyncCore syncCore(Ref ref) {
@@ -103,6 +104,7 @@ class SyncCore {
   Future<SyncRoundOutcome>? _followUpRound;
   int? _commandLimitAfterTooLarge;
   var _consecutiveApplyFailures = 0;
+  CancelToken? _requestCancelToken;
 
   Stream<void> get commandsQueued => _commandsQueued.stream;
 
@@ -143,9 +145,13 @@ class SyncCore {
   /// Binds the local data to the signed-in account. Data of another account
   /// is wiped first, `null` wipes everything including the device id. Does
   /// not wait for a running round: its response no longer matches the token
-  /// and generation and is dropped. Until the stored account is [accountId],
-  /// for example after a failed wipe, rounds and writes do nothing.
+  /// and generation and is dropped. `null` also cancels a running request.
+  /// Until the stored account is [accountId], for example after a failed
+  /// wipe, rounds and writes do nothing.
   Future<void> adoptAccount(String? accountId) {
+    if (accountId == null) {
+      _requestCancelToken?.cancel();
+    }
     _expectedAccountId = accountId;
     final result = _accountOperations.then((_) async {
       final wiped = await _database.transaction(() async {
@@ -177,6 +183,14 @@ class SyncCore {
           .distinct();
 
   Future<int> pendingCommandCount() => _local.commandCount();
+
+  /// The poll interval the server last sent, `null` before its first
+  /// readable response.
+  Future<Duration?> pollInterval() async =>
+      switch ((await _local.readState()).pollIntervalSeconds) {
+        final seconds? => Duration(seconds: seconds),
+        null => null,
+      };
 
   Stream<List<SyncNotice>> watchNotices() =>
       (_database.select(_database.syncNotices)
@@ -248,11 +262,15 @@ class SyncCore {
 
   Future<SyncRoundOutcome> _send(_PlannedRequest request) async {
     final sentCommands = request.sentCommands;
+    final cancelToken = CancelToken();
+    _requestCancelToken = cancelToken;
+    final timeout = Timer(_requestTimeout, cancelToken.cancel);
     final Response<String> response;
     try {
       response = await _apiClient.post<String>(
         '/v1/sync',
         data: request.body.toMap(),
+        cancelToken: cancelToken,
         options: Options(
           headers: {'Murmli-Device-Id': request.state.deviceId},
           contentType: Headers.jsonContentType,
@@ -265,6 +283,11 @@ class SyncCore {
       );
     } on DioException {
       return const SyncRoundOutcome.failed();
+    } finally {
+      timeout.cancel();
+      if (identical(_requestCancelToken, cancelToken)) {
+        _requestCancelToken = null;
+      }
     }
     final arrival = _clock.now();
     final body = response.data ?? '';
