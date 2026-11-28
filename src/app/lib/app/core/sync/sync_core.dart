@@ -311,6 +311,9 @@ class SyncCore {
       for (final command in sentCommands) command.id,
     ]);
     if (readResponse == null) {
+      await _crashReporter.reportProblem(
+        'Received an unreadable sync response',
+      );
       return const SyncRoundOutcome.failed();
     }
     log.resultStatuses = [

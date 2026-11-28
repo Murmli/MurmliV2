@@ -389,8 +389,8 @@ void main() {
     expect(harness.server.requests, hasLength(2));
   });
 
-  schedulerTest('a hanging request ends after 60 seconds and does not block '
-      'the next round', (async, harness) {
+  schedulerTest('a hanging request ends after 60 seconds without a report and '
+      'does not block the next round', (async, harness) {
     startScheduler(async, harness);
     harness.server.answerAfterRelease((_) => harness.response(token: 'never'));
     harness.answerApplyingAll(token: 'second-token');
@@ -400,6 +400,7 @@ void main() {
 
     expectRequestsAfter(async, harness, const Duration(milliseconds: 60500));
     expect(_settle(async, harness.readCommands()), isEmpty);
+    expect(harness.crashReporter.calls, isEmpty);
   });
 
   schedulerTest('in the background no round runs, and returning to the '
